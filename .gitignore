@@ -1,0 +1,9 @@
+# Python
+.pyc
+.ipynb
+
+.venv
+
+
+# GCP Credentials
+serviceAccountKey.json
