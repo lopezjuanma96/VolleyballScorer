@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partido en Vivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    
+    <style>
+        /* Un pequeño estilo para la tabla de puntos */
+        .points-table tr:nth-child(even) {
+            background-color: #f9fafb; /* gray-50 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-3xl p-4 mt-10">
+
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            
+            <div id="game-header" class="text-center mb-6">
+                <p id="game-status" class="text-lg font-semibold text-red-600 mb-4">● EN VIVO</p>
+                
+                <div class="flex justify-around items-center">
+                    <div class="w-1/3 text-center">
+                        <h2 id="team-1-name" class="text-2xl lg:text-3xl font-bold text-gray-800">Cargando...</h2>
+                        <p id="team-1-score" class="text-5xl lg:text-7xl font-bold text-blue-600">0</p>
+                    </div>
+                    
+                    <span class="text-4xl font-light text-gray-400">vs</span>
+                    
+                    <div class="w-1/3 text-center">
+                        <h2 id="team-2-name" class="text-2xl lg:text-3xl font-bold text-gray-800">...Equipo</h2>
+                        <p id="team-2-score" class="text-5xl lg:text-7xl font-bold text-blue-600">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sets-summary-container" class="border-t border-b border-gray-200 py-4 mb-6">
+                <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 text-center">RESUMEN DE SETS</h3>
+                <div id="sets-list" class="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                    </div>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Historial de Puntos (Set Actual)</h3>
+                <div class="overflow-hidden border border-gray-200 rounded-md">
+                    <table class="min-w-full divide-y divide-gray-200 points-table">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Punto de</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Resultado Parcial</th>
+                            </tr>
+                        </thead>
+                        <tbody id="points-history-list" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="2" class="px-4 py-3 text-sm text-gray-500">Cargando puntos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div> <div class="text-center mt-4">
+            <a href="/" class="text-blue-600 hover:underline">&larr; Volver al Lobby</a>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Configuración de Firebase Cliente ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCY9IXzvj6KDaNqbRMXOZ4obnw5mIJKeZs",
+            authDomain: "volleyballscorer.firebaseapp.com",
+            projectId: "volleyballscorer",
+            storageBucket: "volleyballscorer.firebasestorage.app",
+            messagingSenderId: "358310788461",
+            appId: "1:358310788461:web:310bd1b9eec58dab896e64"
+        };
+
+        // --- 2. Inicializar Firebase y obtener Game ID ---
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('id');
+
+        // Referencias al DOM
+        const el = {
+            team1Name: document.getElementById('team-1-name'),
+            team2Name: document.getElementById('team-2-name'),
+            team1Score: document.getElementById('team-1-score'),
+            team2Score: document.getElementById('team-2-score'),
+            gameStatus: document.getElementById('game-status'),
+            setsList: document.getElementById('sets-list'),
+            pointsList: document.getElementById('points-history-list')
+        };
+        
+        let teamNames = {}; // Para guardar { "team_a_id": "Los Cóndores", ... }
+
+        // --- Variables para manejar los listeners ---
+        let currentPointsListener = null; // Guardará la función "unsubscribe"
+        let currentListeningSet = null;   // Guardará el ID del set que estamos escuchando (ej: "3")
+
+
+        if (!gameId) {
+            document.body.innerHTML = '<h1 class="text-red-600 text-center mt-10 text-2xl">Error: No se especificó un ID de partido en la URL.</h1>';
+        } else {
+            // --- 3. Listener Principal 1: El Documento del Partido ---
+            // Escucha el documento 'game' para obtener nombres, estado general y scores actuales.
+            db.collection("games").doc(gameId)
+              .onSnapshot(
+                (gameSnap) => {
+                    if (!gameSnap.exists) {
+                        el.gameStatus.innerText = "Error: Partido no encontrado";
+                        return;
+                    }
+
+                    const gameData = gameSnap.data();
+                    
+                    // Guardar nombres para usar en otros listeners
+                    teamNames = {
+                        [gameData.team1_id]: gameData.team1_name,
+                        [gameData.team2_id]: gameData.team2_name,
+                    };
+
+                    // Actualizar el DOM
+                    el.team1Name.innerText = gameData.team1_name;
+                    el.team2Name.innerText = gameData.team2_name;
+                    el.team1Score.innerText = gameData.current_team1_score;
+                    el.team2Score.innerText = gameData.current_team2_score;
+
+                    if (gameData.status === 'live') {
+                        el.gameStatus.innerText = `● EN VIVO (Set ${gameData.current_set_number})`;
+                        el.gameStatus.className = "text-lg font-semibold text-red-600 mb-4";
+                    } else if (gameData.status === 'upcoming') {
+                        el.gameStatus.innerText = "PARTIDO PRÓXIMO";
+                        el.gameStatus.className = "text-lg font-semibold text-blue-600 mb-4";
+                    } else if (gameData.status === 'finished') {
+                        el.gameStatus.innerText = `PARTIDO FINALIZADO (Ganador: ${teamNames[gameData.winner_id]})`;
+                        el.gameStatus.className = "text-lg font-semibold text-gray-700 mb-4";
+                    }
+
+                },
+                (error) => console.error("Error al escuchar game doc: ", error)
+              );
+
+            // --- 4. Listener Principal 2: La Colección de Sets ---
+            // Escucha la subcolección 'sets' para construir el resumen
+            // y saber a qué historial de puntos suscribirnos.
+            db.collection("games").doc(gameId).collection("sets")
+              .orderBy("set_number")
+              .onSnapshot(
+                (setsSnapshot) => {
+                    el.setsList.innerHTML = ''; // Limpiar resumen
+                    let foundLiveSet = false;
+
+                    if (setsSnapshot.empty) {
+                        el.setsList.innerHTML = '<span class="text-sm text-gray-400">Esperando Set 1...</span>';
+                        return;
+                    }
+
+                    setsSnapshot.forEach((setDoc) => {
+                        const setData = setDoc.data();
+                        
+                        // Renderizar el resumen de este set
+                        const setSummary = document.createElement('span');
+                        setSummary.className = 'text-sm px-2 py-1 rounded';
+                        
+                        if (setData.status === 'finished') {
+                            setSummary.className += ' bg-gray-200 text-gray-700';
+                            setSummary.innerText = `Set ${setData.set_number}: ${setData.team1_current_score} - ${setData.team2_current_score}`;
+                        } else if (setData.status === 'live') {
+                            setSummary.className += ' bg-red-100 text-red-700 font-bold';
+                            setSummary.innerText = `Set ${setData.set_number} (En vivo)`;
+                            
+                            // --- ¡Magia! Aquí conectamos el Listener 3 ---
+                            // Si este es el set "live", nos suscribimos a sus puntos.
+                            // setDoc.id es el número del set (ej: "1", "2")
+                            listenToPoints(setDoc.id); 
+                            foundLiveSet = true;
+                        }
+                        
+                        el.setsList.appendChild(setSummary);
+                    });
+                    
+                    if (!foundLiveSet) {
+                        // Si el partido terminó, no hay set "live"
+                        el.pointsList.innerHTML = '<tr><td colspan="2" class="px-4 py-3 text-sm text-gray-500">El partido ha finalizado.</td></tr>';
+                    }
+
+                },
+                (error) => console.error("Error al escuchar sets collection: ", error)
+              );
+        }
+
+        // --- 5. Listener Dinámico 3: El Historial de Puntos ---
+        function listenToPoints(setNumber) {
+            // setNumber es el ID del doc de set (ej: "1", "2")
+            
+            // Si ya estamos escuchando este set, no hacer nada
+            if (currentListeningSet === setNumber) {
+                return;
+            }
+
+            // Si estábamos escuchando *otro* set (ej: el anterior), desuscribirnos
+            if (currentPointsListener) {
+                currentPointsListener(); // Llama a la función "unsubscribe"
+            }
+            
+            // Guardar el nuevo set que estamos escuchando
+            currentListeningSet = setNumber;
+            el.pointsList.innerHTML = '<tr><td colspan="2" class="px-4 py-3 text-sm text-gray-500">Cargando puntos...</td></tr>';
+
+            // ¡Crear el nuevo listener para los puntos de *este* set!
+            currentPointsListener = db.collection("games").doc(gameId).collection("sets").doc(setNumber).collection("points")
+              .orderBy("timestamp")
+              .onSnapshot(
+                (pointsSnapshot) => {
+                    if (pointsSnapshot.empty) {
+                        el.pointsList.innerHTML = '<tr><td colspan="2" class="px-4 py-3 text-sm text-gray-500">Esperando primer punto...</td></tr>';
+                        return;
+                    }
+
+                    el.pointsList.innerHTML = ''; // Limpiar la lista
+                    
+                    pointsSnapshot.forEach((pointDoc) => {
+                        const pointData = pointDoc.data();
+                        
+                        // Renderizar la fila de la tabla
+                        const tr = document.createElement('tr');
+                        const pointWinnerName = teamNames[pointData.scoring_team_id] || '???';
+                        
+                        tr.innerHTML = `
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">${pointWinnerName}</td>
+                            <td class="px-4 py-3 text-sm text-gray-700 text-right">
+                                <span class="font-bold">${pointData.team1_score_after}</span>
+                                <span class="mx-1">-</span>
+                                <span class="font-bold">${pointData.team2_score_after}</span>
+                            </td>
+                        `;
+                        el.pointsList.appendChild(tr);
+                    });
+                    
+                    // Scroll automático al último punto
+                    el.pointsList.parentElement.parentElement.scrollTop = el.pointsList.parentElement.parentElement.scrollHeight;
+
+                },
+                (error) => console.error(`Error al escuchar puntos del set ${setNumber}: `, error)
+              );
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partidos - Torneo de Voley</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-3xl p-4 mt-10">
+        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">
+            🏐 Partidos del Torneo
+        </h1>
+
+        <h2 class="text-2xl font-semibold mb-4 text-red-600">En Vivo</h2>
+        <div id="live-games-container" class="space-y-4">
+            <p class="text-gray-500" id="live-loading">Cargando partidos en vivo...</p>
+        </div>
+
+        <h2 class="text-2xl font-semibold mt-8 mb-4 text-blue-600">Próximos</h2>
+        <div id="upcoming-games-container" class="space-y-4">
+            <p class="text-gray-500" id="upcoming-loading">Cargando próximos partidos...</p>
+        </div>
+
+        <h2 class="text-2xl font-semibold mt-8 mb-4 text-gray-700">Finalizados</h2>
+        <div id="finished-games-container" class="space-y-4">
+            <p class="text-gray-500" id="finished-loading">Cargando partidos finalizados...</p>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Configuración de Firebase Cliente ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCY9IXzvj6KDaNqbRMXOZ4obnw5mIJKeZs",
+            authDomain: "volleyballscorer.firebaseapp.com",
+            projectId: "volleyballscorer",
+            storageBucket: "volleyballscorer.firebasestorage.app",
+            messagingSenderId: "358310788461",
+            appId: "1:358310788461:web:310bd1b9eec58dab896e64"
+        };
+
+        // --- 2. Inicializar Firebase ---
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // --- 3. Referencias a contenedores ---
+        const liveContainer = document.getElementById('live-games-container');
+        const upcomingContainer = document.getElementById('upcoming-games-container');
+        const finishedContainer = document.getElementById('finished-games-container');
+        const liveLoading = document.getElementById('live-loading');
+        const upcomingLoading = document.getElementById('upcoming-loading');
+        const finishedLoading = document.getElementById('finished-loading');
+
+        // --- 4. Función para renderizar una tarjeta de partido ---
+        function renderGameCard(game) {
+            // game.data() tiene todos los campos del GameDocument
+            const data = game.data();
+            
+            // Determina si es "live" o "upcoming"
+            const isLive = data.status === 'live';
+            const targetContainer = isLive ? liveContainer : upcomingContainer;
+            
+            // Buscar si la tarjeta ya existe para actualizarla
+            let card = document.getElementById(game.id);
+            
+            if (!card) {
+                // Si no existe, crearla
+                card = document.createElement('a');
+                card.id = game.id;
+                card.href = `/game?id=${game.id}`; // Link a la vista de detalle
+                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition";
+                targetContainer.appendChild(card);
+            }
+
+            // (Re)Renderizar el contenido interno de la tarjeta
+            card.innerHTML = `
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xl font-bold text-gray-800">${data.team1_name}</span>
+                    <span class="text-xl font-bold text-gray-800">${data.team2_name}</span>
+                </div>
+                
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
+                        ${data.current_team1_score}
+                    </span>
+                    <span class="text-sm text-gray-500">Set ${data.current_set_number}</span>
+                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
+                        ${data.current_team2_score}
+                    </span>
+                </div>
+                
+                <div class="text-center text-sm font-medium ${isLive ? 'text-red-500' : 'text-blue-500'}">
+                    ${isLive ? '● EN VIVO' : 'PRÓXIMO'}
+                </div>
+            `;
+        }
+
+        function handleGameRemoved(gameId) {
+            const card = document.getElementById(gameId);
+            if (card) {
+                card.remove();
+            }
+        }
+
+        function renderFinishedCard(game) {
+            const data = game.data();
+            
+            // Buscar si la tarjeta ya existe para actualizarla
+            let card = document.getElementById(game.id);
+            
+            if (!card) {
+                // Si no existe, crearla
+                card = document.createElement('a');
+                card.id = game.id;
+                card.href = `/game?id=${game.id}`; // Link para ver el historial
+                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition opacity-80 hover:opacity-100";
+                finishedContainer.appendChild(card);
+            }
+
+            // (Re)Renderizar el contenido interno
+            const winnerName = (data.winner_id === data.team1_id) ? data.team1_name : data.team2_name;
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-center text-gray-600">
+                    <span class="text-lg font-semibold">${data.team1_name}</span>
+                    <span class="text-lg font-semibold">${data.team2_name}</span>
+                </div>
+                
+                <div class="flex justify-between items-center my-2">
+                    <span class="text-3xl font-bold text-gray-700">
+                        ${data.current_team1_score}
+                    </span>
+                    <span class="text-3xl font-bold text-gray-700">
+                        ${data.current_team2_score}
+                    </span>
+                </div>
+                
+                <div class="text-center text-sm font-medium text-green-700 border-t pt-2 mt-2">
+                    Ganador: <strong>${winnerName}</strong>
+                </div>
+            `;
+        }
+
+
+        // --- Listener 1: Partidos "En Vivo" y "Próximos" ---
+        // (Este bloque de código ya lo tienes. No lo modifiques)
+        db.collection("games")
+          .where("status", "!=", "finished")
+          // ... (el resto de tu listener 1) ...
+          .onSnapshot(
+            (querySnapshot) => {
+                // ... (toda la lógica de este listener queda igual) ...
+            },
+            (error) => {
+                // ... (el manejo de error queda igual) ...
+            }
+          );
+        
+        // Escuchamos por separado los partidos finalizados
+        db.collection("games")
+          .where("status", "==", "finished")
+          .orderBy("created_at", "desc") // Mostrar los más recientes primero
+          .limit(10) // Traer solo los últimos 10 (buena práctica)
+          .onSnapshot(
+            (querySnapshot) => {
+                finishedLoading.style.display = 'none';
+
+                if (querySnapshot.empty) {
+                    finishedContainer.innerHTML = '<p class="text-gray-500">Aún no hay partidos finalizados.</p>';
+                    return;
+                }
+                
+                finishedContainer.innerHTML = ''; // Limpiar por si acaso
+
+                querySnapshot.forEach((doc) => {
+                    renderFinishedCard(doc); // Renderiza la tarjeta finalizada
+                });
+            },
+            (error) => {
+                console.error("Error al escuchar partidos finalizados: ", error);
+                // ¡IMPORTANTE! Esto seguro te pida un nuevo índice.
+                // Revisa la consola del navegador (F12) por el link para crearlo.
+                finishedLoading.innerText = 'Error al cargar partidos. (Posible índice faltante)';
+            }
+          );
+
+    </script>
+</body>
+</html>

@@ -96,7 +96,10 @@ def create_game(game: GameCreate, username: str = Depends(get_current_user)):
             team2_name=team2_name,
             status="upcoming",
             created_at=datetime.datetime.now(datetime.timezone.utc),
-            winner_id=None
+            winner_id=None,
+            current_set_number=1,
+            current_team1_score=0,
+            current_team2_score=0
         )
 
         update_time, game_ref = db.collection("games").add(new_game_data.model_dump())
@@ -189,6 +192,13 @@ def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_cu
                 winner_id=None
             )
             transaction.set(next_set_ref, new_set_doc.model_dump())
+            
+            # 3. Actualizar el documento 'game' con el nuevo set y scores en 0
+            transaction.update(game_ref, {
+                "current_set_number": next_set_number,
+                "current_team1_score": 0,
+                "current_team2_score": 0
+            })
             
             # Devolvemos el *nuevo* set creado
             return new_set_doc 
@@ -315,6 +325,14 @@ def increment_score(game_id: str, point: PointCreate, username: str = Depends(ge
                 "team1_current_score": new_score_t1,
                 "team2_current_score": new_score_t2,
                 "status": "live" # Aseguramos que el set esté 'live' si se puntúa
+            })
+
+            # C. Actualizar el score denormalizado en el documento 'game' (para el lobby)
+            transaction.update(game_ref, {
+                "current_set_number": point.set_number,
+                "current_team1_score": new_score_t1,
+                "current_team2_score": new_score_t2,
+                "status": "live" # Aseguramos que el partido esté 'live'
             })
 
             # 7. Retornar el documento del punto creado
