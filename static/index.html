@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partidos - Torneo de Voley</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-3xl p-4 mt-10">
+        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">
+            🏐 Partidos del Torneo
+        </h1>
+
+        <h2 class="text-2xl font-semibold mb-4 text-red-600">En Vivo</h2>
+        <div id="live-games-container" class="space-y-4">
+            <p class="text-gray-500" id="live-loading">Cargando partidos en vivo...</p>
+        </div>
+
+        <h2 class="text-2xl font-semibold mt-8 mb-4 text-blue-600">Próximos</h2>
+        <div id="upcoming-games-container" class="space-y-4">
+            <p class="text-gray-500" id="upcoming-loading">Cargando próximos partidos...</p>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Configuración de Firebase Cliente ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCY9IXzvj6KDaNqbRMXOZ4obnw5mIJKeZs",
+            authDomain: "volleyballscorer.firebaseapp.com",
+            projectId: "volleyballscorer",
+            storageBucket: "volleyballscorer.firebasestorage.app",
+            messagingSenderId: "358310788461",
+            appId: "1:358310788461:web:310bd1b9eec58dab896e64"
+        };
+
+        // --- 2. Inicializar Firebase ---
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // --- 3. Referencias a contenedores ---
+        const liveContainer = document.getElementById('live-games-container');
+        const upcomingContainer = document.getElementById('upcoming-games-container');
+        const liveLoading = document.getElementById('live-loading');
+        const upcomingLoading = document.getElementById('upcoming-loading');
+
+        // --- 4. Función para renderizar una tarjeta de partido ---
+        function renderGameCard(game) {
+            // game.data() tiene todos los campos del GameDocument
+            const data = game.data();
+            
+            // Determina si es "live" o "upcoming"
+            const isLive = data.status === 'live';
+            const targetContainer = isLive ? liveContainer : upcomingContainer;
+            
+            // Buscar si la tarjeta ya existe para actualizarla
+            let card = document.getElementById(game.id);
+            
+            if (!card) {
+                // Si no existe, crearla
+                card = document.createElement('a');
+                card.id = game.id;
+                card.href = `/game?id=${game.id}`; // Link a la vista de detalle
+                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition";
+                targetContainer.appendChild(card);
+            }
+
+            // (Re)Renderizar el contenido interno de la tarjeta
+            card.innerHTML = `
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xl font-bold text-gray-800">${data.team1_name}</span>
+                    <span class="text-xl font-bold text-gray-800">${data.team2_name}</span>
+                </div>
+                
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
+                        ${data.current_team1_score}
+                    </span>
+                    <span class="text-sm text-gray-500">Set ${data.current_set_number}</span>
+                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
+                        ${data.current_team2_score}
+                    </span>
+                </div>
+                
+                <div class="text-center text-sm font-medium ${isLive ? 'text-red-500' : 'text-blue-500'}">
+                    ${isLive ? '● EN VIVO' : 'PRÓXIMO'}
+                </div>
+            `;
+        }
+
+        function handleGameRemoved(gameId) {
+            const card = document.getElementById(gameId);
+            if (card) {
+                card.remove();
+            }
+        }
+
+        // --- 5. El Listener en Tiempo Real (La Magia) ---
+        db.collection("games")
+          .where("status", "!=", "finished") // Solo 'live' y 'upcoming'
+          .orderBy("status", "desc") // 'upcoming' (u) viene antes que 'live' (l) alfabéticamente
+          .orderBy("created_at", "desc")
+          .onSnapshot(
+            (querySnapshot) => {
+                // Snapshot se dispara CADA VEZ que algo cambia
+                
+                // Ocultar "cargando..."
+                liveLoading.style.display = 'none';
+                upcomingLoading.style.display = 'none';
+
+                if (querySnapshot.empty) {
+                    liveContainer.innerHTML = '<p class="text-gray-500">No hay partidos en vivo.</p>';
+                    upcomingContainer.innerHTML = '<p class="text-gray-500">No hay partidos próximos.</p>';
+                    return;
+                }
+                
+                // Limpiar contenedores (una forma simple de manejar cambios)
+                // Una app más compleja buscaría qué cambió
+                liveContainer.innerHTML = '';
+                upcomingContainer.innerHTML = '';
+
+                querySnapshot.forEach((doc) => {
+                    renderGameCard(doc); // Renderiza o actualiza la tarjeta
+                });
+            },
+            (error) => {
+                console.error("Error al escuchar partidos: ", error);
+                liveLoading.innerText = 'Error al cargar partidos.';
+                upcomingLoading.innerText = 'Error al cargar partidos.';
+            }
+        );
+
+    </script>
+</body>
+</html>

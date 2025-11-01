@@ -20,6 +20,10 @@ class GameDocument(BaseModel):
     created_at: datetime.datetime
     winner_id: Optional[str] = None
 
+    current_set_number: int = 1
+    current_team1_score: int = 0
+    current_team2_score: int = 0
+
 class GameListResponse(GameDocument):
     """
     Modelo para la RESPUESTA de la API que sí incluye el ID del documento
