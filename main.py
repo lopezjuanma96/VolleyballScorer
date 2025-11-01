@@ -1,36 +1,27 @@
 import os
 import secrets
+import datetime
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 
 # --- Firebase Admin Setup ---
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# IMPORTANTE: Para desarrollo local
-# 1. Descarga tu "serviceAccountKey.json" desde Firebase
-# 2. Guárdalo en la raíz del proyecto (¡y añádelo a .gitignore!)
-# 3. Descomenta la línea de abajo:
-# cred = credentials.Certificate("serviceAccountKey.json")
-# firebase_admin.initialize_app(cred)
+# --- Importar Modelos ---
+# Importamos todo desde nuestro nuevo archivo models.py
+from models import (
+    Team, GameCreate, GameDocument, SetDocument, PointCreate, PointDocument
+)
 
-# IMPORTANTE: Para Cloud Run
-# Cuando deployas en Cloud Run, él usa automáticamente los permisos
-# de la Service Account del servicio (ver punto 1 de permisos).
-# No necesitas el .json. `initialize_app()` lo detecta solo.
-# Esta lógica try/except maneja ambos casos:
 try:
-    # Intenta inicializar con el .json local
     cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
     print("Firebase inicializado con serviceAccountKey.json (Modo Local)")
 except FileNotFoundError:
-    # Si falla (porque estamos en Cloud Run y el .json no existe),
-    # inicializa usando las credenciales "ambient" de GCP.
     firebase_admin.initialize_app()
     print("Firebase inicializado con credenciales de GCP (Modo Cloud Run)")
 
@@ -41,13 +32,10 @@ db = firestore.client()
 app = FastAPI()
 security = HTTPBasic()
 
-# --- Usuario y Pass Hardcodeados ---
-# (Más adelante los podemos mover a variables de entorno)
 ADMIN_USER = "manager"
-ADMIN_PASS = "voley123" # ¡Cambia esto por algo más seguro!
+ADMIN_PASS = "voley123" # ¡Recuerda cambiar esto!
 
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    """Dependencia de seguridad para endpoints /manager"""
     correct_user = secrets.compare_digest(credentials.username, ADMIN_USER)
     correct_pass = secrets.compare_digest(credentials.password, ADMIN_PASS)
     if not (correct_user and correct_pass):
@@ -59,88 +47,110 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 
-# --- Modelos de Datos (Pydantic) ---
-
-class Team(BaseModel):
-    id: str = Field(..., alias="id") # El ID del documento
-    name: str
-    flag: Optional[str] = None # ej: "🇦🇷"
-
-class GameCreate(BaseModel):
-    """Modelo para crear un nuevo partido"""
-    team1_id: str
-    team2_id: str
-    # Los nombres los buscaremos en la DB al momento de crear
-    # para denormalizarlos.
-
-class PointCreate(BaseModel):
-    """Modelo para registrar un punto"""
-    set_number: int
-    team_to_increment_id: str # "team_a" o "team_b"
-
-
 # --- API Endpoints: Manager (Protegidos) ---
 
 @app.get("/manager/test")
 def read_manager_test(username: str = Depends(get_current_user)):
-    """Endpoint de prueba para verificar que la autenticación funciona"""
     return {"message": f"Hola {username}! Estás autenticado."}
 
-@app.get("/manager/teams", response_model=list[Team])
+
+@app.get("/manager/teams", response_model=List[Team])
 def get_teams_list(username: str = Depends(get_current_user)):
-    """Trae la lista de equipos para el manager (ej: para crear un partido)"""
+    """Trae la lista de equipos para el manager."""
     teams_ref = db.collection("teams").stream()
     teams = []
     for team in teams_ref:
         team_data = team.to_dict()
-        team_data["id"] = team.id # Agregamos el ID del doc
+        team_data["id"] = team.id
         teams.append(team_data)
+    
+    if not teams:
+        raise HTTPException(
+            status_code=404,
+            detail="No se encontraron equipos. Asegúrate de popular la colección 'teams'."
+        )
     return teams
 
-@app.post("/manager/games")
-def create_game(game: GameCreate, username: str = Depends(get_current_user)):
-    """Crea un nuevo partido (placeholder)"""
-    # Lógica a implementar:
-    # 1. Leer los nombres de 'teams' usando game.team1_id y game.team2_id
-    # 2. Crear el documento en la colección 'games' con los datos denormalizados
-    # 3. Crear el sub-documento 'games/{id}/sets/1' con scores en 0
-    print(f"Creando partido entre {game.team1_id} y {game.team2_id}")
-    return {"status": "ok", "message": "Partido creado (lógica pendiente)"}
 
-@app.post("/manager/games/{game_id}/increment")
+@app.post("/manager/games", response_model=GameDocument)
+def create_game(game: GameCreate, username: str = Depends(get_current_user)):
+    """Crea un nuevo partido en Firestore."""
+    
+    if game.team1_id == game.team2_id:
+        raise HTTPException(status_code=400, detail="Un equipo no puede jugar contra sí mismo.")
+
+    try:
+        team1_ref = db.collection("teams").document(game.team1_id).get()
+        team2_ref = db.collection("teams").document(game.team2_id).get()
+
+        if not team1_ref.exists or not team2_ref.exists:
+            raise HTTPException(status_code=404, detail="Uno o ambos IDs de equipo no existen.")
+
+        team1_name = team1_ref.to_dict().get("name", game.team1_id)
+        team2_name = team2_ref.to_dict().get("name", game.team2_id)
+
+        new_game_data = GameDocument(
+            team1_id=game.team1_id,
+            team2_id=game.team2_id,
+            team1_name=team1_name,
+            team2_name=team2_name,
+            status="upcoming",
+            created_at=datetime.datetime.now(datetime.timezone.utc),
+            winner_id=None
+        )
+
+        update_time, game_ref = db.collection("games").add(new_game_data.model_dump())
+
+        first_set_data = SetDocument(
+            set_number=1,
+            status="live",
+            team1_current_score=0,
+            team2_current_score=0,
+            winner_id=None
+        )
+        
+        db.collection("games").document(game_ref.id).collection("sets").document("1").set(
+            first_set_data.model_dump()
+        )
+
+        print(f"Partido creado con ID: {game_ref.id}")
+        return new_game_data
+
+    except Exception as e:
+        print(f"Error al crear partido: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+@app.post("/manager/games/{game_id}/increment", status_code=status.HTTP_201_CREATED)
 def increment_score(game_id: str, point: PointCreate, username: str = Depends(get_current_user)):
-    """Incrementa el score (placeholder)"""
+    """
+    Incrementa el score (placeholder).
+    Ahora usa el modelo 'PointCreate' importado.
+    """
     # Lógica a implementar (LA MÁS COMPLEJA):
     # 1. Iniciar una transacción de Firestore.
     # 2. Leer el documento de 'sets' (point.set_number)
-    # 3. Calcular el nuevo score.
-    # 4. Escribir el nuevo documento en la subcolección 'points'.
-    # 5. Actualizar el score denormalizado en el documento 'sets'.
-    # 6. Commitear la transacción.
-    print(f"Anotando punto para {point.team_to_increment_id} en el set {point.set_number} del partido {game_id}")
+    # 3. Leer el game_document para saber quién es team1 y team2
+    # 4. Calcular el nuevo score.
+    # 5. Escribir el nuevo documento en la subcolección 'points' (usando PointDocument).
+    # 6. Actualizar el score denormalizado en el documento 'sets' (usando SetDocument).
+    # 7. Commitear la transacción.
+    print(f"Anotando punto para {point.scoring_team_id} en el set {point.set_number} del partido {game_id}")
     return {"status": "ok", "message": "Punto anotado (lógica pendiente)"}
 
 
 # --- Servido de Frontend Estático ---
-# Montamos la carpeta 'static' (donde vivirán nuestros html, css, js)
-# NOTA: En un proyecto real, esto es /static, pero para servir
-# los HTML principales lo hacemos con rutas explícitas.
 
 @app.get("/", include_in_schema=False)
 async def get_index_html():
-    """Sirve el Lobby de Watcher (index.html)"""
     return FileResponse("static/index.html")
 
 @app.get("/game", include_in_schema=False)
 async def get_watcher_game_html():
-    """Sirve la página de un partido específico (watcher_game.html)"""
     return FileResponse("static/watcher_game.html")
 
 @app.get("/manager", include_in_schema=False)
 async def get_manager_html():
-    """Sirve la página del Manager"""
-    # Esta página pedirá autenticación Basic
     return FileResponse("static/manager.html")
 
-# Montamos el resto de assets (CSS, JS, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
