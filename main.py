@@ -14,7 +14,7 @@ from firebase_admin import credentials, firestore
 # --- Importar Modelos ---
 # Importamos todo desde nuestro nuevo archivo models.py
 from models import (
-    Team, GameCreate, GameDocument, SetDocument, PointCreate, PointDocument
+    Team, GameCreate, GameDocument, GameListResponse, SetDocument, PointCreate, PointDocument
 )
 
 try:
@@ -121,22 +121,120 @@ def create_game(game: GameCreate, username: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
-@app.post("/manager/games/{game_id}/increment", status_code=status.HTTP_201_CREATED)
+@app.get("/manager/games/list", response_model=List[GameListResponse]) # <--- 2. USA EL NUEVO RESPONSE_MODEL
+def get_games_list(username: str = Depends(get_current_user)):
+    """
+    Trae una lista de partidos que están 'upcoming' o 'live'
+    para que el manager pueda gestionarlos.
+    """
+    try:
+        games_ref = db.collection("games").where(
+            filter=firestore.FieldFilter("status", "!=", "finished")
+        ).order_by("created_at", direction=firestore.Query.DESCENDING).stream()
+
+        games = []
+        for game in games_ref:
+            game_data = game.to_dict()
+            game_data["id"] = game.id 
+            
+            # 3. USA EL NUEVO MODELO AL PARSEAR
+            games.append(GameListResponse(**game_data)) 
+        
+        return games
+    except Exception as e:
+        print(f"Error al listar partidos: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+@app.post("/manager/games/{game_id}/increment", status_code=status.HTTP_201_CREATED, response_model=PointDocument)
 def increment_score(game_id: str, point: PointCreate, username: str = Depends(get_current_user)):
     """
-    Incrementa el score (placeholder).
-    Ahora usa el modelo 'PointCreate' importado.
+    Incrementa el score de un equipo en un set específico usando una transacción.
     """
-    # Lógica a implementar (LA MÁS COMPLEJA):
-    # 1. Iniciar una transacción de Firestore.
-    # 2. Leer el documento de 'sets' (point.set_number)
-    # 3. Leer el game_document para saber quién es team1 y team2
-    # 4. Calcular el nuevo score.
-    # 5. Escribir el nuevo documento en la subcolección 'points' (usando PointDocument).
-    # 6. Actualizar el score denormalizado en el documento 'sets' (usando SetDocument).
-    # 7. Commitear la transacción.
-    print(f"Anotando punto para {point.scoring_team_id} en el set {point.set_number} del partido {game_id}")
-    return {"status": "ok", "message": "Punto anotado (lógica pendiente)"}
+    
+    # 1. Definir las referencias a los documentos
+    game_ref = db.collection("games").document(game_id)
+    set_ref = game_ref.collection("sets").document(str(point.set_number))
+    # Es la referencia a la *colección* donde guardaremos el historial
+    points_collection_ref = set_ref.collection("points")
+
+    try:
+        # 2. @firestore.transactional es un decorador que "envuelve" la función
+        # en una transacción. Si la función falla, la transacción hace rollback.
+        @firestore.transactional
+        def update_score_in_transaction(transaction):
+            
+            # 3. Leer los documentos *dentro* de la transacción
+            game_snapshot = game_ref.get(transaction=transaction)
+            set_snapshot = set_ref.get(transaction=transaction)
+
+            if not game_snapshot.exists or not set_snapshot.exists:
+                # No podemos lanzar HTTPException desde aquí, así que retornamos None
+                # para indicar que falló y lo manejamos afuera.
+                return None
+
+            game_data = game_snapshot.to_dict()
+            set_data = set_snapshot.to_dict()
+
+            # 4. Calcular el nuevo score
+            current_score_t1 = set_data.get("team1_current_score", 0)
+            current_score_t2 = set_data.get("team2_current_score", 0)
+            
+            new_score_t1 = current_score_t1
+            new_score_t2 = current_score_t2
+
+            if point.scoring_team_id == game_data.get("team1_id"):
+                new_score_t1 += 1
+            elif point.scoring_team_id == game_data.get("team2_id"):
+                new_score_t2 += 1
+            else:
+                # El ID del equipo que anotó no pertenece a este partido
+                return None
+
+            # 5. Preparar el nuevo documento de historial de punto
+            new_point_doc = PointDocument(
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+                scoring_team_id=point.scoring_team_id,
+                team1_score_after=new_score_t1,
+                team2_score_after=new_score_t2
+            )
+
+            # 6. Ejecutar las escrituras (aún dentro de la transacción)
+            
+            # A. Escribir el nuevo punto en la subcolección 'points'
+            # (Creamos una referencia a un documento nuevo)
+            new_point_ref = points_collection_ref.document()
+            transaction.set(new_point_ref, new_point_doc.model_dump())
+
+            # B. Actualizar el score denormalizado en el documento 'set'
+            transaction.update(set_ref, {
+                "team1_current_score": new_score_t1,
+                "team2_current_score": new_score_t2,
+                "status": "live" # Aseguramos que el set esté 'live' si se puntúa
+            })
+
+            # 7. Retornar el documento del punto creado
+            return new_point_doc
+
+        # --- Fin de la función de transacción ---
+
+        # 8. Ejecutar la transacción
+        # Pasamos la transacción de la base de datos a nuestra función decorada
+        transaction_result = update_score_in_transaction(db.transaction())
+
+        # 9. Manejar el resultado
+        if transaction_result is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="No se pudo anotar el punto. El ID del equipo, el partido o el set no son válidos."
+            )
+
+        # ¡Éxito! Retornamos el documento del punto que se creó
+        return transaction_result
+
+    except Exception as e:
+        print(f"Error al incrementar score: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
 # --- Servido de Frontend Estático ---

@@ -14,44 +14,60 @@
 
         <div id="alert-container" class="mb-4"></div>
 
-        <div class="bg-white shadow-md rounded-lg p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">Autenticación</h2>
-            <div class="mb-4">
-                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
-                <input type="text" id="username" value="manager" 
-                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        <details class="bg-white shadow-md rounded-lg p-6 mb-6">
+            <summary class="text-xl font-semibold cursor-pointer">Autenticación</summary>
+            <div class="mt-4">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                    <input type="text" id="username" value="manager" 
+                           class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                    <input type="password" id="password" value="voley123"
+                           class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
             </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
-                <input type="password" id="password" value="voley123"
-                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-            </div>
-            <p class="text-xs text-gray-500 mt-2">Esto se usará para todas las peticiones de API.</p>
-        </div>
+        </details>
 
-        <div class="bg-white shadow-md rounded-lg p-6">
-            <h2 class="text-xl font-semibold mb-4">Crear Nuevo Partido</h2>
-            
-            <div class="mb-4">
-                <label for="team1-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Local</label>
-                <select id="team1-select" 
-                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Cargando equipos...</option>
-                </select>
+        <details class="bg-white shadow-md rounded-lg p-6 mb-6">
+            <summary class="text-xl font-semibold cursor-pointer">Crear Nuevo Partido</summary>
+            <div class="mt-4">
+                <div class="mb-4">
+                    <label for="team1-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Local</label>
+                    <select id="team1-select" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Cargando equipos...</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="team2-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Visitante</label>
+                    <select id="team2-select" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Cargando equipos...</option>
+                    </select>
+                </div>
+                
+                <button id="create-game-btn" 
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out">
+                    Crear Partido
+                </button>
+            </div>
+        </details>
+
+        <div id="manage-games-section" class="bg-white shadow-md rounded-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Gestionar Partidos</h2>
+                <button id="refresh-games-btn" 
+                        class="bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition text-sm">
+                    Refrescar Lista
+                </button>
             </div>
             
-            <div class="mb-4">
-                <label for="team2-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Visitante</label>
-                <select id="team2-select" 
-                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Cargando equipos...</option>
-                </select>
+            <div id="games-list-container" class="space-y-4">
+                <p class="text-gray-500">Haz clic en "Refrescar Lista" para ver los partidos 'en curso' o 'próximos'.</p>
             </div>
-            
-            <button id="create-game-btn" 
-                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out">
-                Crear Partido
-            </button>
         </div>
         
     </div>
@@ -64,6 +80,11 @@
         const alertContainer = document.getElementById('alert-container');
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
+        
+        // (NUEVAS) Constantes de Gestión
+        const refreshGamesBtn = document.getElementById('refresh-games-btn');
+        const gamesListContainer = document.getElementById('games-list-container');
+
 
         // --- Headers de Autenticación ---
         function getAuthHeaders() {
@@ -76,40 +97,28 @@
             };
         }
 
-        // --- Funciones de API ---
+        // --- Funciones API (Creación) ---
+        
         async function loadTeams() {
             try {
                 const response = await fetch('/manager/teams', {
                     method: 'GET',
                     headers: getAuthHeaders()
                 });
-
-                if (response.status === 401) {
-                    showAlert('Error de autenticación. Revisa usuario y contraseña.', 'danger');
-                    return;
-                }
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.detail || `Error ${response.status}: No se pudieron cargar los equipos.`);
+                    throw new Error(errorData.detail || `Error ${response.status}`);
                 }
-
                 const teams = await response.json(); 
-
                 team1Select.innerHTML = '<option value="">Selecciona un equipo</option>';
                 team2Select.innerHTML = '<option value="">Selecciona un equipo</option>';
-
                 teams.forEach(team => {
                     const option1 = new Option(`${team.name} ${team.flag || ''}`, team.id);
                     const option2 = new Option(`${team.name} ${team.flag || ''}`, team.id);
                     team1Select.add(option1);
                     team2Select.add(option2);
                 });
-                
-                // No mostramos alerta de éxito, es mejor que simplemente funcione
-                // showAlert('Equipos cargados correctamente.', 'success');
-
             } catch (error) {
-                console.error('Error en loadTeams:', error);
                 showAlert(error.message, 'danger');
             }
         }
@@ -117,45 +126,27 @@
         async function createGame() {
             const team1_id = team1Select.value;
             const team2_id = team2Select.value;
-
-            if (!team1_id || !team2_id) {
-                showAlert('Debes seleccionar ambos equipos.', 'warning');
+            if (!team1_id || !team2_id || team1_id === team2_id) {
+                showAlert('Selecciona dos equipos diferentes.', 'warning');
                 return;
             }
-            if (team1_id === team2_id) {
-                showAlert('Un equipo no puede jugar contra sí mismo.', 'warning');
-                return;
-            }
-
+            // ... (resto de la lógica de createGame)
             createGameBtn.disabled = true;
             createGameBtn.textContent = 'Creando...';
-
-            const body = JSON.stringify({
-                team1_id: team1_id,
-                team2_id: team2_id
-            });
-
             try {
                 const response = await fetch('/manager/games', {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: body
+                    body: JSON.stringify({ team1_id, team2_id })
                 });
-
                 const responseData = await response.json(); 
-
-                if (!response.ok) {
-                    throw new Error(responseData.detail || `Error ${response.status}`);
-                }
+                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
                 
-                const game = responseData;
-                showAlert(`Partido creado: ${game.team1_name} vs ${game.team2_name}`, 'success');
-                
+                showAlert(`Partido creado: ${responseData.team1_name} vs ${responseData.team2_name}`, 'success');
                 team1Select.value = "";
                 team2Select.value = "";
-
+                loadActiveGames(); // Refrescar la lista de partidos después de crear uno
             } catch (error) {
-                console.error('Error en createGame:', error);
                 showAlert(error.message, 'danger');
             } finally {
                 createGameBtn.disabled = false;
@@ -163,40 +154,152 @@
             }
         }
 
-        // --- Helper de UI ---
-        function showAlert(message, type = 'info') {
-            let bgColor, borderColor, textColor;
-            switch (type) {
-                case 'success':
-                    bgColor = 'bg-green-100'; borderColor = 'border-green-400'; textColor = 'text-green-700';
-                    break;
-                case 'danger':
-                    bgColor = 'bg-red-100'; borderColor = 'border-red-400'; textColor = 'text-red-700';
-                    break;
-                case 'warning':
-                    bgColor = 'bg-yellow-100'; borderColor = 'border-yellow-400'; textColor = 'text-yellow-700';
-                    break;
-                default:
-                    bgColor = 'bg-blue-100'; borderColor = 'border-blue-400'; textColor = 'text-blue-700';
+        // --- (NUEVAS) Funciones API (Gestión) ---
+
+        async function loadActiveGames() {
+            gamesListContainer.innerHTML = '<p class="text-gray-500">Cargando partidos...</p>';
+            try {
+                const response = await fetch('/manager/games/list', {
+                    method: 'GET',
+                    headers: getAuthHeaders()
+                });
+                if (response.status === 401) throw new Error('Error de autenticación.');
+                
+                const responseData = await response.json();
+                if (!response.ok) {
+                    // El error de índice de Firestore vendrá aquí
+                    if (responseData.detail.includes("index")) {
+                        showAlert("Falta un índice en Firestore. Revisa la terminal de uvicorn, copia el link que te da Google y créalo.", 'danger');
+                    }
+                    throw new Error(responseData.detail || `Error ${response.status}`);
+                }
+
+                if (responseData.length === 0) {
+                    gamesListContainer.innerHTML = '<p class="text-gray-500">No hay partidos activos o próximos.</p>';
+                    return;
+                }
+
+                // Limpiar y renderizar tarjetas
+                gamesListContainer.innerHTML = '';
+                responseData.forEach(game => {
+                    const gameCard = renderGameCard(game);
+                    gamesListContainer.appendChild(gameCard);
+                });
+
+            } catch (error) {
+                showAlert(error.message, 'danger');
+                gamesListContainer.innerHTML = `<p class="text-red-500">Error al cargar partidos.</p>`;
+            }
+        }
+
+        function renderGameCard(game) {
+            // 'game' es el GameDocument (incluye team1_id, team1_name, etc.)
+            const div = document.createElement('div');
+            div.className = 'border border-gray-200 rounded-lg p-4';
+            
+            // Asumimos Set 1 por ahora.
+            // Para mostrar el score actual, necesitaríamos otra query,
+            // pero por ahora solo ponemos los botones.
+            const set_number = 1; // TODO: Hacer esto dinámico
+
+            div.innerHTML = `
+                <h3 class="font-semibold text-lg">${game.team1_name} vs ${game.team2_name}</h3>
+                <p class="text-sm text-gray-500">Estado: ${game.status} (Set ${set_number})</p>
+                <div class="flex gap-4 mt-4">
+                    <button 
+                        class="flex-1 bg-blue-500 text-white py-2 px-3 rounded-md hover:bg-blue-600 score-btn"
+                        data-game-id="${game.id}"
+                        data-set-number="${set_number}"
+                        data-scoring-team-id="${game.team1_id}"
+                    >
+                        +1 ${game.team1_name}
+                    </button>
+                    <button 
+                        class="flex-1 bg-red-500 text-white py-2 px-3 rounded-md hover:bg-red-600 score-btn"
+                        data-game-id="${game.id}"
+                        data-set-number="${set_number}"
+                        data-scoring-team-id="${game.team2_id}"
+                    >
+                        +1 ${game.team2_name}
+                    </button>
+                </div>
+            `;
+            return div;
+        }
+
+        async function handleScorePoint(event) {
+            // Esta función maneja el clic en CUALQUIER botón de puntuar
+            if (!event.target.classList.contains('score-btn')) {
+                return; // No fue un botón de score
             }
 
+            const button = event.target;
+            const { gameId, setNumber, scoringTeamId } = button.dataset;
+
+            if (!gameId || !setNumber || !scoringTeamId) {
+                showAlert('Error interno: falta información en el botón.', 'danger');
+                return;
+            }
+            
+            button.disabled = true;
+            button.textContent = 'Anotando...';
+
+            const body = JSON.stringify({
+                set_number: parseInt(setNumber, 10),
+                scoring_team_id: scoringTeamId
+            });
+
+            try {
+                const response = await fetch(`/manager/games/${gameId}/increment`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: body
+                });
+
+                const responseData = await response.json();
+                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
+                
+                // ¡Éxito!
+                showAlert(`Punto anotado para ${scoringTeamId}. Nuevo score: ${responseData.team1_score_after} - ${responseData.team2_score_after}`, 'success');
+                // TODO: Actualizar la UI de la tarjeta con el nuevo score
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            } finally {
+                // Reactivar el botón (y restaurar texto original)
+                button.disabled = false;
+                button.textContent = button.textContent.replace('Anotando...', `+1 ...`); // Simplificado
+                // Una mejor implementación recargaría el estado del botón
+            }
+        }
+
+
+        // --- Helper de UI (Alertas) ---
+        function showAlert(message, type = 'info') {
+            // (Mismo código de alertas que antes)
+            let bgColor, borderColor, textColor;
+            switch (type) {
+                case 'success': bgColor = 'bg-green-100'; borderColor = 'border-green-400'; textColor = 'text-green-700'; break;
+                case 'danger': bgColor = 'bg-red-100'; borderColor = 'border-red-400'; textColor = 'text-red-700'; break;
+                case 'warning': bgColor = 'bg-yellow-100'; borderColor = 'border-yellow-400'; textColor = 'text-yellow-700'; break;
+                default: bgColor = 'bg-blue-100'; borderColor = 'border-blue-400'; textColor = 'text-blue-700'; break;
+            }
             const alertDiv = document.createElement('div');
             alertDiv.className = `${bgColor} ${borderColor} ${textColor} border px-4 py-3 rounded relative`;
             alertDiv.setAttribute('role', 'alert');
-            alertDiv.innerHTML = `
-                <span class="block sm:inline">${message}</span>
-                <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove();">
-                    <svg class="fill-current h-6 w-6 ${textColor}" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l3.029-2.651-3.03-2.651a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.03a1.2 1.2 0 1 1 1.697 1.697l-3.03 2.651 3.03 2.651a1.2 1.2 0 0 1 0 1.698z"/></svg>
-                </span>
-            `;
-            
-            alertContainer.innerHTML = ''; // Limpiar alertas anteriores
+            alertDiv.innerHTML = `<span class="block sm:inline">${message}</span><span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove();"><svg class="fill-current h-6 w-6 ${textColor}" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Cerrar</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l3.029-2.651-3.03-2.651a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.03a1.2 1.2 0 1 1 1.697 1.697l-3.03 2.651 3.03 2.651a1.2 1.2 0 0 1 0 1.698z"/></svg></span>`;
+            alertContainer.innerHTML = ''; 
             alertContainer.append(alertDiv);
         }
 
         // --- Event Listeners ---
         document.addEventListener('DOMContentLoaded', loadTeams);
         createGameBtn.addEventListener('click', createGame);
+        
+        // (NUEVOS) Listeners de Gestión
+        refreshGamesBtn.addEventListener('click', loadActiveGames);
+        // Usamos delegación de eventos para manejar clics en botones de score
+        gamesListContainer.addEventListener('click', handleScorePoint);
+
     </script>
 </body>
 </html>

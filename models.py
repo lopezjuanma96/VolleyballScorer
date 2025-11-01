@@ -20,6 +20,13 @@ class GameDocument(BaseModel):
     created_at: datetime.datetime
     winner_id: Optional[str] = None
 
+class GameListResponse(GameDocument):
+    """
+    Modelo para la RESPUESTA de la API que sí incluye el ID del documento
+    Hereda todo de GameDocument y le añade el campo 'id'.
+    """
+    id: str
+
 class SetDocument(BaseModel):
     """Modelo para el sub-documento 'sets/{set_number}'"""
     set_number: int
