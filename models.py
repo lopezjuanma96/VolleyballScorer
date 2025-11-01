@@ -34,7 +34,7 @@ class SetDocument(BaseModel):
     team1_current_score: int
     team2_current_score: int
     winner_id: Optional[str] = None
-    
+
 class PointDocument(BaseModel):
     """Modelo para el sub-documento 'points/{point_id}'"""
     timestamp: datetime.datetime
@@ -49,6 +49,15 @@ class GameCreate(BaseModel):
     """Modelo para la request POST /manager/games"""
     team1_id: str
     team2_id: str
+
+class SetFinish(BaseModel):
+    """Modelo para la request POST /manager/games/{game_id}/finish_set"""
+    set_number: int
+    winner_team_id: str
+
+class GameFinish(BaseModel):
+    """Modelo para la request POST /manager/games/{game_id}/finish_game"""
+    winner_team_id: str
 
 class PointCreate(BaseModel):
     """

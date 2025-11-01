@@ -193,87 +193,219 @@
         }
 
         function renderGameCard(game) {
-            // 'game' es el GameDocument (incluye team1_id, team1_name, etc.)
             const div = document.createElement('div');
-            div.className = 'border border-gray-200 rounded-lg p-4';
+            div.className = 'border border-gray-200 rounded-lg p-4 game-card';
+            // Guardamos el game-id en la tarjeta misma
+            div.dataset.gameId = game.id;
             
-            // Asumimos Set 1 por ahora.
-            // Para mostrar el score actual, necesitaríamos otra query,
-            // pero por ahora solo ponemos los botones.
-            const set_number = 1; // TODO: Hacer esto dinámico
-
             div.innerHTML = `
                 <h3 class="font-semibold text-lg">${game.team1_name} vs ${game.team2_name}</h3>
-                <p class="text-sm text-gray-500">Estado: ${game.status} (Set ${set_number})</p>
-                <div class="flex gap-4 mt-4">
-                    <button 
-                        class="flex-1 bg-blue-500 text-white py-2 px-3 rounded-md hover:bg-blue-600 score-btn"
-                        data-game-id="${game.id}"
-                        data-set-number="${set_number}"
-                        data-scoring-team-id="${game.team1_id}"
-                    >
-                        +1 ${game.team1_name}
-                    </button>
-                    <button 
-                        class="flex-1 bg-red-500 text-white py-2 px-3 rounded-md hover:bg-red-600 score-btn"
-                        data-game-id="${game.id}"
-                        data-set-number="${set_number}"
-                        data-scoring-team-id="${game.team2_id}"
-                    >
-                        +1 ${game.team2_name}
-                    </button>
+                <p class="text-sm text-gray-500 mb-4">Estado: ${game.status} (ID: ${game.id})</p>
+                
+                <div class="border-t pt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Puntuar en Set N°:</label>
+                    <input type-="number" value="1" 
+                        class="set-number-input w-20 px-2 py-1 border border-gray-300 rounded-md shadow-sm mb-2">
+                    
+                    <div class="flex gap-4">
+                        <button 
+                            class="flex-1 bg-blue-500 text-white py-2 px-3 rounded-md hover:bg-blue-600 score-btn"
+                            data-scoring-team-id="${game.team1_id}">
+                            +1 ${game.team1_name}
+                        </button>
+                        <button 
+                            class="flex-1 bg-red-500 text-white py-2 px-3 rounded-md hover:bg-red-600 score-btn"
+                            data-scoring-team-id="${game.team2_id}">
+                            +1 ${game.team2_name}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="border-t pt-4 mt-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Finalizar Set</h4>
+                    <div class="flex gap-4">
+                        <button 
+                            class="flex-1 bg-yellow-500 text-white py-2 px-3 rounded-md hover:bg-yellow-600 finish-set-btn"
+                            data-winner-team-id="${game.team1_id}">
+                            Ganó ${game.team1_name}
+                        </button>
+                        <button 
+                            class="flex-1 bg-yellow-500 text-white py-2 px-3 rounded-md hover:bg-yellow-600 finish-set-btn"
+                            data-winner-team-id="${game.team2_id}">
+                            Ganó ${game.team2_name}
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Usará el N° de Set de arriba. Esto creará el siguiente set.</p>
+                </div>
+
+                <div class="border-t pt-4 mt-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Finalizar Partido</h4>
+                    <div class="flex gap-4">
+                        <button 
+                            class="flex-1 bg-gray-700 text-white py-2 px-3 rounded-md hover:bg-gray-800 finish-game-btn"
+                            data-winner-team-id="${game.team1_id}">
+                            Ganó ${game.team1_name}
+                        </button>
+                        <button 
+                            class="flex-1 bg-gray-700 text-white py-2 px-3 rounded-md hover:bg-gray-800 finish-game-btn"
+                            data-winner-team-id="${game.team2_id}">
+                            Ganó ${game.team2_name}
+                        </button>
+                    </div>
                 </div>
             `;
             return div;
         }
 
-        async function handleScorePoint(event) {
-            // Esta función maneja el clic en CUALQUIER botón de puntuar
-            if (!event.target.classList.contains('score-btn')) {
-                return; // No fue un botón de score
-            }
+        function findCardAndSetNumber(button) {
+            const card = button.closest('.game-card');
+            if (!card) return null;
 
-            const button = event.target;
-            const { gameId, setNumber, scoringTeamId } = button.dataset;
+            const gameId = card.dataset.gameId;
+            const setInput = card.querySelector('.set-number-input');
+            const setNumber = parseInt(setInput.value, 10);
 
-            if (!gameId || !setNumber || !scoringTeamId) {
-                showAlert('Error interno: falta información en el botón.', 'danger');
-                return;
+            if (!gameId || isNaN(setNumber) || setNumber <= 0) {
+                showAlert('Error: No se encontró el ID del partido o el N° de Set es inválido.', 'danger');
+                return null;
             }
+            return { card, gameId, setNumber };
+        }
+
+        async function handleScorePoint(button) {
+            const { card, gameId, setNumber } = findCardAndSetNumber(button);
+            if (!card) return;
             
+            const scoringTeamId = button.dataset.scoringTeamId;
+            if (!scoringTeamId) return;
+
             button.disabled = true;
             button.textContent = 'Anotando...';
 
             const body = JSON.stringify({
-                set_number: parseInt(setNumber, 10),
+                set_number: setNumber,
                 scoring_team_id: scoringTeamId
             });
 
             try {
                 const response = await fetch(`/manager/games/${gameId}/increment`, {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: body
+                    method: 'POST', headers: getAuthHeaders(), body: body
                 });
-
                 const responseData = await response.json();
                 if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
                 
-                // ¡Éxito!
-                showAlert(`Punto anotado para ${scoringTeamId}. Nuevo score: ${responseData.team1_score_after} - ${responseData.team2_score_after}`, 'success');
-                // TODO: Actualizar la UI de la tarjeta con el nuevo score
+                showAlert(`Punto (Set ${setNumber}): ${responseData.team1_score_after} - ${responseData.team2_score_after}`, 'success');
+            
             } catch (error) {
                 showAlert(error.message, 'danger');
             } finally {
-                // Reactivar el botón (y restaurar texto original)
                 button.disabled = false;
-                button.textContent = button.textContent.replace('Anotando...', `+1 ...`); // Simplificado
-                // Una mejor implementación recargaría el estado del botón
+                button.textContent = button.textContent.replace('Anotando...', `+1 ...`);
+            }
+        }
+
+        async function handleFinishSet(button) {
+            const { card, gameId, setNumber } = findCardAndSetNumber(button);
+            if (!card) return;
+
+            const winnerTeamId = button.dataset.winnerTeamId;
+            if (!winnerTeamId) return;
+
+            if (!confirm(`¿Seguro que quieres finalizar el Set ${setNumber} con ganador ${winnerTeamId}? Esto creará el Set ${setNumber + 1}.`)) {
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Finalizando...';
+
+            const body = JSON.stringify({
+                set_number: setNumber,
+                winner_team_id: winnerTeamId
+            });
+
+            try {
+                const response = await fetch(`/manager/games/${gameId}/finish_set`, {
+                    method: 'POST', headers: getAuthHeaders(), body: body
+                });
+                const responseData = await response.json(); // responseData es el *nuevo* set
+                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
+                
+                showAlert(`Set ${setNumber} finalizado. Creado Set ${responseData.set_number}.`, 'success');
+                
+                // Actualizamos el input al nuevo número de set
+                const setInput = card.querySelector('.set-number-input');
+                setInput.value = responseData.set_number;
+
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            } finally {
+                button.disabled = false;
+                button.textContent = button.textContent.replace('Finalizando...', 'Ganó...');
+            }
+        }
+
+        async function handleFinishGame(button) {
+            const card = button.closest('.game-card');
+            if (!card) return;
+            const gameId = card.dataset.gameId;
+            
+            const winnerTeamId = button.dataset.winnerTeamId;
+            if (!winnerTeamId) return;
+
+            if (!confirm(`¿¡SEGURO!? ¿Quieres finalizar TODO el partido ${gameId} con ganador ${winnerTeamId}? Esta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Finalizando...';
+
+            const body = JSON.stringify({
+                winner_team_id: winnerTeamId
+            });
+
+            try {
+                const response = await fetch(`/manager/games/${gameId}/finish_game`, {
+                    method: 'POST', headers: getAuthHeaders(), body: body
+                });
+                const responseData = await response.json();
+                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
+                
+                showAlert(`¡Partido ${gameId} finalizado!`, 'success');
+                
+                // El partido terminó, lo sacamos de la lista
+                card.remove();
+
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            } finally {
+                // No necesitamos re-habilitar el botón porque la tarjeta se elimina
             }
         }
 
 
-        // --- Helper de UI (Alertas) ---
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', loadTeams);
+        createGameBtn.addEventListener('click', createGame);
+        refreshGamesBtn.addEventListener('click', loadActiveGames);
+
+        gamesListContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('button'); // Encuentra el botón más cercano
+            if (!button) return;
+
+            if (button.classList.contains('score-btn')) {
+                handleScorePoint(button);
+                return;
+            }
+            if (button.classList.contains('finish-set-btn')) {
+                handleFinishSet(button);
+                return;
+            }
+            if (button.classList.contains('finish-game-btn')) {
+                handleFinishGame(button);
+                return;
+            }
+        });
+
         function showAlert(message, type = 'info') {
             // (Mismo código de alertas que antes)
             let bgColor, borderColor, textColor;
@@ -295,7 +427,6 @@
         document.addEventListener('DOMContentLoaded', loadTeams);
         createGameBtn.addEventListener('click', createGame);
         
-        // (NUEVOS) Listeners de Gestión
         refreshGamesBtn.addEventListener('click', loadActiveGames);
         // Usamos delegación de eventos para manejar clics en botones de score
         gamesListContainer.addEventListener('click', handleScorePoint);

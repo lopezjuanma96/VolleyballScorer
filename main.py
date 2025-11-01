@@ -14,7 +14,7 @@ from firebase_admin import credentials, firestore
 # --- Importar Modelos ---
 # Importamos todo desde nuestro nuevo archivo models.py
 from models import (
-    Team, GameCreate, GameDocument, GameListResponse, SetDocument, PointCreate, PointDocument
+    Team, GameCreate, GameDocument, GameListResponse, GameFinish, SetDocument, SetFinish, PointCreate, PointDocument
 )
 
 try:
@@ -143,6 +143,110 @@ def get_games_list(username: str = Depends(get_current_user)):
         return games
     except Exception as e:
         print(f"Error al listar partidos: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+@app.post("/manager/games/{game_id}/finish_set", response_model=SetDocument)
+def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_current_user)):
+    """
+    Marca un set como finalizado y (opcionalmente) crea el siguiente.
+    """
+    
+    game_ref = db.collection("games").document(game_id)
+    set_ref = game_ref.collection("sets").document(str(set_data.set_number))
+
+    try:
+        @firestore.transactional
+        def finish_set_in_transaction(transaction):
+            game_snapshot = game_ref.get(transaction=transaction)
+            set_snapshot = set_ref.get(transaction=transaction)
+
+            if not game_snapshot.exists or not set_snapshot.exists:
+                return None # Indicará que el partido o set no existe
+
+            game_data = game_snapshot.to_dict()
+
+            # Validar que el ganador sea parte del partido
+            if set_data.winner_team_id not in [game_data["team1_id"], game_data["team2_id"]]:
+                return None # Ganador inválido
+
+            # 1. Actualizar el set actual
+            transaction.update(set_ref, {
+                "status": "finished",
+                "winner_id": set_data.winner_team_id
+            })
+
+            # 2. Crear el *siguiente* set (Punto 3 de nuestro plan)
+            # Asumimos que no es un partido a 5 sets, el manager lo parará manualmente
+            next_set_number = set_data.set_number + 1
+            next_set_ref = game_ref.collection("sets").document(str(next_set_number))
+            
+            new_set_doc = SetDocument(
+                set_number=next_set_number,
+                status="live", # El nuevo set arranca 'live'
+                team1_current_score=0,
+                team2_current_score=0,
+                winner_id=None
+            )
+            transaction.set(next_set_ref, new_set_doc.model_dump())
+            
+            # Devolvemos el *nuevo* set creado
+            return new_set_doc 
+
+        # --- Fin de la transacción ---
+        
+        transaction_result = finish_set_in_transaction(db.transaction())
+
+        if transaction_result is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="No se pudo finalizar el set. El ID del equipo, partido o set no son válidos."
+            )
+        
+        # Devolvemos el nuevo set que se creó
+        return transaction_result
+
+    except Exception as e:
+        print(f"Error al finalizar set: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+# ---
+# Endpoint 4: Finalizar Partido (¡NUEVO!)
+# ---
+@app.post("/manager/games/{game_id}/finish_game", response_model=GameDocument)
+def finish_game(game_id: str, game_data: GameFinish, username: str = Depends(get_current_user)):
+    """
+    Marca un partido como finalizado.
+    """
+    game_ref = db.collection("games").document(game_id)
+
+    try:
+        # 1. Leer el partido
+        game_snapshot = game_ref.get()
+        if not game_snapshot.exists:
+            raise HTTPException(status_code=404, detail="El partido no existe.")
+        
+        game_dict = game_snapshot.to_dict()
+
+        # 2. Validar ganador
+        if game_data.winner_team_id not in [game_dict["team1_id"], game_dict["team2_id"]]:
+            raise HTTPException(status_code=400, detail="El ID del equipo ganador no es válido.")
+
+        # 3. Actualizar el documento
+        game_ref.update({
+            "status": "finished",
+            "winner_id": game_data.winner_team_id
+        })
+        
+        # 4. Devolver el estado final del partido
+        # Para evitar otra lectura, actualizamos el dict que ya teníamos
+        game_dict["status"] = "finished"
+        game_dict["winner_id"] = game_data.winner_team_id
+        return game_dict
+
+    except Exception as e:
+        print(f"Error al finalizar partido: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
