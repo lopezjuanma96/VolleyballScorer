@@ -25,6 +25,11 @@
         <div id="upcoming-games-container" class="space-y-4">
             <p class="text-gray-500" id="upcoming-loading">Cargando próximos partidos...</p>
         </div>
+
+        <h2 class="text-2xl font-semibold mt-8 mb-4 text-gray-700">Finalizados</h2>
+        <div id="finished-games-container" class="space-y-4">
+            <p class="text-gray-500" id="finished-loading">Cargando partidos finalizados...</p>
+        </div>
     </div>
 
     <script>
@@ -45,8 +50,10 @@
         // --- 3. Referencias a contenedores ---
         const liveContainer = document.getElementById('live-games-container');
         const upcomingContainer = document.getElementById('upcoming-games-container');
+        const finishedContainer = document.getElementById('finished-games-container');
         const liveLoading = document.getElementById('live-loading');
         const upcomingLoading = document.getElementById('upcoming-loading');
+        const finishedLoading = document.getElementById('finished-loading');
 
         // --- 4. Función para renderizar una tarjeta de partido ---
         function renderGameCard(game) {
@@ -99,40 +106,87 @@
             }
         }
 
-        // --- 5. El Listener en Tiempo Real (La Magia) ---
+        function renderFinishedCard(game) {
+            const data = game.data();
+            
+            // Buscar si la tarjeta ya existe para actualizarla
+            let card = document.getElementById(game.id);
+            
+            if (!card) {
+                // Si no existe, crearla
+                card = document.createElement('a');
+                card.id = game.id;
+                card.href = `/game?id=${game.id}`; // Link para ver el historial
+                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition opacity-80 hover:opacity-100";
+                finishedContainer.appendChild(card);
+            }
+
+            // (Re)Renderizar el contenido interno
+            const winnerName = (data.winner_id === data.team1_id) ? data.team1_name : data.team2_name;
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-center text-gray-600">
+                    <span class="text-lg font-semibold">${data.team1_name}</span>
+                    <span class="text-lg font-semibold">${data.team2_name}</span>
+                </div>
+                
+                <div class="flex justify-between items-center my-2">
+                    <span class="text-3xl font-bold text-gray-700">
+                        ${data.current_team1_score}
+                    </span>
+                    <span class="text-3xl font-bold text-gray-700">
+                        ${data.current_team2_score}
+                    </span>
+                </div>
+                
+                <div class="text-center text-sm font-medium text-green-700 border-t pt-2 mt-2">
+                    Ganador: <strong>${winnerName}</strong>
+                </div>
+            `;
+        }
+
+
+        // --- Listener 1: Partidos "En Vivo" y "Próximos" ---
+        // (Este bloque de código ya lo tienes. No lo modifiques)
         db.collection("games")
-          .where("status", "!=", "finished") // Solo 'live' y 'upcoming'
-          .orderBy("status", "desc") // 'upcoming' (u) viene antes que 'live' (l) alfabéticamente
-          .orderBy("created_at", "desc")
+          .where("status", "!=", "finished")
+          // ... (el resto de tu listener 1) ...
           .onSnapshot(
             (querySnapshot) => {
-                // Snapshot se dispara CADA VEZ que algo cambia
-                
-                // Ocultar "cargando..."
-                liveLoading.style.display = 'none';
-                upcomingLoading.style.display = 'none';
+                // ... (toda la lógica de este listener queda igual) ...
+            },
+            (error) => {
+                // ... (el manejo de error queda igual) ...
+            }
+          );
+        
+        // Escuchamos por separado los partidos finalizados
+        db.collection("games")
+          .where("status", "==", "finished")
+          .orderBy("created_at", "desc") // Mostrar los más recientes primero
+          .limit(10) // Traer solo los últimos 10 (buena práctica)
+          .onSnapshot(
+            (querySnapshot) => {
+                finishedLoading.style.display = 'none';
 
                 if (querySnapshot.empty) {
-                    liveContainer.innerHTML = '<p class="text-gray-500">No hay partidos en vivo.</p>';
-                    upcomingContainer.innerHTML = '<p class="text-gray-500">No hay partidos próximos.</p>';
+                    finishedContainer.innerHTML = '<p class="text-gray-500">Aún no hay partidos finalizados.</p>';
                     return;
                 }
                 
-                // Limpiar contenedores (una forma simple de manejar cambios)
-                // Una app más compleja buscaría qué cambió
-                liveContainer.innerHTML = '';
-                upcomingContainer.innerHTML = '';
+                finishedContainer.innerHTML = ''; // Limpiar por si acaso
 
                 querySnapshot.forEach((doc) => {
-                    renderGameCard(doc); // Renderiza o actualiza la tarjeta
+                    renderFinishedCard(doc); // Renderiza la tarjeta finalizada
                 });
             },
             (error) => {
-                console.error("Error al escuchar partidos: ", error);
-                liveLoading.innerText = 'Error al cargar partidos.';
-                upcomingLoading.innerText = 'Error al cargar partidos.';
+                console.error("Error al escuchar partidos finalizados: ", error);
+                // ¡IMPORTANTE! Esto seguro te pida un nuevo índice.
+                // Revisa la consola del navegador (F12) por el link para crearlo.
+                finishedLoading.innerText = 'Error al cargar partidos. (Posible índice faltante)';
             }
-        );
+          );
 
     </script>
 </body>
