@@ -1,5 +1,6 @@
 # Python
-.pyc
+*.pyc
+__pycache__
 .ipynb
 
 .venv
