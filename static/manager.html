@@ -189,9 +189,9 @@
                                 <th class="p-2 w-2/5 text-lg font-bold text-gray-800">${game.team2_name}</th>
                             </tr>
                             <tr>
-                                <td class="p-2 text-4xl font-bold text-blue-600">${game.current_team1_score}</td>
+                                <td class="p-2 text-4xl font-bold text-blue-600" data-score-team="1">${game.current_team1_score}</td>
                                 <td class="p-2 text-gray-400">-</td>
-                                <td class="p-2 text-4xl font-bold text-blue-600">${game.current_team2_score}</td>
+                                <td class="p-2 text-4xl font-bold text-blue-600" data-score-team="2">${game.current_team2_score}</td>
                             </tr>
                         </thead>
                         
@@ -248,8 +248,8 @@
         // --- (ACTUALIZADO) Manejadores de Eventos ---
 
         async function handleScorePoint(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
+            const { card, gameId, gameData } = getGameDataFromButton(button);
+            if (!card) return;
             
             const scoringTeamId = button.dataset.teamId;
             if (!scoringTeamId) return;
@@ -265,15 +265,30 @@
                 const response = await fetch(`/manager/games/${gameId}/increment`, {
                     method: 'POST', headers: getAuthHeaders(), body: body
                 });
-                const responseData = await response.json();
+                
+                const responseData = await response.json(); // Es el PointDocument
                 if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
                 
-                // Refrescar solo esta tarjeta (o todo)
-                loadActiveGames(); // Es lo más simple
+                // --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+                // 1. En lugar de loadActiveGames(), actualizamos el DOM manualmente
+                const score1Elem = card.querySelector('[data-score-team="1"]');
+                const score2Elem = card.querySelector('[data-score-team="2"]');
+
+                score1Elem.textContent = responseData.team1_score_after;
+                score2Elem.textContent = responseData.team2_score_after;
+
+                // 2. También actualizamos nuestro "cache" local de datos
+                gameData.current_team1_score = responseData.team1_score_after;
+                gameData.current_team2_score = responseData.team2_score_after;
+                loadedGamesData.set(gameId, gameData);
+                // --- FIN DEL CAMBIO ---
 
             } catch (error) {
                 showAlert(error.message, 'danger');
-                button.disabled = false; button.textContent = '+1 Punto';
+            } finally {
+                // Esto es clave: reactivamos el botón
+                button.disabled = false; 
+                button.textContent = '+1 Punto';
             }
         }
 
@@ -344,26 +359,40 @@
         // --- (NUEVO) Manejadores de Acciones Globales ---
 
         async function handleUndoPoint(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
+            const { card, gameId, gameData } = getGameDataFromButton(button);
             if (!gameId) return;
             
-            // No pedimos confirmación
             button.disabled = true; button.textContent = 'Deshaciendo...';
             
             try {
                 const response = await fetch(`/manager/games/${gameId}/undo_point`, {
                     method: 'POST', headers: getAuthHeaders()
                 });
-                const responseData = await response.json();
+                const responseData = await response.json(); // Contiene { new_scores: { ... } }
                 if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
 
-                showAlert(responseData.message, 'success');
-                loadActiveGames(); // Recargar
+                // --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+                const newScores = responseData.new_scores;
+
+                // 1. Actualizamos el DOM
+                const score1Elem = card.querySelector('[data-score-team="1"]');
+                const score2Elem = card.querySelector('[data-score-team="2"]');
+                score1Elem.textContent = newScores.team1_score;
+                score2Elem.textContent = newScores.team2_score;
+
+                // 2. Actualizamos el cache local
+                gameData.current_team1_score = newScores.team1_score;
+                gameData.current_team2_score = newScores.team2_score;
+                loadedGamesData.set(gameId, gameData);
+
+                showAlert(responseData.message, 'success'); // Mantenemos la alerta de éxito
 
             } catch (error) {
                 showAlert(error.message, 'danger');
             } finally {
-                // El botón se repintará con loadActiveGames
+                // Reactivamos el botón (se repintará con el texto original)
+                button.disabled = false;
+                button.textContent = `Deshacer Último Punto (Set ${gameData.current_set_number})`;
             }
         }
 
