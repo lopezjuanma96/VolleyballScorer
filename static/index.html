@@ -150,13 +150,34 @@
         // (Este bloque de código ya lo tienes. No lo modifiques)
         db.collection("games")
           .where("status", "!=", "finished")
-          // ... (el resto de tu listener 1) ...
+          .orderBy("status", "desc") // 'upcoming' (u) viene antes que 'live' (l) alfabéticamente
+          .orderBy("created_at", "desc")
           .onSnapshot(
             (querySnapshot) => {
-                // ... (toda la lógica de este listener queda igual) ...
+                // Snapshot se dispara CADA VEZ que algo cambia
+                
+                // Ocultar "cargando..."
+                liveLoading.style.display = 'none';
+                upcomingLoading.style.display = 'none';
+                if (querySnapshot.empty) {
+                    liveContainer.innerHTML = '<p class="text-gray-500">No hay partidos en vivo.</p>';
+                    upcomingContainer.innerHTML = '<p class="text-gray-500">No hay partidos próximos.</p>';
+                    return;
+                }
+                
+                // Limpiar contenedores (una forma simple de manejar cambios)
+                // Una app más compleja buscaría qué cambió
+                liveContainer.innerHTML = '';
+                upcomingContainer.innerHTML = '';
+
+                querySnapshot.forEach((doc) => {
+                    renderGameCard(doc); // Renderiza la tarjeta finalizada
+                });
             },
             (error) => {
-                // ... (el manejo de error queda igual) ...
+                console.error("Error al escuchar partidos finalizados: ", error);
+                liveLoading.innerText = 'Error al cargar partidos.';
+                upcomingLoading.innerText = 'Error al cargar partidos.';
             }
           );
         
