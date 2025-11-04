@@ -59,6 +59,10 @@ class SetFinish(BaseModel):
     set_number: int
     winner_team_id: str
 
+class SetCancel(BaseModel): # <--- (AÑADE ESTA CLASE)
+    """Modelo para la request POST /manager/games/{game_id}/cancel_set"""
+    set_number: int
+
 class GameFinish(BaseModel):
     """Modelo para la request POST /manager/games/{game_id}/finish_game"""
     winner_team_id: str

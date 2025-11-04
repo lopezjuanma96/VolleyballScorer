@@ -14,7 +14,7 @@ from firebase_admin import credentials, firestore
 # --- Importar Modelos ---
 # Importamos todo desde nuestro nuevo archivo models.py
 from models import (
-    Team, GameCreate, GameDocument, GameListResponse, GameFinish, SetDocument, SetFinish, PointCreate, PointDocument
+    Team, GameCreate, GameDocument, GameListResponse, GameFinish, SetDocument, SetFinish, SetCancel, PointCreate, PointDocument
 )
 
 try:
@@ -132,7 +132,7 @@ def get_games_list(username: str = Depends(get_current_user)):
     """
     try:
         games_ref = db.collection("games").where(
-            filter=firestore.FieldFilter("status", "!=", "finished")
+            filter=firestore.FieldFilter("status", "in", ["upcoming", "live"])
         ).order_by("created_at", direction=firestore.Query.DESCENDING).stream()
 
         games = []
@@ -221,9 +221,6 @@ def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_cu
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
-# ---
-# Endpoint 4: Finalizar Partido (¡NUEVO!)
-# ---
 @app.post("/manager/games/{game_id}/finish_game", response_model=GameDocument)
 def finish_game(game_id: str, game_data: GameFinish, username: str = Depends(get_current_user)):
     """
@@ -356,6 +353,167 @@ def increment_score(game_id: str, point: PointCreate, username: str = Depends(ge
 
     except Exception as e:
         print(f"Error al incrementar score: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+@app.post("/manager/games/{game_id}/undo_point", status_code=status.HTTP_200_OK)
+def undo_last_point(game_id: str, username: str = Depends(get_current_user)):
+    """
+    Deshace el último punto anotado en el set actual.
+    """
+    
+    result = None
+    message = "Error desconocido."
+    try:
+        @firestore.transactional
+        def undo_in_transaction(transaction):
+            # 1. Obtener el set actual
+            game_ref = db.collection("games").document(game_id)
+            game_snapshot = game_ref.get(transaction=transaction)
+            if not game_snapshot.exists:
+                return (None, "El partido no existe.")
+            
+            game_data = game_snapshot.to_dict()
+            current_set_num = game_data.get("current_set_number", 1)
+            
+            set_ref = game_ref.collection("sets").document(str(current_set_num))
+            points_collection_ref = set_ref.collection("points")
+
+            # 2. Buscar los últimos 2 puntos
+            last_two_points_query = points_collection_ref.order_by(
+                "timestamp", direction=firestore.Query.DESCENDING
+            ).limit(2)
+            last_two_points = list(last_two_points_query.get(transaction=transaction))
+
+            # 3. Determinar el estado anterior
+            new_score_t1 = 0
+            new_score_t2 = 0
+            
+            if len(last_two_points) == 0:
+                return (None, "No hay puntos en este set para deshacer.")
+            
+            elif len(last_two_points) == 1:
+                point_to_delete_ref = last_two_points[0].reference
+            
+            else:
+                point_to_delete_ref = last_two_points[0].reference
+                anteultimo_point_data = last_two_points[1].to_dict()
+                new_score_t1 = anteultimo_point_data.get("team1_score_after", 0)
+                new_score_t2 = anteultimo_point_data.get("team2_score_after", 0)
+
+            # 4. Ejecutar las escrituras
+            transaction.delete(point_to_delete_ref)
+            transaction.update(set_ref, {
+                "team1_current_score": new_score_t1,
+                "team2_current_score": new_score_t2
+            })
+            transaction.update(game_ref, {
+                "current_team1_score": new_score_t1,
+                "current_team2_score": new_score_t2
+            })
+            
+            return ({"team1_score": new_score_t1, "team2_score": new_score_t2}, "Punto deshecho.")
+
+        # --- Fin de la transacción ---
+        
+        result, message = undo_in_transaction(db.transaction())
+        
+    except Exception as e:
+        # Esto SÍ es un error interno
+        print(f"Error al deshacer punto: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+    # Manejamos los 'None' (errores lógicos) FUERA del try/except
+    if result is None:
+        # Usamos 400 (Bad Request) o 404 (Not Found) según el 'message'
+        status_code = 404 if "no existe" in message else 400
+        raise HTTPException(status_code=status_code, detail=message)
+
+    return {"status": "ok", "message": message, "new_scores": result}
+
+
+@app.post("/manager/games/{game_id}/cancel_set", response_model=SetDocument)
+def cancel_set(game_id: str, set_data: SetCancel, username: str = Depends(get_current_user)):
+    """
+    Marca un set como 'cancelled' y automáticamente crea el siguiente,
+    actualizando el game doc.
+    """
+    
+    game_ref = db.collection("games").document(game_id)
+    set_ref = game_ref.collection("sets").document(str(set_data.set_number))
+
+    try:
+        @firestore.transactional
+        def cancel_set_in_transaction(transaction):
+            
+            game_snapshot = game_ref.get(transaction=transaction)
+            set_snapshot = set_ref.get(transaction=transaction)
+
+            if not game_snapshot.exists or not set_snapshot.exists:
+                return (None, "El partido o el set no existen.")
+
+            # 1. Actualizar el set actual a 'cancelled'
+            transaction.update(set_ref, {
+                "status": "cancelled"
+                # No necesitamos un 'winner_id'
+            })
+
+            # 2. Crear el *siguiente* set (igual que en finish_set)
+            next_set_number = set_data.set_number + 1
+            next_set_ref = game_ref.collection("sets").document(str(next_set_number))
+            
+            new_set_doc = SetDocument(
+                set_number=next_set_number,
+                status="live", 
+                team1_current_score=0,
+                team2_current_score=0,
+                winner_id=None
+            )
+            transaction.set(next_set_ref, new_set_doc.model_dump())
+            
+            # 3. Actualizar el documento 'game' principal
+            transaction.update(game_ref, {
+                "current_set_number": next_set_number,
+                "current_team1_score": 0,
+                "current_team2_score": 0
+            })
+            
+            # Devolvemos el *nuevo* set creado
+            return (new_set_doc, "Set cancelado.")
+        
+        # --- Fin de la transacción ---
+        
+        result, message = cancel_set_in_transaction(db.transaction())
+
+        if result is None:
+            raise HTTPException(status_code=404, detail=message)
+        
+        # Devolvemos el SetDocument del *nuevo* set creado
+        return result
+
+    except Exception as e:
+        print(f"Error al cancelar set: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+
+
+@app.post("/manager/games/{game_id}/cancel", status_code=status.HTTP_200_OK)
+def cancel_game(game_id: str, username: str = Depends(get_current_user)):
+    """
+    Anula un partido cambiándole el estado a 'cancelled'.
+    """
+    try:
+        game_ref = db.collection("games").document(game_id)
+        game_snapshot = game_ref.get()
+
+        if not game_snapshot.exists:
+            raise HTTPException(status_code=404, detail="El partido no existe.")
+        
+        game_ref.update({"status": "cancelled"})
+        
+        return {"status": "ok", "message": "Partido anulado."}
+    
+    except Exception as e:
+        print(f"Error al anular partido: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
