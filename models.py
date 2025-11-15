@@ -62,6 +62,8 @@ class GameCreate(BaseModel):
     """Modelo para la request POST /manager/games"""
     team1_id: str
     team2_id: str
+    
+    category_id: Optional[str] = None
 
 class SetFinish(BaseModel):
     """Modelo para la request POST /manager/games/{game_id}/finish_set"""
