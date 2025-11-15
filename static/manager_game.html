@@ -2,249 +2,327 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controlador de Partido</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Controlador - Voley</title>
+    <link rel="icon" href="/static/icon.png" type="image/x-icon">
+    <link rel="manifest" href="/static/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100">
+    
+    <style>
+        .flag-img { border-radius: 4px; object-fit: cover; }
+        body { overflow-x: hidden; background-color: #f3f4f6; }
 
-    <div class="bg-white shadow mb-6">
-        <div class="container mx-auto px-4 py-3 flex items-center">
-            <a href="/manager" class="text-gray-500 hover:text-gray-800 mr-4">
-                &larr; Volver
-            </a>
-            <h1 class="text-lg font-bold text-gray-800 truncate" id="header-title">Cargando partido...</h1>
-        </div>
-    </div>
+        /* =========================================
+           1. MODO VERTICAL (PORTRAIT - Default) 
+           ========================================= */
+        .layout-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Dos columnas */
+            grid-template-rows: auto auto auto; /* 3 Filas explícitas */
+            gap: 0.75rem;
+            padding: 1rem;
+            padding-bottom: 4rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
 
-    <div class="container mx-auto max-w-xl p-4">
-        <div id="alert-container" class="mb-4"></div>
+        /* Fila 1: Score Card */
+        .mobile-score-card { 
+            grid-column: 1 / -1; 
+            grid-row: 1; /* Forzamos primera fila */
+            display: block; 
+            margin-bottom: 0.5rem;
+        }
 
-        <div id="game-control-card" class="bg-white shadow-lg rounded-xl overflow-hidden hidden">
+        /* Fila 2: Botones de Equipos (Lado a Lado) */
+        .area-t1 { 
+            grid-column: 1; 
+            grid-row: 2; /* Forzamos segunda fila */
+            display: flex; flex-direction: column; gap: 0.75rem; 
+        }
+        .area-t2 { 
+            grid-column: 2; 
+            grid-row: 2; /* Forzamos segunda fila */
+            display: flex; flex-direction: column; gap: 0.75rem; 
+        }
+
+        /* Fila 3: Admin */
+        .area-center { 
+            grid-column: 1 / -1; 
+            grid-row: 3; /* Forzamos tercera fila */
+            margin-top: 1rem;
+            background-color: white;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .desktop-header { display: none; } 
+
+
+        /* =========================================
+           2. MODO HORIZONTAL (LANDSCAPE) 
+           ========================================= */
+        @media (orientation: landscape) {
+            body { overflow: hidden; background-color: #ffffff; } 
             
-            <div class="bg-gray-50 border-b border-gray-200 p-6 text-center">
-                <div class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2" id="category-label">CATEGORÍA</div>
-                
+            .mobile-navbar, .mobile-score-card { display: none !important; }
+            .desktop-header { display: block !important; }
+
+            .layout-container {
+                display: grid;
+                grid-template-columns: 1fr 24rem 1fr;
+                grid-template-rows: 100vh; /* Una sola fila gigante */
+                height: 100vh;
+                max-width: none;
+                margin: 0; padding: 0; gap: 0;
+            }
+
+            /* Resetear filas para que todos estén en la fila 1 */
+            .area-t1 {
+                grid-column: 1;
+                grid-row: 1; /* Reset a fila 1 */
+                background-color: #eff6ff; border-right: 1px solid #dbeafe;
+                padding: 1.5rem; justify-content: center; height: 100%;
+            }
+
+            .area-center {
+                grid-column: 2;
+                grid-row: 1; /* Reset a fila 1 */
+                margin: 0; border-radius: 0; box-shadow: none;
+                display: flex; flex-direction: column; justify-content: center;
+                height: 100%; background-color: white; z-index: 10;
+            }
+
+            .area-t2 {
+                grid-column: 3;
+                grid-row: 1; /* Reset a fila 1 */
+                background-color: #eff6ff; border-left: 1px solid #dbeafe;
+                padding: 1.5rem; justify-content: center; height: 100%;
+            }
+
+            .btn-action {
+                height: auto; min-height: 80px; max-height: 160px; flex-grow: 1;
+                font-size: 1.5rem !important;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                margin-bottom: 1rem;
+            }
+            
+            .desktop-header h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+            .score-big { font-size: 5rem; line-height: 1; }
+        }
+
+        .btn-action {
+            width: 100%; padding: 1rem; border-radius: 0.75rem; font-weight: bold;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: transform 0.1s;
+        }
+        .btn-action:active { transform: scale(0.95); }
+
+        #toast-container {
+            position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 0.5rem;
+            pointer-events: none; width: 100%; max-width: 400px; padding: 1rem;
+        }
+        @media (orientation: portrait) { #toast-container { top: 0; left: 50%; transform: translateX(-50%); } }
+        @media (orientation: landscape) { #toast-container { bottom: 0; right: 0; align-items: flex-end; } }
+        .toast { pointer-events: auto; transition: all 0.3s; transform: translateY(0); opacity: 1; }
+        .toast-enter { transform: translateY(-20px); opacity: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="toast-container"></div>
+
+    <nav class="mobile-navbar bg-white shadow px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <a href="/manager" class="text-gray-500 hover:text-gray-800 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Volver
+        </a>
+        <span class="text-sm font-bold text-gray-800 truncate max-w-[150px]" id="nav-title">Cargando...</span>
+        <div class="w-10"></div> 
+    </nav>
+
+    <div class="layout-container">
+
+        <div class="mobile-score-card">
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center border border-gray-200">
+                <div class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2 category-label-display">CATEGORÍA</div>
                 <div class="flex justify-between items-center">
                     <div class="flex-1">
-                        <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1" id="team1-name">Equipo 1</h2>
-                        <div class="flex items-baseline justify-center gap-2">
-                            <span class="text-6xl font-black text-gray-800" id="score1">0</span>
-                            <span class="text-xl font-bold text-gray-400">
-                                (<span id="sets1">0</span>)
-                            </span>
+                        <h2 class="text-lg font-bold text-gray-900 truncate t1-name-display">Local</h2>
+                        <div class="flex items-baseline justify-center gap-1">
+                            <span class="text-5xl font-black text-gray-800 t1-score-display">0</span>
+                            <span class="text-lg font-bold text-gray-400">(<span class="t1-sets-display">0</span>)</span>
                         </div>
                     </div>
-
-                    <div class="px-4">
-                        <div class="text-sm font-medium text-gray-400 mb-2">SET <span id="set-num">1</span></div>
-                        <div class="h-12 w-px bg-gray-300 mx-auto"></div>
+                    <div class="px-2">
+                        <div class="text-xs font-bold text-gray-400 mb-1">SET <span class="set-num-display">1</span></div>
+                        <div class="h-8 w-px bg-gray-300 mx-auto"></div>
                     </div>
-
                     <div class="flex-1">
-                        <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1" id="team2-name">Equipo 2</h2>
-                        <div class="flex items-baseline justify-center gap-2 flex-row-reverse">
-                            <span class="text-6xl font-black text-gray-800" id="score2">0</span>
-                            <span class="text-xl font-bold text-gray-400">
-                                (<span id="sets2">0</span>)
-                            </span>
+                        <h2 class="text-lg font-bold text-gray-900 truncate t2-name-display">Visita</h2>
+                        <div class="flex items-baseline justify-center gap-1 flex-row-reverse">
+                            <span class="text-5xl font-black text-gray-800 t2-score-display">0</span>
+                            <span class="text-lg font-bold text-gray-400">(<span class="t2-sets-display">0</span>)</span>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="p-6 space-y-6">
-                
-                <div class="grid grid-cols-2 gap-4">
-                    <button onclick="addPoint('team1')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow transition transform active:scale-95">
-                        +1 Punto Local
-                    </button>
-                    <button onclick="addPoint('team2')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow transition transform active:scale-95">
-                        +1 Punto Visita
-                    </button>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <button onclick="finishSet('team1')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-3 rounded-lg transition">
-                        Set para Local
-                    </button>
-                    <button onclick="finishSet('team2')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-3 rounded-lg transition">
-                        Set para Visita
-                    </button>
-                </div>
-
-                <hr>
-
-                <div class="space-y-3">
-                    <button onclick="undoPoint()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded transition">
-                        Deshacer Último Punto
-                    </button>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <button onclick="finishGame('team1')" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm transition">
-                            Ganó Local (Fin)
-                        </button>
-                        <button onclick="finishGame('team2')" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm transition">
-                            Ganó Visita (Fin)
-                        </button>
-                    </div>
-
-                    <details class="text-center">
-                        <summary class="text-xs text-red-400 cursor-pointer hover:text-red-600 mt-2">Opciones de Anulación</summary>
-                        <div class="mt-3 space-y-2">
-                             <button onclick="cancelSet()" class="w-full border border-red-300 text-red-500 hover:bg-red-50 py-2 rounded text-sm">
-                                Anular Set Actual
-                            </button>
-                             <button onclick="cancelGame()" class="w-full bg-red-100 text-red-600 hover:bg-red-200 py-2 rounded text-sm">
-                                Anular Partido Completo
-                            </button>
-                        </div>
-                    </details>
-                </div>
-
             </div>
         </div>
+
+        <div class="area-t1">
+            <div class="desktop-header text-center mb-6">
+                <h2 class="text-xl font-bold text-gray-900 truncate t1-name-display">Local</h2>
+                <div class="flex items-baseline justify-center gap-2">
+                    <span class="score-big font-black text-blue-600 t1-score-display">0</span>
+                    <span class="text-3xl font-bold text-gray-400">(<span class="t1-sets-display">0</span>)</span>
+                </div>
+            </div>
+            <button onclick="addPoint('team1')" class="btn-action bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800">
+                <span class="text-2xl">+1</span> <span class="text-sm uppercase tracking-wide opacity-90">Punto</span>
+            </button>
+            <button onclick="finishSet('team1')" class="btn-action bg-yellow-500 text-white hover:bg-yellow-600 active:bg-yellow-700">
+                +1 Set
+            </button>
+        </div>
+
+        <div class="area-center">
+            <div class="desktop-header text-center mb-8">
+                <div class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2 category-label-display">CATEGORÍA</div>
+                <div class="inline-block px-6 py-2 bg-gray-100 rounded-full text-lg font-bold text-gray-700">
+                    SET <span class="set-num-display">1</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3 w-full mt-auto"> <button onclick="undoPoint()" class="w-full bg-gray-200 active:bg-gray-300 text-gray-700 font-medium py-3 rounded-lg transition">
+                    Deshacer Punto
+                </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-win-1" onclick="finishGame('team1')" class="bg-green-600 active:bg-green-700 text-white py-3 rounded text-xs font-bold truncate px-1">
+                        Ganó Local
+                    </button>
+                    <button id="btn-win-2" onclick="finishGame('team2')" class="bg-green-600 active:bg-green-700 text-white py-3 rounded text-xs font-bold truncate px-1">
+                        Ganó Visita
+                    </button>
+                </div>
+                <details class="text-center mt-4">
+                    <summary class="text-xs text-red-400 cursor-pointer p-2 bg-gray-50 rounded select-none">Opciones de Anulación</summary>
+                    <div class="mt-2 space-y-2">
+                        <button onclick="cancelSet()" class="w-full border border-red-300 text-red-500 hover:bg-red-50 py-2 rounded text-xs">Anular Set Actual</button>
+                        <button onclick="cancelGame()" class="w-full bg-red-100 text-red-600 hover:bg-red-200 py-2 rounded text-xs">Anular Partido Completo</button>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <div class="area-t2">
+            <div class="desktop-header text-center mb-6">
+                <h2 class="text-xl font-bold text-gray-900 truncate t2-name-display">Visita</h2>
+                <div class="flex items-baseline justify-center gap-2 flex-row-reverse">
+                    <span class="score-big font-black text-blue-600 t2-score-display">0</span>
+                    <span class="text-3xl font-bold text-gray-400">(<span class="t2-sets-display">0</span>)</span>
+                </div>
+            </div>
+            <button onclick="addPoint('team2')" class="btn-action bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800">
+                <span class="text-2xl">+1</span> <span class="text-sm uppercase tracking-wide opacity-90">Punto</span>
+            </button>
+            <button onclick="finishSet('team2')" class="btn-action bg-yellow-500 text-white hover:bg-yellow-600 active:bg-yellow-700">
+                +1 Set
+            </button>
+        </div>
+
     </div>
 
     <script>
-        // ID del juego desde URL
         const urlParams = new URLSearchParams(window.location.search);
         const GAME_ID = urlParams.get('id');
-        
-        // Estado local
         let gameData = null;
 
-        // Refs DOM
-        const ui = {
-            card: document.getElementById('game-control-card'),
-            title: document.getElementById('header-title'),
-            catLabel: document.getElementById('category-label'),
-            t1Name: document.getElementById('team1-name'),
-            t2Name: document.getElementById('team2-name'),
-            score1: document.getElementById('score1'),
-            score2: document.getElementById('score2'),
-            sets1: document.getElementById('sets1'),
-            sets2: document.getElementById('sets2'),
-            setNum: document.getElementById('set-num')
-        };
+        function updateDisplays(className, text) {
+            document.querySelectorAll('.' + className).forEach(el => el.innerText = text);
+        }
 
         async function init() {
-            if (!GAME_ID) return showAlert('No hay ID de partido', 'danger');
+            if (!GAME_ID) return showToast('No hay ID de partido', 'danger');
             await loadGame();
         }
 
         async function loadGame() {
             try {
                 const res = await fetch(`/manager/games/${GAME_ID}`);
-                if (!res.ok) throw new Error('No se pudo cargar el partido');
+                if (!res.ok) throw new Error('Error cargando datos');
                 gameData = await res.json();
                 render();
-            } catch (e) {
-                showAlert(e.message, 'danger');
-            }
+            } catch (e) { showToast(e.message, 'danger'); }
         }
 
         function render() {
-            ui.card.classList.remove('hidden');
-            ui.title.innerText = `${gameData.team1_name} vs ${gameData.team2_name}`;
-            
-            ui.catLabel.innerText = gameData.category_name || 'AMISTOSO';
-            
-            ui.t1Name.innerText = gameData.team1_name;
-            ui.t2Name.innerText = gameData.team2_name;
-            
-            ui.score1.innerText = gameData.current_team1_score;
-            ui.score2.innerText = gameData.current_team2_score;
-            
-            // Los "números chiquitos" (con fallback a 0 si no existen)
-            ui.sets1.innerText = gameData.team1_sets_won || 0;
-            ui.sets2.innerText = gameData.team2_sets_won || 0;
-            
-            ui.setNum.innerText = gameData.current_set_number;
+            const t1 = gameData.team1_name; const t2 = gameData.team2_name;
+            document.getElementById('nav-title').innerText = `${t1} vs ${t2}`;
+            document.getElementById('btn-win-1').innerText = `Ganó ${t1}`;
+            document.getElementById('btn-win-2').innerText = `Ganó ${t2}`;
+            updateDisplays('category-label-display', gameData.category_name || 'AMISTOSO');
+            updateDisplays('set-num-display', gameData.current_set_number);
+            updateDisplays('t1-name-display', t1);
+            updateDisplays('t2-name-display', t2);
+            updateDisplays('t1-score-display', gameData.current_team1_score);
+            updateDisplays('t2-score-display', gameData.current_team2_score);
+            updateDisplays('t1-sets-display', gameData.team1_sets_won || 0);
+            updateDisplays('t2-sets-display', gameData.team2_sets_won || 0);
         }
-
-        // --- Acciones ---
 
         async function addPoint(teamKey) {
-            // 1. Determinar IDs y Equipos
             const isTeam1 = (teamKey === 'team1');
             const teamId = isTeam1 ? gameData.team1_id : gameData.team2_id;
-            
-            // 2. ACTUALIZACIÓN OPTIMISTA (Inmediata)
-            // Incrementamos nuestra copia local de los datos
-            if (isTeam1) {
-                gameData.current_team1_score += 1;
-                ui.score1.innerText = gameData.current_team1_score;
-            } else {
-                gameData.current_team2_score += 1;
-                ui.score2.innerText = gameData.current_team2_score;
-            }
-
-            // 3. Enviar al servidor (en segundo plano visualmente)
-            // Nota: Si hay un error en el servidor, loadGame() se encargará
-            // de "volver atrás" el número cuando refresque los datos reales.
-            await sendAction(`/manager/games/${GAME_ID}/increment`, {
-                set_number: gameData.current_set_number,
-                scoring_team_id: teamId
-            });
+            if (isTeam1) { gameData.current_team1_score += 1; updateDisplays('t1-score-display', gameData.current_team1_score); } 
+            else { gameData.current_team2_score += 1; updateDisplays('t2-score-display', gameData.current_team2_score); }
+            await sendAction(`/manager/games/${GAME_ID}/increment`, { set_number: gameData.current_set_number, scoring_team_id: teamId });
         }
 
-        async function undoPoint() {
-            await sendAction(`/manager/games/${GAME_ID}/undo_point`, {});
-        }
+        async function undoPoint() { await sendAction(`/manager/games/${GAME_ID}/undo_point`, {}); }
 
         async function finishSet(teamKey) {
-            const teamId = (teamKey === 'team1') ? gameData.team1_id : gameData.team2_id;
-            if (!confirm(`¿Ganó el SET ${gameData.current_set_number} ${teamKey === 'team1' ? gameData.team1_name : gameData.team2_name}?`)) return;
-            
-            await sendAction(`/manager/games/${GAME_ID}/finish_set`, {
-                set_number: gameData.current_set_number,
-                winner_team_id: teamId
-            });
+            const isTeam1 = (teamKey === 'team1');
+            const teamId = isTeam1 ? gameData.team1_id : gameData.team2_id;
+            const teamName = isTeam1 ? gameData.team1_name : gameData.team2_name;
+            const s1 = gameData.current_team1_score; const s2 = gameData.current_team2_score;
+            if (!confirm(`¿Ganó el SET ${gameData.current_set_number} ${teamName}?`)) return;
+            if ((isTeam1 && s1 < s2) || (!isTeam1 && s2 < s1)) { if (!confirm(`⚠️ ¡ATENCIÓN!\n\n${teamName} tiene MENOS puntos.\n¿Seguro que ganó el set?`)) return; }
+            await sendAction(`/manager/games/${GAME_ID}/finish_set`, { set_number: gameData.current_set_number, winner_team_id: teamId });
         }
         
         async function finishGame(teamKey) {
             const teamId = (teamKey === 'team1') ? gameData.team1_id : gameData.team2_id;
-            if (!confirm(`¿FINALIZAR PARTIDO? Ganador: ${teamKey === 'team1' ? gameData.team1_name : gameData.team2_name}`)) return;
-
+            if (!confirm(`¿FINALIZAR PARTIDO?`)) return;
             await sendAction(`/manager/games/${GAME_ID}/finish_game`, { winner_team_id: teamId });
-            window.location.href = '/manager'; // Volver al dashboard
+            window.location.href = '/manager'; 
         }
 
         async function cancelSet() {
             if(!confirm("¿ANULAR SET ACTUAL?")) return;
             await sendAction(`/manager/games/${GAME_ID}/cancel_set`, { set_number: gameData.current_set_number });
         }
-
         async function cancelGame() {
             if(!confirm("¿ANULAR PARTIDO COMPLETO?")) return;
             await sendAction(`/manager/games/${GAME_ID}/cancel`, {});
             window.location.href = '/manager';
         }
 
-        // Helper para fetch
         async function sendAction(url, body) {
             try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                if (!res.ok) throw new Error('Error en la acción');
-                
-                // Si la acción retorna datos, podríamos usarlos, 
-                // pero lo más seguro es recargar el estado completo del juego
+                const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+                if (!res.ok) throw new Error('Error en acción');
                 await loadGame(); 
-
-            } catch (e) {
-                showAlert(e.message, 'danger');
-            }
+            } catch (e) { showToast(e.message, 'danger'); await loadGame(); }
         }
 
-        function showAlert(msg, type) {
-            const color = type === 'danger' ? 'red' : 'green';
-            document.getElementById('alert-container').innerHTML = 
-                `<div class="bg-${color}-100 text-${color}-700 p-3 rounded mb-4">${msg}</div>`;
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            let bg = type === 'danger' ? 'bg-red-600' : 'bg-blue-600';
+            const toast = document.createElement('div');
+            toast.className = `toast toast-enter ${bg} text-white px-4 py-3 rounded shadow flex items-center gap-3`;
+            toast.innerHTML = `<span class="grow text-sm">${msg}</span><button onclick="this.parentElement.remove()">✕</button>`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('toast-enter'));
+            setTimeout(() => { if(toast.isConnected) toast.remove(); }, 4000);
         }
 
         init();
