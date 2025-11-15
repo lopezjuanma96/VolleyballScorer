@@ -5,30 +5,39 @@ from typing import Optional
 
 # --- Modelos de Base de Datos ---
 
-class Team(BaseModel):
-    id: str # El ID del documento
+class Category(BaseModel): # <--- NUEVO
+    id: str
     name: str
-    flag: Optional[str] = None
+    order: int = 0 # Para ordenar en el selector (ej: 1 para A, 2 para B)
+
+class Team(BaseModel):
+    id: str
+    name: str
+    flag: Optional[str] = None 
+    category_id: Optional[str] = None
 
 class GameDocument(BaseModel):
     """Modelo para el documento que guardamos en 'games'"""
     team1_id: str
     team2_id: str
-    team1_name: str # Denormalizado
-    team2_name: str # Denormalizado
-    status: str # "upcoming", "live", "finished"
+    team1_name: str
+    team2_name: str
+    status: str
     created_at: datetime.datetime
     winner_id: Optional[str] = None
-
+    
+    # Campos de Score en vivo
     current_set_number: int = 1
     current_team1_score: int = 0
     current_team2_score: int = 0
+    team1_sets_won: int = 0             # Contador de sets ganados
+    team2_sets_won: int = 0             # Contador de sets ganados
+
+    category_name: Optional[str] = None # Denormalizado para mostrar en el lobby
+    team1_flag: Optional[str] = None    # Denormalizado
+    team2_flag: Optional[str] = None    # Denormalizado
 
 class GameListResponse(GameDocument):
-    """
-    Modelo para la RESPUESTA de la API que sí incluye el ID del documento
-    Hereda todo de GameDocument y le añade el campo 'id'.
-    """
     id: str
 
 class SetDocument(BaseModel):
