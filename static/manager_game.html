@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controlador de Partido</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+
+    <div class="bg-white shadow mb-6">
+        <div class="container mx-auto px-4 py-3 flex items-center">
+            <a href="/manager" class="text-gray-500 hover:text-gray-800 mr-4">
+                &larr; Volver
+            </a>
+            <h1 class="text-lg font-bold text-gray-800 truncate" id="header-title">Cargando partido...</h1>
+        </div>
+    </div>
+
+    <div class="container mx-auto max-w-xl p-4">
+        <div id="alert-container" class="mb-4"></div>
+
+        <div id="game-control-card" class="bg-white shadow-lg rounded-xl overflow-hidden hidden">
+            
+            <div class="bg-gray-50 border-b border-gray-200 p-6 text-center">
+                <div class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2" id="category-label">CATEGORÍA</div>
+                
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1" id="team1-name">Equipo 1</h2>
+                        <div class="flex items-baseline justify-center gap-2">
+                            <span class="text-6xl font-black text-gray-800" id="score1">0</span>
+                            <span class="text-xl font-bold text-gray-400">
+                                (<span id="sets1">0</span>)
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="px-4">
+                        <div class="text-sm font-medium text-gray-400 mb-2">SET <span id="set-num">1</span></div>
+                        <div class="h-12 w-px bg-gray-300 mx-auto"></div>
+                    </div>
+
+                    <div class="flex-1">
+                        <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1" id="team2-name">Equipo 2</h2>
+                        <div class="flex items-baseline justify-center gap-2 flex-row-reverse">
+                            <span class="text-6xl font-black text-gray-800" id="score2">0</span>
+                            <span class="text-xl font-bold text-gray-400">
+                                (<span id="sets2">0</span>)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-6">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="addPoint('team1')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow transition transform active:scale-95">
+                        +1 Punto Local
+                    </button>
+                    <button onclick="addPoint('team2')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow transition transform active:scale-95">
+                        +1 Punto Visita
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="finishSet('team1')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-3 rounded-lg transition">
+                        Set para Local
+                    </button>
+                    <button onclick="finishSet('team2')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-3 rounded-lg transition">
+                        Set para Visita
+                    </button>
+                </div>
+
+                <hr>
+
+                <div class="space-y-3">
+                    <button onclick="undoPoint()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded transition">
+                        Deshacer Último Punto
+                    </button>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <button onclick="finishGame('team1')" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm transition">
+                            Ganó Local (Fin)
+                        </button>
+                        <button onclick="finishGame('team2')" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm transition">
+                            Ganó Visita (Fin)
+                        </button>
+                    </div>
+
+                    <details class="text-center">
+                        <summary class="text-xs text-red-400 cursor-pointer hover:text-red-600 mt-2">Opciones de Anulación</summary>
+                        <div class="mt-3 space-y-2">
+                             <button onclick="cancelSet()" class="w-full border border-red-300 text-red-500 hover:bg-red-50 py-2 rounded text-sm">
+                                Anular Set Actual
+                            </button>
+                             <button onclick="cancelGame()" class="w-full bg-red-100 text-red-600 hover:bg-red-200 py-2 rounded text-sm">
+                                Anular Partido Completo
+                            </button>
+                        </div>
+                    </details>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ID del juego desde URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const GAME_ID = urlParams.get('id');
+        
+        // Estado local
+        let gameData = null;
+
+        // Refs DOM
+        const ui = {
+            card: document.getElementById('game-control-card'),
+            title: document.getElementById('header-title'),
+            catLabel: document.getElementById('category-label'),
+            t1Name: document.getElementById('team1-name'),
+            t2Name: document.getElementById('team2-name'),
+            score1: document.getElementById('score1'),
+            score2: document.getElementById('score2'),
+            sets1: document.getElementById('sets1'),
+            sets2: document.getElementById('sets2'),
+            setNum: document.getElementById('set-num')
+        };
+
+        async function init() {
+            if (!GAME_ID) return showAlert('No hay ID de partido', 'danger');
+            await loadGame();
+        }
+
+        async function loadGame() {
+            try {
+                const res = await fetch(`/manager/games/${GAME_ID}`);
+                if (!res.ok) throw new Error('No se pudo cargar el partido');
+                gameData = await res.json();
+                render();
+            } catch (e) {
+                showAlert(e.message, 'danger');
+            }
+        }
+
+        function render() {
+            ui.card.classList.remove('hidden');
+            ui.title.innerText = `${gameData.team1_name} vs ${gameData.team2_name}`;
+            
+            ui.catLabel.innerText = gameData.category_name || 'AMISTOSO';
+            
+            ui.t1Name.innerText = gameData.team1_name;
+            ui.t2Name.innerText = gameData.team2_name;
+            
+            ui.score1.innerText = gameData.current_team1_score;
+            ui.score2.innerText = gameData.current_team2_score;
+            
+            // Los "números chiquitos" (con fallback a 0 si no existen)
+            ui.sets1.innerText = gameData.team1_sets_won || 0;
+            ui.sets2.innerText = gameData.team2_sets_won || 0;
+            
+            ui.setNum.innerText = gameData.current_set_number;
+        }
+
+        // --- Acciones ---
+
+        async function addPoint(teamKey) {
+            // 1. Determinar IDs y Equipos
+            const isTeam1 = (teamKey === 'team1');
+            const teamId = isTeam1 ? gameData.team1_id : gameData.team2_id;
+            
+            // 2. ACTUALIZACIÓN OPTIMISTA (Inmediata)
+            // Incrementamos nuestra copia local de los datos
+            if (isTeam1) {
+                gameData.current_team1_score += 1;
+                ui.score1.innerText = gameData.current_team1_score;
+            } else {
+                gameData.current_team2_score += 1;
+                ui.score2.innerText = gameData.current_team2_score;
+            }
+
+            // 3. Enviar al servidor (en segundo plano visualmente)
+            // Nota: Si hay un error en el servidor, loadGame() se encargará
+            // de "volver atrás" el número cuando refresque los datos reales.
+            await sendAction(`/manager/games/${GAME_ID}/increment`, {
+                set_number: gameData.current_set_number,
+                scoring_team_id: teamId
+            });
+        }
+
+        async function undoPoint() {
+            await sendAction(`/manager/games/${GAME_ID}/undo_point`, {});
+        }
+
+        async function finishSet(teamKey) {
+            const teamId = (teamKey === 'team1') ? gameData.team1_id : gameData.team2_id;
+            if (!confirm(`¿Ganó el SET ${gameData.current_set_number} ${teamKey === 'team1' ? gameData.team1_name : gameData.team2_name}?`)) return;
+            
+            await sendAction(`/manager/games/${GAME_ID}/finish_set`, {
+                set_number: gameData.current_set_number,
+                winner_team_id: teamId
+            });
+        }
+        
+        async function finishGame(teamKey) {
+            const teamId = (teamKey === 'team1') ? gameData.team1_id : gameData.team2_id;
+            if (!confirm(`¿FINALIZAR PARTIDO? Ganador: ${teamKey === 'team1' ? gameData.team1_name : gameData.team2_name}`)) return;
+
+            await sendAction(`/manager/games/${GAME_ID}/finish_game`, { winner_team_id: teamId });
+            window.location.href = '/manager'; // Volver al dashboard
+        }
+
+        async function cancelSet() {
+            if(!confirm("¿ANULAR SET ACTUAL?")) return;
+            await sendAction(`/manager/games/${GAME_ID}/cancel_set`, { set_number: gameData.current_set_number });
+        }
+
+        async function cancelGame() {
+            if(!confirm("¿ANULAR PARTIDO COMPLETO?")) return;
+            await sendAction(`/manager/games/${GAME_ID}/cancel`, {});
+            window.location.href = '/manager';
+        }
+
+        // Helper para fetch
+        async function sendAction(url, body) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                if (!res.ok) throw new Error('Error en la acción');
+                
+                // Si la acción retorna datos, podríamos usarlos, 
+                // pero lo más seguro es recargar el estado completo del juego
+                await loadGame(); 
+
+            } catch (e) {
+                showAlert(e.message, 'danger');
+            }
+        }
+
+        function showAlert(msg, type) {
+            const color = type === 'danger' ? 'red' : 'green';
+            document.getElementById('alert-container').innerHTML = 
+                `<div class="bg-${color}-100 text-${color}-700 p-3 rounded mb-4">${msg}</div>`;
+        }
+
+        init();
+    </script>
+</body>
+</html>

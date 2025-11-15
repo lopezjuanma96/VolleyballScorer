@@ -216,6 +216,19 @@ def get_games_list(username: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
+@app.get("/manager/games/{game_id}", response_model=GameDocument)
+def get_single_game(game_id: str, username: str = Depends(get_current_user)):
+    """Trae los detalles de un partido específico para el controlador."""
+    game_ref = db.collection("games").document(game_id)
+    snapshot = game_ref.get()
+    
+    if not snapshot.exists:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    
+    # Retornamos los datos. Pydantic hará el resto.
+    return snapshot.to_dict()
+
+
 @app.post("/manager/games/{game_id}/finish_set", response_model=SetDocument)
 def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_current_user)):
     
@@ -605,5 +618,12 @@ async def get_manager_html(request: Request):
     if not verify_page_access(request):
         return RedirectResponse(url="/login")
     return FileResponse("static/manager.html")
+
+# Esta ruta está PROTEGIDA con redirección
+@app.get("/manager/game", include_in_schema=False)
+async def get_manager_game_html(request: Request):
+    if not verify_page_access(request):
+        return RedirectResponse(url="/login")
+    return FileResponse("static/manager_game.html")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
