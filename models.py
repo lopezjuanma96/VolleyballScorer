@@ -58,11 +58,16 @@ class PointDocument(BaseModel):
 
 # --- Modelos de Request (API) ---
 
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 class GameCreate(BaseModel):
     """Modelo para la request POST /manager/games"""
     team1_id: str
     team2_id: str
-    
+
     category_id: Optional[str] = None
 
 class SetFinish(BaseModel):

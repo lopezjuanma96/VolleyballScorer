@@ -1,10 +1,10 @@
 import os
 import secrets
 import datetime
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from typing import List, Optional
 
 # --- Firebase Admin Setup ---
@@ -16,6 +16,7 @@ from firebase_admin import credentials, firestore
 from models import (
     Team, Category, GameCreate, GameDocument, SetDocument, PointCreate, PointDocument,
     GameListResponse, SetFinish, GameFinish, SetCancel,
+    LoginRequest
 )
 
 try:
@@ -35,24 +36,57 @@ security = HTTPBasic()
 
 ADMIN_USER = "manager"
 ADMIN_PASS = "voley123" # ¡Recuerda cambiar esto!
+COOKIE_NAME = "voley_session"
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_user = secrets.compare_digest(credentials.username, ADMIN_USER)
-    correct_pass = secrets.compare_digest(credentials.password, ADMIN_PASS)
-    if not (correct_user and correct_pass):
+
+def get_current_user(request: Request):
+    session_token = request.cookies.get(COOKIE_NAME)
+    if not session_token or session_token != "authenticated_token_xyz":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contraseña incorrectos",
-            headers={"WWW-Authenticate": "Basic"},
+            detail="No autenticado"
         )
-    return credentials.username
+    return "manager"
 
+
+def verify_page_access(request: Request):
+    session_token = request.cookies.get(COOKIE_NAME)
+    if not session_token or session_token != "authenticated_token_xyz":
+        # Si falla, lanzamos una excepción especial que capturaremos
+        # o simplemente retornamos False y manejamos en la ruta
+        return False
+    return True
+
+
+@app.post("/auth/login")
+def login(creds: LoginRequest, response: Response):
+    correct_user = secrets.compare_digest(creds.username, ADMIN_USER)
+    correct_pass = secrets.compare_digest(creds.password, ADMIN_PASS)
+    
+    if not (correct_user and correct_pass):
+        raise HTTPException(status_code=400, detail="Credenciales incorrectas")
+    
+    # Crear la cookie
+    # httponly=True es vital: impide que el JS lea la cookie (seguridad XSS)
+    response.set_cookie(
+        key=COOKIE_NAME, 
+        value="authenticated_token_xyz", # En un app real, usa un token firmado JWT
+        httponly=True,
+        max_age=3600 * 12 # 12 horas de duración
+    )
+    return {"message": "Login exitoso"}
+
+
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(COOKIE_NAME)
+    return {"message": "Logout exitoso"}
 
 # --- API Endpoints: Manager (Protegidos) ---
 
 @app.get("/manager/test")
 def read_manager_test(username: str = Depends(get_current_user)):
-    return {"message": f"Hola {username}! Estás autenticado."}
+    return {"message": "Estás autenticado via Cookie!"}
 
 
 @app.get("/manager/categories", response_model=List[Category])
@@ -561,8 +595,15 @@ async def get_index_html():
 async def get_watcher_game_html():
     return FileResponse("static/watcher_game.html")
 
+@app.get("/login", include_in_schema=False)
+async def get_login_html():
+    return FileResponse("static/login.html")
+
+# Esta ruta está PROTEGIDA con redirección
 @app.get("/manager", include_in_schema=False)
-async def get_manager_html():
+async def get_manager_html(request: Request):
+    if not verify_page_access(request):
+        return RedirectResponse(url="/login")
     return FileResponse("static/manager.html")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
