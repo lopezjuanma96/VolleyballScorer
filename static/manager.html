@@ -3,486 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manager - Torneo de Voley</title>
+    <title>Dashboard - Manager Voley</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
 
-    <div class="container mx-auto max-w-2xl p-4 mt-10">
+    <nav class="bg-white shadow mb-6">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">Panel Manager</h1>
+            <button id="logout-btn" class="text-sm text-red-600 hover:text-red-800 font-medium">Cerrar Sesión</button>
+        </div>
+    </nav>
 
-        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">Manager de Partidos</h1>
+    <div class="container mx-auto max-w-2xl p-4">
 
         <div id="alert-container" class="mb-4"></div>
 
-        <details class="bg-white shadow-md rounded-lg p-6 mb-6">
-            <summary class="text-xl font-semibold cursor-pointer">Autenticación</summary>
-            <div class="mt-4">
-                <div class="mb-4">
-                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
-                    <input type="text" id="username" value="manager" 
-                           class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Crear Nuevo Partido</h2>
+            
+            <div class="mb-4">
+                <label for="category-select" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select id="category-select" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Selecciona una categoría...</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="team1-select" class="block text-sm font-medium text-gray-700 mb-1">Local</label>
+                    <select id="team1-select" disabled class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 disabled:bg-gray-100">
+                        <option value="">Primero elige categoría</option>
+                    </select>
                 </div>
                 <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
-                    <input type="password" id="password" value="voley123"
-                           class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-            </div>
-        </details>
-
-        <details class="bg-white shadow-md rounded-lg p-6 mb-6">
-            <summary class="text-xl font-semibold cursor-pointer">Crear Nuevo Partido</summary>
-            <div class="mt-4">
-                <div class="mb-4">
-                    <label for="team1-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Local</label>
-                    <select id="team1-select" 
-                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Cargando equipos...</option>
+                    <label for="team2-select" class="block text-sm font-medium text-gray-700 mb-1">Visitante</label>
+                    <select id="team2-select" disabled class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 disabled:bg-gray-100">
+                        <option value="">Primero elige categoría</option>
                     </select>
                 </div>
-                <div class="mb-4">
-                    <label for="team2-select" class="block text-sm font-medium text-gray-700 mb-1">Equipo Visitante</label>
-                    <select id="team2-select" 
-                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Cargando equipos...</option>
-                    </select>
-                </div>
-                <button id="create-game-btn" 
-                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out">
-                    Crear Partido
-                </button>
-            </div>
-        </details>
-
-        <div id="manage-games-section" class="bg-white shadow-md rounded-lg p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Gestionar Partidos</h2>
-                <button id="refresh-games-btn" 
-                        class="bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition text-sm">
-                    Refrescar Lista
-                </button>
             </div>
             
-            <div id="games-list-container" class="space-y-6">
-                <p class="text-gray-500">Haz clic en "Refrescar Lista" para ver los partidos.</p>
-            </div>
+            <button id="create-game-btn" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition">
+                Crear Partido
+            </button>
+        </div>
+
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Partidos En Curso / Próximos</h2>
+            <button id="refresh-btn" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Refrescar</button>
+        </div>
+
+        <div id="games-list" class="space-y-4">
+            <p class="text-gray-500 text-center py-4">Cargando partidos...</p>
         </div>
         
     </div>
 
     <script>
-        // --- Constantes del DOM (sin cambios) ---
+        const categorySelect = document.getElementById('category-select');
         const team1Select = document.getElementById('team1-select');
         const team2Select = document.getElementById('team2-select');
         const createGameBtn = document.getElementById('create-game-btn');
+        const gamesList = document.getElementById('games-list');
         const alertContainer = document.getElementById('alert-container');
-        const usernameInput = document.getElementById('username');
-        const passwordInput = document.getElementById('password');
-        const refreshGamesBtn = document.getElementById('refresh-games-btn');
-        const gamesListContainer = document.getElementById('games-list-container');
-        
-        // --- Almacén simple para los datos de los juegos cargados ---
-        let loadedGamesData = new Map();
 
+        // --- Funciones API ---
 
-        // --- Headers de Autenticación (sin cambios) ---
-        function getAuthHeaders() {
-            const user = usernameInput.value;
-            const pass = passwordInput.value;
-            const basicAuth = 'Basic ' + btoa(user + ':' + pass);
-            return {
-                'Content-Type': 'application/json',
-                'Authorization': basicAuth
-            };
+        async function loadCategories() {
+            try {
+                const res = await fetch('/manager/categories');
+                if (!res.ok) throw new Error('Error cargando categorías');
+                const cats = await res.json();
+                
+                categorySelect.innerHTML = '<option value="">Selecciona una categoría...</option>';
+                cats.forEach(c => {
+                    categorySelect.add(new Option(c.name, c.id));
+                });
+            } catch (e) { showAlert(e.message, 'danger'); }
         }
 
-        // --- Funciones API (Creación) (sin cambios) ---
-        async function loadTeams() {
+        async function loadTeams(categoryId) {
+            team1Select.innerHTML = '<option value="">Cargando...</option>';
+            team2Select.innerHTML = '<option value="">Cargando...</option>';
+            team1Select.disabled = true;
+            team2Select.disabled = true;
+
             try {
-                const response = await fetch('/manager/teams', {
-                    method: 'GET', headers: getAuthHeaders()
+                const res = await fetch(`/manager/teams?category_id=${categoryId}`);
+                if (!res.ok) throw new Error('Error cargando equipos');
+                const teams = await res.json();
+
+                team1Select.innerHTML = '<option value="">Selecciona Equipo</option>';
+                team2Select.innerHTML = '<option value="">Selecciona Equipo</option>';
+                
+                teams.forEach(t => {
+                    team1Select.add(new Option(t.name, t.id));
+                    team2Select.add(new Option(t.name, t.id));
                 });
-                if (!response.ok) { const d = await response.json(); throw new Error(d.detail); }
-                const teams = await response.json(); 
-                team1Select.innerHTML = '<option value="">Selecciona un equipo</option>';
-                team2Select.innerHTML = '<option value="">Selecciona un equipo</option>';
-                teams.forEach(team => {
-                    const option1 = new Option(`${team.name} ${team.flag || ''}`, team.id);
-                    const option2 = new Option(`${team.name} ${team.flag || ''}`, team.id);
-                    team1Select.add(option1);
-                    team2Select.add(option2);
-                });
-            } catch (error) { showAlert(error.message, 'danger'); }
+                
+                team1Select.disabled = false;
+                team2Select.disabled = false;
+            } catch (e) { showAlert(e.message, 'danger'); }
         }
 
         async function createGame() {
+            const category_id = categorySelect.value;
             const team1_id = team1Select.value;
             const team2_id = team2Select.value;
-            if (!team1_id || !team2_id || team1_id === team2_id) {
-                showAlert('Selecciona dos equipos diferentes.', 'warning');
-                return;
-            }
+
+            if (!category_id || !team1_id || !team2_id) return showAlert('Completa todos los campos', 'warning');
+            if (team1_id === team2_id) return showAlert('Los equipos deben ser distintos', 'warning');
+
             createGameBtn.disabled = true; createGameBtn.textContent = 'Creando...';
+
             try {
-                const response = await fetch('/manager/games', {
+                const res = await fetch('/manager/games', {
                     method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({ team1_id, team2_id })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ team1_id, team2_id, category_id })
                 });
-                const responseData = await response.json(); 
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-                showAlert(`Partido creado: ${responseData.team1_name} vs ${responseData.team2_name}`, 'success');
+                if (!res.ok) throw new Error('Error al crear partido');
+                
+                showAlert('Partido creado exitosamente', 'success');
                 team1Select.value = ""; team2Select.value = "";
-                loadActiveGames(); // Refrescar la lista
-            } catch (error) { showAlert(error.message, 'danger');
+                loadActiveGames();
+            } catch (e) { showAlert(e.message, 'danger');
             } finally { createGameBtn.disabled = false; createGameBtn.textContent = 'Crear Partido'; }
         }
 
-        // --- (ACTUALIZADO) Funciones API (Gestión) ---
-
         async function loadActiveGames() {
-            gamesListContainer.innerHTML = '<p class="text-gray-500">Cargando partidos...</p>';
-            loadedGamesData.clear(); // Limpiar datos antiguos
+            gamesList.innerHTML = '<p class="text-gray-500 text-center">Cargando...</p>';
             try {
-                const response = await fetch('/manager/games/list', {
-                    method: 'GET', headers: getAuthHeaders()
-                });
-                const responseData = await response.json();
-                if (!response.ok) {
-                    if (responseData.detail.includes("index")) {
-                        showAlert("Falta un índice en Firestore. Revisa la terminal, copia el link y créalo.", 'danger');
-                    }
-                    throw new Error(responseData.detail || `Error ${response.status}`);
-                }
+                const res = await fetch('/manager/games/list');
+                const games = await res.json();
 
-                if (responseData.length === 0) {
-                    gamesListContainer.innerHTML = '<p class="text-gray-500">No hay partidos activos o próximos.</p>';
+                if (games.length === 0) {
+                    gamesList.innerHTML = '<div class="text-center text-gray-500 py-8">No hay partidos activos.</div>';
                     return;
                 }
 
-                gamesListContainer.innerHTML = '';
-                responseData.forEach(game => {
-                    loadedGamesData.set(game.id, game); // Guardar datos del juego
-                    const gameCard = renderGameCard(game);
-                    gamesListContainer.appendChild(gameCard);
+                gamesList.innerHTML = '';
+                games.forEach(game => {
+                    // Tarjeta simple de resumen
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-lg shadow flex justify-between items-center';
+                    card.innerHTML = `
+                        <div>
+                            <div class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">
+                                ${game.category_name || 'Sin Categoría'}
+                            </div>
+                            <div class="text-lg font-bold text-gray-800">
+                                ${game.team1_name} <span class="text-gray-400 text-sm px-1">vs</span> ${game.team2_name}
+                            </div>
+                            <div class="text-sm text-gray-500 mt-1">
+                                ${game.status === 'live' 
+                                    ? `<span class="text-red-600 font-bold">● EN VIVO</span> - Set ${game.current_set_number}` 
+                                    : 'Próximo'}
+                            </div>
+                        </div>
+                        <div>
+                            <a href="/manager/game?id=${game.id}" 
+                               class="block bg-gray-800 text-white text-sm font-medium py-2 px-4 rounded hover:bg-black transition">
+                                Gestionar &rarr;
+                            </a>
+                        </div>
+                    `;
+                    gamesList.appendChild(card);
                 });
 
-            } catch (error) {
-                showAlert(error.message, 'danger');
-                gamesListContainer.innerHTML = `<p class="text-red-500">Error al cargar partidos.</p>`;
-            }
+            } catch (e) { gamesList.innerHTML = '<p class="text-red-500">Error de carga</p>'; }
         }
 
-        // --- (ACTUALIZADO) Renderizado de Tarjeta ---
-        function renderGameCard(game) {
-            const div = document.createElement('div');
-            div.className = 'border border-gray-300 rounded-lg p-4 game-card';
-            div.dataset.gameId = game.id; // Guardamos el ID aquí
-            
-            div.innerHTML = `
-                <div class="overflow-x-auto">
-                    <table class="w-full text-center">
-                        <thead class="border-b-2 border-gray-200">
-                            <tr>
-                                <th class="p-2 w-2/5 text-lg font-bold text-gray-800">${game.team1_name}</th>
-                                <th class="p-2 w-1/5 text-sm font-medium text-gray-500">Set ${game.current_set_number}</th>
-                                <th class="p-2 w-2/5 text-lg font-bold text-gray-800">${game.team2_name}</th>
-                            </tr>
-                            <tr>
-                                <td class="p-2 text-4xl font-bold text-blue-600" data-score-team="1">${game.current_team1_score}</td>
-                                <td class="p-2 text-gray-400">-</td>
-                                <td class="p-2 text-4xl font-bold text-blue-600" data-score-team="2">${game.current_team2_score}</td>
-                            </tr>
-                        </thead>
-                        
-                        <tbody class="divide-y divide-gray-100">
-                            <tr>
-                                <td class="p-2"><button class="w-full bg-blue-500 text-white py-2 px-3 rounded-md hover:bg-blue-600 score-btn" data-team-id="${game.team1_id}">+1 Punto</button></td>
-                                <td></td>
-                                <td class="p-2"><button class="w-full bg-blue-500 text-white py-2 px-3 rounded-md hover:bg-blue-600 score-btn" data-team-id="${game.team2_id}">+1 Punto</button></td>
-                            </tr>
-                            <tr>
-                                <td class="p-2"><button class="w-full bg-yellow-500 text-black py-2 px-3 rounded-md hover:bg-yellow-400 finish-set-btn" data-team-id="${game.team1_id}">+1 Set</button></td>
-                                <td></td>
-                                <td class="p-2"><button class="w-full bg-yellow-500 text-black py-2 px-3 rounded-md hover:bg-yellow-400 finish-set-btn" data-team-id="${game.team2_id}">+1 Set</button></td>
-                            </tr>
-                            <tr>
-                                <td class="p-2"><button class="w-full bg-green-600 text-white py-2 px-3 rounded-md hover:bg-green-700 finish-game-btn" data-team-id="${game.team1_id}">Ganador</button></td>
-                                <td></td>
-                                <td class="p-2"><button class="w-full bg-green-600 text-white py-2 px-3 rounded-md hover:bg-green-700 finish-game-btn" data-team-id="${game.team2_id}">Ganador</button></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="border-t border-gray-200 mt-4 pt-4 space-y-2">
-                    <button class="w-full bg-gray-600 text-white py-2 px-3 rounded-md hover:bg-gray-700 undo-point-btn">
-                        Deshacer Último Punto (Set ${game.current_set_number})
-                    </button>
-                    <button class="w-full bg-red-500 text-white py-2 px-3 rounded-md hover:bg-red-600 cancel-set-btn">
-                        Anular Set ${game.current_set_number} (Crea Set ${game.current_set_number + 1})
-                    </button>
-                    <button class="w-full bg-red-800 text-white py-2 px-3 rounded-md hover:bg-red-900 cancel-game-btn">
-                        Anular Partido Completo
-                    </button>
-                </div>
-            `;
-            return div;
-        }
+        // --- Listeners ---
+        categorySelect.addEventListener('change', (e) => {
+            if (e.target.value) loadTeams(e.target.value);
+            else {
+                team1Select.innerHTML = '<option value="">Primero elige categoría</option>';
+                team1Select.disabled = true;
+                // ... (mismo para team2)
+            }
+        });
+        createGameBtn.addEventListener('click', createGame);
+        document.getElementById('refresh-btn').addEventListener('click', loadActiveGames);
         
-        // --- (NUEVO) Helper para encontrar datos del juego ---
-        function getGameDataFromButton(button) {
-            const card = button.closest('.game-card');
-            if (!card) return null;
-            
-            const gameId = card.dataset.gameId;
-            const gameData = loadedGamesData.get(gameId); // Obtener datos guardados
-
-            if (!gameId || !gameData) {
-                showAlert('Error: No se encontró el ID del partido o sus datos.', 'danger');
-                return null;
-            }
-            return { card, gameId, gameData };
-        }
-
-        // --- (ACTUALIZADO) Manejadores de Eventos ---
-
-        async function handleScorePoint(button) {
-            const { card, gameId, gameData } = getGameDataFromButton(button);
-            if (!card) return;
-            
-            const scoringTeamId = button.dataset.teamId;
-            if (!scoringTeamId) return;
-
-            button.disabled = true; button.textContent = '...';
-
-            const body = JSON.stringify({
-                set_number: gameData.current_set_number,
-                scoring_team_id: scoringTeamId
-            });
-
-            try {
-                const response = await fetch(`/manager/games/${gameId}/increment`, {
-                    method: 'POST', headers: getAuthHeaders(), body: body
-                });
-                
-                const responseData = await response.json(); // Es el PointDocument
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-                
-                // --- ¡AQUÍ ESTÁ EL CAMBIO! ---
-                // 1. En lugar de loadActiveGames(), actualizamos el DOM manualmente
-                const score1Elem = card.querySelector('[data-score-team="1"]');
-                const score2Elem = card.querySelector('[data-score-team="2"]');
-
-                score1Elem.textContent = responseData.team1_score_after;
-                score2Elem.textContent = responseData.team2_score_after;
-
-                // 2. También actualizamos nuestro "cache" local de datos
-                gameData.current_team1_score = responseData.team1_score_after;
-                gameData.current_team2_score = responseData.team2_score_after;
-                loadedGamesData.set(gameId, gameData);
-                // --- FIN DEL CAMBIO ---
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            } finally {
-                // Esto es clave: reactivamos el botón
-                button.disabled = false; 
-                button.textContent = '+1 Punto';
-            }
-        }
-
-        async function handleFinishSet(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
-            
-            const winnerTeamId = button.dataset.teamId;
-            const setNumber = gameData.current_set_number;
-
-            if (!confirm(`¿Seguro que quieres finalizar el Set ${setNumber} con ganador ${winnerTeamId}? Esto creará el Set ${setNumber + 1}.`)) {
-                return;
-            }
-
-            button.disabled = true; button.textContent = '...';
-
-            const body = JSON.stringify({
-                set_number: setNumber,
-                winner_team_id: winnerTeamId
-            });
-
-            try {
-                const response = await fetch(`/manager/games/${gameId}/finish_set`, {
-                    method: 'POST', headers: getAuthHeaders(), body: body
-                });
-                const responseData = await response.json(); 
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-                
-                showAlert(`Set ${setNumber} finalizado. Creado Set ${responseData.set_number}.`, 'success');
-                loadActiveGames(); // Recargar todo
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-                button.disabled = false; button.textContent = '+1 Set';
-            }
-        }
-        
-        async function handleFinishGame(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
-            
-            const winnerTeamId = button.dataset.teamId;
-
-            if (!confirm(`¿¡SEGURO!? ¿Quieres finalizar TODO el partido ${gameData.team1_name} vs ${gameData.team2_name} con ganador ${winnerTeamId}?`)) {
-                return;
-            }
-
-            button.disabled = true; button.textContent = '...';
-
-            try {
-                const response = await fetch(`/manager/games/${gameId}/finish_game`, {
-                    method: 'POST', 
-                    headers: getAuthHeaders(), 
-                    body: JSON.stringify({ winner_team_id: winnerTeamId })
-                });
-                const responseData = await response.json();
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-                
-                showAlert(`¡Partido ${gameData.team1_name} vs ${gameData.team2_name} finalizado!`, 'success');
-                loadActiveGames(); // Recargar, la tarjeta desaparecerá
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-                button.disabled = false; button.textContent = 'Ganador';
-            }
-        }
-
-        // --- (NUEVO) Manejadores de Acciones Globales ---
-
-        async function handleUndoPoint(button) {
-            const { card, gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
-            
-            button.disabled = true; button.textContent = 'Deshaciendo...';
-            
-            try {
-                const response = await fetch(`/manager/games/${gameId}/undo_point`, {
-                    method: 'POST', headers: getAuthHeaders()
-                });
-                const responseData = await response.json(); // Contiene { new_scores: { ... } }
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-
-                // --- ¡AQUÍ ESTÁ EL CAMBIO! ---
-                const newScores = responseData.new_scores;
-
-                // 1. Actualizamos el DOM
-                const score1Elem = card.querySelector('[data-score-team="1"]');
-                const score2Elem = card.querySelector('[data-score-team="2"]');
-                score1Elem.textContent = newScores.team1_score;
-                score2Elem.textContent = newScores.team2_score;
-
-                // 2. Actualizamos el cache local
-                gameData.current_team1_score = newScores.team1_score;
-                gameData.current_team2_score = newScores.team2_score;
-                loadedGamesData.set(gameId, gameData);
-
-                showAlert(responseData.message, 'success'); // Mantenemos la alerta de éxito
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            } finally {
-                // Reactivamos el botón (se repintará con el texto original)
-                button.disabled = false;
-                button.textContent = `Deshacer Último Punto (Set ${gameData.current_set_number})`;
-            }
-        }
-
-        async function handleCancelSet(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
-            
-            const setNumber = gameData.current_set_number;
-
-            if (!confirm(`¿Seguro que quieres ANULAR el Set ${setNumber}? El score volverá a 0-0 y se creará el Set ${setNumber + 1}.`)) {
-                return;
-            }
-            
-            button.disabled = true; button.textContent = 'Anulando Set...';
-            
-            try {
-                const response = await fetch(`/manager/games/${gameId}/cancel_set`, {
-                    method: 'POST', 
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({ set_number: setNumber })
-                });
-                const responseData = await response.json();
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-
-                showAlert(`Set ${setNumber} anulado. Creado Set ${responseData.set_number}.`, 'success');
-                loadActiveGames(); // Recargar
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            }
-        }
-
-        async function handleCancelGame(button) {
-            const { gameId, gameData } = getGameDataFromButton(button);
-            if (!gameId) return;
-
-            if (!confirm(`¿¡SEGURO!? ¿Quieres ANULAR el partido ${gameData.team1_name} vs ${gameData.team2_name}? El partido se marcará como 'cancelled' y desaparecerá.`)) {
-                return;
-            }
-            
-            button.disabled = true; button.textContent = 'Anulando Partido...';
-            
-            try {
-                const response = await fetch(`/manager/games/${gameId}/cancel`, {
-                    method: 'POST', headers: getAuthHeaders()
-                });
-                const responseData = await response.json();
-                if (!response.ok) throw new Error(responseData.detail || `Error ${response.status}`);
-
-                showAlert(responseData.message, 'success');
-                loadActiveGames(); // Recargar, la tarjeta desaparecerá
-
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            }
-        }
-        
-        // --- (ACTUALIZADO) Delegación de eventos principal ---
-        gamesListContainer.addEventListener('click', (event) => {
-            const button = event.target.closest('button');
-            if (!button) return;
-
-            if (button.classList.contains('score-btn')) { handleScorePoint(button); return; }
-            if (button.classList.contains('finish-set-btn')) { handleFinishSet(button); return; }
-            if (button.classList.contains('finish-game-btn')) { handleFinishGame(button); return; }
-            if (button.classList.contains('undo-point-btn')) { handleUndoPoint(button); return; }
-            if (button.classList.contains('cancel-set-btn')) { handleCancelSet(button); return; }
-            if (button.classList.contains('cancel-game-btn')) { handleCancelGame(button); return; }
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
         });
 
-        // --- Listeners iniciales (sin cambios) ---
-        document.addEventListener('DOMContentLoaded', loadTeams);
-        createGameBtn.addEventListener('click', createGame);
-        refreshGamesBtn.addEventListener('click', loadActiveGames);
+        // Init
+        loadCategories();
+        loadActiveGames();
 
-        // --- Helper de UI (Alertas) (sin cambios) ---
-        function showAlert(message, type = 'info') {
-            let bgColor, borderColor, textColor;
-            switch (type) {
-                case 'success': bgColor = 'bg-green-100'; borderColor = 'border-green-400'; textColor = 'text-green-700'; break;
-                case 'danger': bgColor = 'bg-red-100'; borderColor = 'border-red-400'; textColor = 'text-red-700'; break;
-                case 'warning': bgColor = 'bg-yellow-100'; borderColor = 'border-yellow-400'; textColor = 'text-yellow-700'; break;
-                default: bgColor = 'bg-blue-100'; borderColor = 'border-blue-400'; textColor = 'text-blue-700'; break;
-            }
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `${bgColor} ${borderColor} ${textColor} border px-4 py-3 rounded relative`;
-            alertDiv.setAttribute('role', 'alert');
-            alertDiv.innerHTML = `<span class="block sm:inline">${message}</span><span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove();"><svg class="fill-current h-6 w-6 ${textColor}" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Cerrar</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l3.029-2.651-3.03-2.651a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.03a1.2 1.2 0 1 1 1.697 1.697l-3.03 2.651 3.03 2.651a1.2 1.2 0 0 1 0 1.698z"/></svg></span>`;
-            alertContainer.innerHTML = ''; 
-            alertContainer.append(alertDiv);
+        function showAlert(msg, type) {
+            const color = type === 'danger' ? 'red' : type === 'success' ? 'green' : 'yellow';
+            alertContainer.innerHTML = `<div class="bg-${color}-100 border border-${color}-400 text-${color}-700 px-4 py-3 rounded relative">${msg}</div>`;
+            setTimeout(() => alertContainer.innerHTML = '', 3000);
         }
     </script>
 </body>

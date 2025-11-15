@@ -1,10 +1,10 @@
 import os
 import secrets
 import datetime
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from typing import List, Optional
 
 # --- Firebase Admin Setup ---
@@ -14,7 +14,9 @@ from firebase_admin import credentials, firestore
 # --- Importar Modelos ---
 # Importamos todo desde nuestro nuevo archivo models.py
 from models import (
-    Team, GameCreate, GameDocument, GameListResponse, GameFinish, SetDocument, SetFinish, SetCancel, PointCreate, PointDocument
+    Team, Category, GameCreate, GameDocument, SetDocument, PointCreate, PointDocument,
+    GameListResponse, SetFinish, GameFinish, SetCancel,
+    LoginRequest
 )
 
 try:
@@ -34,76 +36,143 @@ security = HTTPBasic()
 
 ADMIN_USER = "manager"
 ADMIN_PASS = "voley123" # ¡Recuerda cambiar esto!
+COOKIE_NAME = "voley_session"
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_user = secrets.compare_digest(credentials.username, ADMIN_USER)
-    correct_pass = secrets.compare_digest(credentials.password, ADMIN_PASS)
-    if not (correct_user and correct_pass):
+
+def get_current_user(request: Request):
+    session_token = request.cookies.get(COOKIE_NAME)
+    if not session_token or session_token != "authenticated_token_xyz":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contraseña incorrectos",
-            headers={"WWW-Authenticate": "Basic"},
+            detail="No autenticado"
         )
-    return credentials.username
+    return "manager"
 
+
+def verify_page_access(request: Request):
+    session_token = request.cookies.get(COOKIE_NAME)
+    if not session_token or session_token != "authenticated_token_xyz":
+        # Si falla, lanzamos una excepción especial que capturaremos
+        # o simplemente retornamos False y manejamos en la ruta
+        return False
+    return True
+
+
+@app.post("/auth/login")
+def login(creds: LoginRequest, response: Response):
+    correct_user = secrets.compare_digest(creds.username, ADMIN_USER)
+    correct_pass = secrets.compare_digest(creds.password, ADMIN_PASS)
+    
+    if not (correct_user and correct_pass):
+        raise HTTPException(status_code=400, detail="Credenciales incorrectas")
+    
+    # Crear la cookie
+    # httponly=True es vital: impide que el JS lea la cookie (seguridad XSS)
+    response.set_cookie(
+        key=COOKIE_NAME, 
+        value="authenticated_token_xyz", # En un app real, usa un token firmado JWT
+        httponly=True,
+        max_age=3600 * 12 # 12 horas de duración
+    )
+    return {"message": "Login exitoso"}
+
+
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(COOKIE_NAME)
+    return {"message": "Logout exitoso"}
 
 # --- API Endpoints: Manager (Protegidos) ---
 
 @app.get("/manager/test")
 def read_manager_test(username: str = Depends(get_current_user)):
-    return {"message": f"Hola {username}! Estás autenticado."}
+    return {"message": "Estás autenticado via Cookie!"}
+
+
+@app.get("/manager/categories", response_model=List[Category])
+def get_categories(username: str = Depends(get_current_user)):
+    """Trae la lista de categorías ordenadas."""
+    # Asegúrate de crear la colección 'categories' en Firestore
+    cats_ref = db.collection("categories").order_by("order").stream()
+    categories = []
+    for cat in cats_ref:
+        cat_data = cat.to_dict()
+        cat_data["id"] = cat.id
+        categories.append(cat_data)
+    return categories
 
 
 @app.get("/manager/teams", response_model=List[Team])
-def get_teams_list(username: str = Depends(get_current_user)):
-    """Trae la lista de equipos para el manager."""
-    teams_ref = db.collection("teams").stream()
+def get_teams_list(category_id: Optional[str] = None, username: str = Depends(get_current_user)):
+    """
+    Trae equipos. Si se pasa category_id, filtra.
+    """
+    teams_ref = db.collection("teams")
+    
+    if category_id:
+        # Filtramos por el campo category_id
+        teams_ref = teams_ref.where(filter=firestore.FieldFilter("category_id", "==", category_id))
+        
+    docs = teams_ref.stream()
     teams = []
-    for team in teams_ref:
+    for team in docs:
         team_data = team.to_dict()
         team_data["id"] = team.id
         teams.append(team_data)
     
-    if not teams:
-        raise HTTPException(
-            status_code=404,
-            detail="No se encontraron equipos. Asegúrate de popular la colección 'teams'."
-        )
     return teams
 
 
 @app.post("/manager/games", response_model=GameDocument)
 def create_game(game: GameCreate, username: str = Depends(get_current_user)):
-    """Crea un nuevo partido en Firestore."""
-    
     if game.team1_id == game.team2_id:
         raise HTTPException(status_code=400, detail="Un equipo no puede jugar contra sí mismo.")
 
     try:
+        # 1. Buscar datos de equipos
         team1_ref = db.collection("teams").document(game.team1_id).get()
         team2_ref = db.collection("teams").document(game.team2_id).get()
 
         if not team1_ref.exists or not team2_ref.exists:
-            raise HTTPException(status_code=404, detail="Uno o ambos IDs de equipo no existen.")
+            raise HTTPException(status_code=404, detail="Equipos no encontrados.")
 
-        team1_name = team1_ref.to_dict().get("name", game.team1_id)
-        team2_name = team2_ref.to_dict().get("name", game.team2_id)
+        t1_data = team1_ref.to_dict()
+        t2_data = team2_ref.to_dict()
 
+        # 2. Buscar nombre de categoría (si se envió)
+        cat_name = "Amistoso" # Default
+        if game.category_id:
+            cat_ref = db.collection("categories").document(game.category_id).get()
+            if cat_ref.exists:
+                cat_name = cat_ref.to_dict().get("name", "Torneo")
+
+        # 3. Crear documento con los nuevos campos (Flags y Sets Won)
         new_game_data = GameDocument(
             team1_id=game.team1_id,
             team2_id=game.team2_id,
-            team1_name=team1_name,
-            team2_name=team2_name,
+            team1_name=t1_data.get("name", "Equipo 1"),
+            team2_name=t2_data.get("name", "Equipo 2"),
+            
+            # Guardamos las flags aquí para no buscarlas cada vez en el watcher
+            team1_flag=t1_data.get("flag"), 
+            team2_flag=t2_data.get("flag"),
+            category_name=cat_name,
+
             status="upcoming",
             created_at=datetime.datetime.now(datetime.timezone.utc),
-            winner_id=None,
+            
             current_set_number=1,
             current_team1_score=0,
-            current_team2_score=0
+            current_team2_score=0,
+            
+            # Inicializamos contadores de sets
+            team1_sets_won=0,
+            team2_sets_won=0
         )
 
         update_time, game_ref = db.collection("games").add(new_game_data.model_dump())
 
+        # Crear set 1 (Igual que antes)
         first_set_data = SetDocument(
             set_number=1,
             status="live",
@@ -111,17 +180,15 @@ def create_game(game: GameCreate, username: str = Depends(get_current_user)):
             team2_current_score=0,
             winner_id=None
         )
-        
         db.collection("games").document(game_ref.id).collection("sets").document("1").set(
             first_set_data.model_dump()
         )
 
-        print(f"Partido creado con ID: {game_ref.id}")
         return new_game_data
 
     except Exception as e:
-        print(f"Error al crear partido: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+        print(f"Error create_game: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/manager/games/list", response_model=List[GameListResponse]) # <--- 2. USA EL NUEVO RESPONSE_MODEL
@@ -149,11 +216,21 @@ def get_games_list(username: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
 
 
+@app.get("/manager/games/{game_id}", response_model=GameDocument)
+def get_single_game(game_id: str, username: str = Depends(get_current_user)):
+    """Trae los detalles de un partido específico para el controlador."""
+    game_ref = db.collection("games").document(game_id)
+    snapshot = game_ref.get()
+    
+    if not snapshot.exists:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    
+    # Retornamos los datos. Pydantic hará el resto.
+    return snapshot.to_dict()
+
+
 @app.post("/manager/games/{game_id}/finish_set", response_model=SetDocument)
 def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_current_user)):
-    """
-    Marca un set como finalizado y (opcionalmente) crea el siguiente.
-    """
     
     game_ref = db.collection("games").document(game_id)
     set_ref = game_ref.collection("sets").document(str(set_data.set_number))
@@ -165,60 +242,64 @@ def finish_set(game_id: str, set_data: SetFinish, username: str = Depends(get_cu
             set_snapshot = set_ref.get(transaction=transaction)
 
             if not game_snapshot.exists or not set_snapshot.exists:
-                return None # Indicará que el partido o set no existe
+                return None
 
             game_data = game_snapshot.to_dict()
 
-            # Validar que el ganador sea parte del partido
             if set_data.winner_team_id not in [game_data["team1_id"], game_data["team2_id"]]:
-                return None # Ganador inválido
+                return None 
 
-            # 1. Actualizar el set actual
+            # 1. Actualizar el set (Igual que antes)
             transaction.update(set_ref, {
                 "status": "finished",
                 "winner_id": set_data.winner_team_id
             })
 
-            # 2. Crear el *siguiente* set (Punto 3 de nuestro plan)
-            # Asumimos que no es un partido a 5 sets, el manager lo parará manualmente
+            # 2. Lógica NUEVA: Incrementar sets_won
+            updates = {
+                "current_set_number": set_data.set_number + 1,
+                "current_team1_score": 0,
+                "current_team2_score": 0
+            }
+            
+            # Leemos los valores actuales (o 0 si es legacy)
+            current_sets_t1 = game_data.get("team1_sets_won", 0)
+            current_sets_t2 = game_data.get("team2_sets_won", 0)
+
+            if set_data.winner_team_id == game_data["team1_id"]:
+                updates["team1_sets_won"] = current_sets_t1 + 1
+            else:
+                updates["team2_sets_won"] = current_sets_t2 + 1
+            
+            transaction.update(game_ref, updates)
+
+            # 3. Crear siguiente set (Igual que antes)
             next_set_number = set_data.set_number + 1
             next_set_ref = game_ref.collection("sets").document(str(next_set_number))
             
             new_set_doc = SetDocument(
                 set_number=next_set_number,
-                status="live", # El nuevo set arranca 'live'
+                status="live", 
                 team1_current_score=0,
                 team2_current_score=0,
                 winner_id=None
             )
             transaction.set(next_set_ref, new_set_doc.model_dump())
             
-            # 3. Actualizar el documento 'game' con el nuevo set y scores en 0
-            transaction.update(game_ref, {
-                "current_set_number": next_set_number,
-                "current_team1_score": 0,
-                "current_team2_score": 0
-            })
-            
-            # Devolvemos el *nuevo* set creado
             return new_set_doc 
 
-        # --- Fin de la transacción ---
+        # ... (resto del manejo de transacción igual) ...
         
         transaction_result = finish_set_in_transaction(db.transaction())
-
-        if transaction_result is None:
-            raise HTTPException(
-                status_code=400, 
-                detail="No se pudo finalizar el set. El ID del equipo, partido o set no son válidos."
-            )
         
-        # Devolvemos el nuevo set que se creó
+        if transaction_result is None:
+             raise HTTPException(status_code=400, detail="Error al finalizar set.")
+        
         return transaction_result
 
     except Exception as e:
-        print(f"Error al finalizar set: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+        print(f"Error finish_set: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/manager/games/{game_id}/finish_game", response_model=GameDocument)
@@ -527,8 +608,22 @@ async def get_index_html():
 async def get_watcher_game_html():
     return FileResponse("static/watcher_game.html")
 
+@app.get("/login", include_in_schema=False)
+async def get_login_html():
+    return FileResponse("static/login.html")
+
+# Esta ruta está PROTEGIDA con redirección
 @app.get("/manager", include_in_schema=False)
-async def get_manager_html():
+async def get_manager_html(request: Request):
+    if not verify_page_access(request):
+        return RedirectResponse(url="/login")
     return FileResponse("static/manager.html")
+
+# Esta ruta está PROTEGIDA con redirección
+@app.get("/manager/game", include_in_schema=False)
+async def get_manager_game_html(request: Request):
+    if not verify_page_access(request):
+        return RedirectResponse(url="/login")
+    return FileResponse("static/manager_game.html")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

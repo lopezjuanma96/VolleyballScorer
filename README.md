@@ -1,10 +1,11 @@
-# 🏐 Volleyball Scorer (v0.2)
+### `README.md` (v0.3)
 
-App web simple para gestionar y ver puntajes de un torneo de voley en tiempo real, construida con FastAPI, Firestore y deployada en Google Cloud Run.
+````markdown
+# 🏐 Volleyball Scorer (v0.3)
 
-Esta aplicación se compone de dos partes principales:
-1.  **Panel Manager (`/manager`):** Una interfaz de administración protegida por contraseña para crear partidos, sumar puntos y finalizar sets/partidos.
-2.  **Panel Watcher (`/` y `/game`):** Un lobby público (`/`) que muestra todos los partidos en tiempo real y una vista de detalle (`/game?id=...`) que muestra el historial de puntos de un partido específico.
+App web progresiva para gestionar y visualizar puntajes de torneos de voley en tiempo real. Construida con **FastAPI**, **Google Firestore** y **Tailwind CSS**.
+
+Esta versión introduce gestión por categorías, autenticación por cookies, interfaz optimista para el manager y visualización rica (banderas, sets ganados) para los espectadores.
 
 ---
 
@@ -12,139 +13,143 @@ Esta aplicación se compone de dos partes principales:
 
 * **Backend:** Python 3.10+, **FastAPI**
 * **Servidor:** **Uvicorn**
-* **Base de Datos:** Google **Firestore** (en modo Datastore)
-* **Frontend:** HTML5, **Tailwind CSS** (vía Play CDN), **Firebase JS SDK** (para real-time)
-* **Plataforma de Deploy:** **Google Cloud Run**
-* **Dependencias de Python:** `uv` (para gestión de paquetes)
+* **Base de Datos:** Google **Firestore** (Modo Nativo)
+* **Frontend:** HTML5, **Tailwind CSS** (Play CDN), **Firebase JS SDK** (Real-time)
+* **Infraestructura:** Google **Cloud Run** (Serverless)
+* **Gestión de Paquetes:** `uv`
 
 ---
 
-## ✨ Características (v0.2)
+## ✨ Características (v0.3)
 
-### Panel Watcher (Público)
+### 🔐 Autenticación & Seguridad
+* **Login Separado:** Página dedicada de inicio de sesión (`/login`).
+* **Cookies HttpOnly:** Gestión de sesión segura mediante cookies (adiós a los popups de navegador).
+* **Protección de Rutas:** Middleware que redirige a usuarios no autenticados fuera del panel de manager.
 
+### 📺 Panel Watcher (Público)
 * **Lobby (`/`):**
-    * Muestra 3 listas separadas: "En Vivo", "Próximos" y "Finalizados".
-    * Los scores de los partidos "En Vivo" se actualizan en **tiempo real** sin necesidad de refrescar.
-    * Cada tarjeta de partido es un link a la vista de detalle.
+    * Listas en tiempo real: "En Vivo", "Próximos" y "Finalizados".
+    * Visualización de **Categorías** y **Banderas** de los equipos.
+    * Indicadores de **Sets Ganados** en cada tarjeta.
 * **Vista de Partido (`/game?id=...`):**
-    * Muestra un encabezado con el score principal, que se actualiza en **tiempo real**.
-    * Muestra **pestañas (Tabs)** por cada set (incluyendo sets finalizados y anulados).
-    * Al hacer clic en una pestaña, carga el **historial de puntos** de ese set, ordenado del más nuevo al más viejo.
-    * La tabla de historial resalta visualmente (en amarillo) qué equipo anotó cada punto.
+    * Encabezado con banderas grandes y score global.
+    * **Pestañas de Sets:** Navegación entre sets activos, finalizados y anulados.
+    * **Historial de Puntos:** Tabla que carga bajo demanda, con resaltado visual (amarillo) del equipo que anotó.
 
-### Panel Manager (Admin)
-
-* **Creación de Partidos:**
-    * Formulario para crear un nuevo partido seleccionando equipos de una lista cargada desde Firestore.
-* **Gestión de Partidos "En Vivo":**
-    * Layout de tabla claro que muestra el score y N° de set actual para cada partido.
-    * **+1 Punto:** Suma un punto al set *actual*. El score se actualiza en el manager sin recargar la tarjeta.
-    * **+1 Set (Finalizar Set):** Declara un ganador para el set *actual* y crea automáticamente el siguiente set.
-    * **Ganador (Finalizar Partido):** Declara un ganador para el partido y lo mueve a la lista de "Finalizados" (desaparece del manager).
-* **Acciones de Administración:**
-    * **Deshacer Último Punto:** Revierte el último punto anotado en el set *actual*. El score se actualiza sin recargar.
-    * **Anular Set:** Marca el set *actual* como "cancelled", lo resetea a 0-0 y crea automáticamente el siguiente.
-    * **Anular Partido:** Marca el partido como "cancelled" y lo quita de la lista de gestión.
+### 👨‍💼 Panel Manager (Admin)
+* **Dashboard (`/manager`):**
+    * Filtrado de creación de partidos por **Categoría**.
+    * Lista de partidos activos con botón "Gestionar" individual.
+* **Controlador de Partido (`/manager/game?id=...`):**
+    * **Optimistic UI:** El marcador se actualiza instantáneamente al tocar un botón (sin esperar al servidor).
+    * **Gestión Completa:** Sumar puntos, Finalizar Sets, Finalizar Partido.
+    * **Corrección de Errores:** Deshacer último punto, Anular Set actual, Anular Partido completo.
 
 ---
 
 ## 📋 Estructura del Proyecto
 
-```
+```text
 .
 ├── static/
 │   ├── index.html          # Lobby (Watcher)
 │   ├── watcher_game.html   # Vista de partido (Watcher)
-│   ├── manager.html        # Panel de Administración
-│   └── setup_firebase.js   # (Opcional) Config pública de Firebase
+│   ├── login.html          # Página de Login
+│   ├── manager.html        # Dashboard del Manager (Lista)
+│   ├── manager_game.html   # Controlador de Partido
+│   └── no_flag.png         # Imagen fallback para equipos sin bandera
 │
-├── .venv/                  # Entorno virtual de Python
-├── main.py                 # Servidor FastAPI (API y servido de estáticos)
+├── .venv/                  # Entorno virtual
+├── main.py                 # Servidor FastAPI (Lógica de negocio y Auth)
 ├── models.py               # Modelos de datos Pydantic
-├── requirements.txt        # Dependencias de Python
+├── requirements.txt        # Dependencias
 ├── Dockerfile              # Configuración para Cloud Run
-└── serviceAccountKey.json  # Credenciales de Admin de Firebase (¡EN .gitignore!)
-```
+└── serviceAccountKey.json  # Credenciales Admin (¡NO SUBIR A GIT!)
+````
 
----
+-----
 
 ## 🏃 Puesta en Marcha (Local)
 
-1.  **Clonar el Repositorio**
-    ```bash
-    git clone [URL_DEL_REPO]
-    cd [NOMBRE_DEL_REPO]
-    ```
+### 1\. Clonar y Preparar
 
-2.  **Configurar Google Cloud / Firebase**
-    * Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) y habilita la API de **Firestore**.
-    * En Firestore, crea una base de datos en Modo Nativo (`(default)`).
-    * Ve a **IAM y Administración** > **Cuentas de servicio**, crea una nueva cuenta, asígnale el rol `Editor de Cloud Datastore`, y descarga la clave JSON. Renómbrala a `serviceAccountKey.json` y colócala en la raíz del proyecto. **(¡Añade `serviceAccountKey.json` a tu `.gitignore`!)**
-    * Ve a [Firebase Console](https://console.firebase.google.com/), "Agrega un proyecto" y selecciona tu proyecto de GCP.
-    * Registra una nueva "App Web" (ícono `</>`).
-    * Copia el objeto `firebaseConfig`.
+```bash
+git clone [URL_DEL_REPO]
+cd [NOMBRE_DEL_REPO]
 
-3.  **Configurar Frontend**
-    * Pega el objeto `firebaseConfig` en `static/index.html` y `static/watcher_game.html` (o en un `static/setup_firebase.js` importado). **Esta clave es pública** y es seguro subirla a GitHub.
+# Crear entorno virtual e instalar dependencias
+python -m venv .venv
+source .venv/bin/activate  # o .\.venv\Scripts\activate en Windows
+pip install uv
+uv pip install -r requirements.txt
+```
 
-4.  **Configurar Reglas de Firestore**
-    * En la consola de Firebase > Firestore Database > Reglas, pega las siguientes reglas:
-    ```javascript
-    rules_version = '2';
-    service cloud.firestore {
-      match /databases/{database}/documents {
-        match /{document=**} {
-          allow read: if true;
-          allow write: if false; // Solo el backend puede escribir
-        }
-      }
-    }
-    ```
+### 2\. Configuración de Google Cloud / Firebase
 
-5.  **Poblar Datos Iniciales**
-    * En la consola de Firestore, crea la colección `teams`.
-    * Añade documentos con la estructura: `{"name": "Nombre del Equipo", "flag": "🇦🇷"}`.
+1.  **Proyecto:** Crea un proyecto en GCP y habilita **Firestore**.
+2.  **Backend (Admin):**
+      * Crea una Service Account en GCP con rol `Editor de Cloud Datastore`.
+      * Descarga la key JSON, renómbrala a `serviceAccountKey.json` y ponla en la raíz.
+      * **¡Importante\!** Agrega este archivo a tu `.gitignore`.
+3.  **Frontend (Cliente):**
+      * En la consola de Firebase, registra una Web App.
+      * Copia el objeto `firebaseConfig`.
+      * **Pégalo dentro** de las etiquetas `<script>` en `static/index.html` y `static/watcher_game.html`.
 
-6.  **Instalar y Correr (usando `uv`)**
-    ```bash
-    # Crear entorno virtual
-    python -m venv .venv
-    
-    # Activar (macOS/Linux)
-    source .venv/bin/activate
-    # Activar (Windows)
-    # .\.venv\Scripts\activate
-    
-    # Instalar uv (si no lo tienes)
-    pip install uv
-    
-    # Instalar dependencias
-    uv pip install -r requirements.txt
-    
-    # ¡Correr el servidor!
-    uvicorn main:app --reload
-    ```
+### 3\. Poblar la Base de Datos (Requisito v0.3)
 
-7.  **Acceder a la App**
-    * **Manager:** `http://127.0.0.1:8000/manager`
-        * Usuario/Pass: `manager`/`voley123` (hardcodeados en `main.py` para desarrollo).
-    * **Lobby:** `http://127.0.0.1:8000/`
+Para que el sistema funcione, debes crear manualmente algunas estructuras en Firestore:
 
----
+1.  **Colección `categories`:** Crea documentos con los campos:
+      * `name` (string): ej: "Femenino A"
+      * `order` (number): ej: 1
+2.  **Colección `teams`:** Crea documentos para los equipos:
+      * `name` (string): "Nombre Equipo"
+      * `flag` (string): URL de la imagen de la bandera.
+      * `category_id` (string): ID del documento de la categoría correspondiente.
+
+### 4\. Ejecutar
+
+```bash
+uvicorn main:app --reload
+```
+
+### 5\. Accesos
+
+  * **Lobby:** `http://127.0.0.1:8000/`
+  * **Manager:** `http://127.0.0.1:8000/login`
+      * Credenciales (Default): `manager` / `voley123` (Modificar `ADMIN_USER` y `ADMIN_PASS` en `main.py`).
+
+-----
 
 ## 🐳 Deploy en Cloud Run
 
-1.  Asegúrate de tener `gcloud` CLI instalado y configurado (`gcloud init`).
-2.  (Recomendado) Sube tu código a un repositorio (GitHub, GitLab, etc.).
-3.  Despliega el servicio **directamente desde la fuente**:
+1.  Subir código al repositorio.
+2.  Ejecutar deploy:
     ```bash
     gcloud run deploy volleyball-scorer \
       --source . \
       --platform managed \
       --region [TU_REGION] \
-      --allow-unauthenticated \
-      --set-env-vars="ADMIN_USER=tu_user_secreto,ADMIN_PASS=tu_pass_secreto"
+      --allow-unauthenticated
     ```
-4.  La primera vez, `gcloud` te preguntará por el nombre del servicio, la región, y habilitará las APIs necesarias (Cloud Build, Artifact Registry).
-5.  **Importante:** La cuenta de servicio de Cloud Run necesitará permisos para escribir en Firestore. Ve a la consola de GCP -> IAM y Admin, busca la cuenta de servicio de tu Cloud Run (ej: `...compute@developer.gserviceaccount.com`) y asígnale el rol `Editor de Cloud Datastore`.
+3.  **Permisos:** Asegúrate de que la Service Account que usa Cloud Run tenga el rol **Editor de Cloud Datastore** en IAM.
+
+-----
+
+## 🔒 Seguridad y Reglas
+
+Asegúrate de configurar las reglas de Firestore en la consola de Firebase para permitir lectura pública pero escritura solo vía backend:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
+```

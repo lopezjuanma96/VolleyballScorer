@@ -5,93 +5,80 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Partido en Vivo</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     
-    <script src="static/setup_firebase.js"></script>
-    
     <style>
-        /* Estilos para las pestañas */
-        .tab-btn {
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: 1px solid transparent;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-        }
-        .tab-btn.inactive {
-            background-color: #f3f4f6; /* gray-100 */
-            color: #4b5563; /* gray-600 */
-            border-color: #e5e7eb; /* gray-200 */
-        }
-        .tab-btn.inactive:hover {
-            background-color: #e5e7eb; /* gray-200 */
-        }
-        .tab-btn.active {
-            background-color: #3b82f6; /* blue-500 */
-            color: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .tab-btn.cancelled {
-            background-color: #fecaca; /* red-200 */
-            color: #b91c1c; /* red-700 */
-            border-color: #fca5a5; /* red-300 */
-            text-decoration: line-through;
-        }
+        .tab-btn { padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.inactive { background-color: #f3f4f6; color: #4b5563; }
+        .tab-btn.active { background-color: #3b82f6; color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .tab-btn.cancelled { background-color: #fecaca; color: #b91c1c; text-decoration: line-through; }
     </style>
 </head>
 <body class="bg-gray-100">
 
-    <div class="container mx-auto max-w-3xl p-4 mt-10">
+    <div class="container mx-auto max-w-3xl p-4 mt-4 lg:mt-10">
 
-        <div class="bg-white shadow-lg rounded-lg p-6">
+        <div class="bg-white shadow-xl rounded-xl p-6">
             
             <div id="game-header" class="text-center mb-6">
-                <p id="game-status" class="text-lg font-semibold text-red-600 mb-4">● EN VIVO</p>
-                <div class="flex justify-around items-center">
-                    <div class="w-1/3 text-center">
-                        <h2 id="team-1-name" class="text-2xl lg:text-3xl font-bold text-gray-800">Cargando...</h2>
-                        <p id="team-1-score" class="text-5xl lg:text-7xl font-bold text-blue-600">0</p>
+                
+                <div class="flex justify-between items-center mb-4">
+                    <span id="category-label" class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">Categoría</span>
+                    <p id="game-status" class="text-sm font-bold text-red-600 animate-pulse">● EN VIVO</p>
+                </div>
+                
+                <div class="flex justify-around items-start">
+                    <div class="w-1/3 flex flex-col items-center">
+                        <img id="team1-flag" src="/static/no_flag.png" class="w-16 h-16 lg:w-20 lg:h-20 rounded-full object-cover border-2 border-white shadow-md mb-2">
+                        <h2 id="team-1-name" class="text-xl lg:text-2xl font-bold text-gray-800 leading-tight">...</h2>
+                        <div class="mt-2 flex items-baseline gap-2">
+                            <span id="team-1-score" class="text-5xl lg:text-6xl font-black text-blue-600">0</span>
+                            <span class="text-xl font-bold text-gray-400">(<span id="sets1">0</span>)</span>
+                        </div>
                     </div>
-                    <span class="text-4xl font-light text-gray-400">vs</span>
-                    <div class="w-1/3 text-center">
-                        <h2 id="team-2-name" class="text-2xl lg:text-3xl font-bold text-gray-800">...Equipo</h2>
-                        <p id="team-2-score" class="text-5xl lg:text-7xl font-bold text-blue-600">0</p>
+                    
+                    <div class="mt-8">
+                        <span class="text-2xl font-light text-gray-300">vs</span>
+                    </div>
+                    
+                    <div class="w-1/3 flex flex-col items-center">
+                        <img id="team2-flag" src="/static/no_flag.png" class="w-16 h-16 lg:w-20 lg:h-20 rounded-full object-cover border-2 border-white shadow-md mb-2">
+                        <h2 id="team-2-name" class="text-xl lg:text-2xl font-bold text-gray-800 leading-tight">...</h2>
+                        <div class="mt-2 flex items-baseline gap-2">
+                            <span id="team-2-score" class="text-5xl lg:text-6xl font-black text-blue-600">0</span>
+                            <span class="text-xl font-bold text-gray-400">(<span id="sets2">0</span>)</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div id="sets-tabs-container" class="flex flex-wrap gap-2 border-b border-gray-200 pb-4 mb-4">
+            <div id="sets-tabs-container" class="flex flex-wrap gap-2 border-b border-gray-200 pb-4 mb-4 overflow-x-auto">
                 <span class="text-sm text-gray-400">Cargando sets...</span>
             </div>
 
             <div>
-                <div class="overflow-hidden border border-gray-200 rounded-md">
+                <div class="overflow-hidden border border-gray-200 rounded-lg">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th id="points-header-team1" class="w-2/5 px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    ...
-                                </th>
-                                <th class="w-1/5 px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Punto
-                                </th>
-                                <th id="points-header-team2" class="w-2/5 px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    ...
-                                </th>
+                                <th id="points-header-team1" class="w-2/5 px-4 py-2 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">...</th>
+                                <th class="w-1/5 px-4 py-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Pto</th>
+                                <th id="points-header-team2" class="w-2/5 px-4 py-2 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">...</th>
                             </tr>
                         </thead>
                         <tbody id="points-history-list" class="bg-white divide-y divide-gray-200">
-                            <tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">Selecciona un set...</td></tr>
+                            <tr><td colspan="3" class="px-4 py-8 text-sm text-center text-gray-400">Selecciona un set para ver el historial</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-
-        </div> <div class="text-center mt-4">
-            <a href="/" class="text-blue-600 hover:underline">&larr; Volver al Lobby</a>
+        </div>
+        
+        <div class="text-center mt-6">
+            <a href="/" class="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium transition">
+                &larr; Volver al Lobby
+            </a>
         </div>
     </div>
 
@@ -105,215 +92,142 @@
             messagingSenderId: "358310788461",
             appId: "1:358310788461:web:3eb5012f9a9d34d6896e64"
         };
+
+        // --- 2. Inicializar Firebase ---
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-
-        // --- 2. Obtener Game ID ---
         const urlParams = new URLSearchParams(window.location.search);
         const gameId = urlParams.get('id');
 
-        // --- 3. Referencias al DOM ---
+        // Helper
+        const getFlag = (url) => url ? url : '/static/no_flag.png';
+
+        // Refs DOM
         const el = {
-            team1Name: document.getElementById('team-1-name'),
-            team2Name: document.getElementById('team-2-name'),
-            team1Score: document.getElementById('team-1-score'),
-            team2Score: document.getElementById('team-2-score'),
+            catLabel: document.getElementById('category-label'),
+            team1Name: document.getElementById('team-1-name'), team2Name: document.getElementById('team-2-name'),
+            team1Flag: document.getElementById('team1-flag'), team2Flag: document.getElementById('team2-flag'),
+            team1Score: document.getElementById('team-1-score'), team2Score: document.getElementById('team-2-score'),
+            sets1: document.getElementById('sets1'), sets2: document.getElementById('sets2'),
             gameStatus: document.getElementById('game-status'),
             setsTabsContainer: document.getElementById('sets-tabs-container'),
             pointsList: document.getElementById('points-history-list'),
-            pointsHeaderTeam1: document.getElementById('points-header-team1'),
-            pointsHeaderTeam2: document.getElementById('points-header-team2')
+            pointsHeaderTeam1: document.getElementById('points-header-team1'), pointsHeaderTeam2: document.getElementById('points-header-team2')
         };
         
-        // --- 4. Almacén de Estado Local ---
-        let gameDataCache = {}; // Guardará el doc del partido (para IDs de equipos)
-        let setsDataCache = new Map(); // Guardará los datos de cada set
-        let currentPointsListener = null; // Función "unsubscribe"
-        let activeSetNumber = null; // N° del set que se está viendo (ej: "1")
+        let gameDataCache = {}; 
+        let setsDataCache = new Map(); 
+        let currentPointsListener = null; 
+        let activeSetNumber = null;
 
-        if (!gameId) {
-            document.body.innerHTML = '<h1 class="text-red-600 text-center mt-10 text-2xl">Error: No se especificó un ID de partido en la URL.</h1>';
-        } else {
-            // --- 5. Listener 1: Documento del Partido (Para el Encabezado) ---
-            db.collection("games").doc(gameId)
-              .onSnapshot(
-                (gameSnap) => {
-                    if (!gameSnap.exists) {
-                        el.gameStatus.innerText = "Error: Partido no encontrado";
-                        return;
-                    }
+        if (!gameId) document.body.innerHTML = '<h1 class="text-center mt-10 text-red-600">ID no encontrado</h1>';
+        else {
+            // Listener 1: Game Doc
+            db.collection("games").doc(gameId).onSnapshot((snap) => {
+                if (!snap.exists) return;
+                gameDataCache = snap.data();
+                
+                // Render Header
+                el.catLabel.innerText = gameDataCache.category_name || 'General';
+                
+                el.team1Name.innerText = gameDataCache.team1_name;
+                el.team1Flag.src = getFlag(gameDataCache.team1_flag);
+                
+                el.team2Name.innerText = gameDataCache.team2_name;
+                el.team2Flag.src = getFlag(gameDataCache.team2_flag);
 
-                    gameDataCache = gameSnap.data(); // Guardar datos
-                    
-                    // Actualizar el DOM del encabezado
-                    el.team1Name.innerText = gameDataCache.team1_name;
-                    el.team2Name.innerText = gameDataCache.team2_name;
-                    el.team1Score.innerText = gameDataCache.current_team1_score;
-                    el.team2Score.innerText = gameDataCache.current_team2_score;
+                el.team1Score.innerText = gameDataCache.current_team1_score;
+                el.team2Score.innerText = gameDataCache.current_team2_score;
+                
+                // Sets Won (Fallback a 0)
+                el.sets1.innerText = gameDataCache.team1_sets_won || 0;
+                el.sets2.innerText = gameDataCache.team2_sets_won || 0;
 
-                    // Actualizar cabeceras de la tabla de puntos
-                    el.pointsHeaderTeam1.innerText = gameDataCache.team1_name;
-                    el.pointsHeaderTeam2.innerText = gameDataCache.team2_name;
+                el.pointsHeaderTeam1.innerText = gameDataCache.team1_name;
+                el.pointsHeaderTeam2.innerText = gameDataCache.team2_name;
 
-                    if (gameDataCache.status === 'live') {
-                        el.gameStatus.innerText = `● EN VIVO (Set ${gameDataCache.current_set_number})`;
-                        el.gameStatus.className = "text-lg font-semibold text-red-600 mb-4";
-                    } else if (gameDataCache.status === 'upcoming') {
-                        el.gameStatus.innerText = "PARTIDO PRÓXIMO";
-                        el.gameStatus.className = "text-lg font-semibold text-blue-600 mb-4";
-                    } else if (gameDataCache.status === 'finished') {
-                        const winnerName = (gameDataCache.winner_id === gameDataCache.team1_id) ? gameDataCache.team1_name : gameDataCache.team2_name;
-                        el.gameStatus.innerText = `PARTIDO FINALIZADO (Ganador: ${winnerName})`;
-                        el.gameStatus.className = "text-lg font-semibold text-gray-700 mb-4";
-                    }
-                },
-                (error) => console.error("Error al escuchar game doc: ", error)
-              );
-
-            // --- 6. Listener 2: Colección de Sets (Para las Pestañas) ---
-            db.collection("games").doc(gameId).collection("sets")
-              .orderBy("set_number")
-              .onSnapshot(
-                (setsSnapshot) => {
-                    el.setsTabsContainer.innerHTML = ''; // Limpiar pestañas
-                    setsDataCache.clear();
-                    
-                    let latestLiveSet = null;
-                    let lastSetNumber = null;
-
-                    if (setsSnapshot.empty) {
-                        el.setsTabsContainer.innerHTML = '<span class="text-sm text-gray-400">Esperando Set 1...</span>';
-                        return;
-                    }
-
-                    setsSnapshot.forEach((setDoc) => {
-                        const setData = setDoc.data();
-                        const setNumber = setDoc.id; // "1", "2", etc.
-                        setsDataCache.set(setNumber, setData); // Guardar datos del set
-                        
-                        const tab = document.createElement('button');
-                        tab.className = 'tab-btn inactive'; // Empezar como inactivo
-                        tab.dataset.setNumber = setNumber;
-                        
-                        // Lógica para el texto de la pestaña
-                        if (setData.status === 'finished') {
-                            tab.innerText = `Set ${setData.set_number}: ${setData.team1_current_score} - ${setData.team2_current_score}`;
-                        } else if (setData.status === 'live') {
-                            tab.innerText = `Set ${setData.set_number} (En vivo)`;
-                            latestLiveSet = setNumber;
-                        } else if (setData.status === 'cancelled') {
-                            // Requisito v0.2: Mostrar sets cancelados
-                            tab.innerText = `Set ${setData.set_number} (Anulado)`;
-                            tab.classList.add('cancelled');
-                        }
-                        
-                        tab.addEventListener('click', () => handleTabClick(setNumber));
-                        el.setsTabsContainer.appendChild(tab);
-                        lastSetNumber = setNumber;
-                    });
-                    
-                    // Decidir qué pestaña activar
-                    const set_to_activate = latestLiveSet || activeSetNumber || lastSetNumber;
-                    handleTabClick(set_to_activate);
-
-                },
-                (error) => console.error("Error al escuchar sets collection: ", error)
-              );
-        }
-
-        // --- 7. (NUEVO) Manejador de Clic en Pestaña ---
-        function handleTabClick(setNumber) {
-            if (activeSetNumber === setNumber) {
-                return; // Ya está activo, no hacer nada
-            }
-            
-            activeSetNumber = setNumber;
-
-            // Actualizar estilos de pestañas
-            Array.from(el.setsTabsContainer.children).forEach(tab => {
-                if (tab.dataset.setNumber === setNumber) {
-                    tab.classList.remove('inactive');
-                    tab.classList.add('active');
+                if (gameDataCache.status === 'live') {
+                    el.gameStatus.innerText = `● EN VIVO (Set ${gameDataCache.current_set_number})`;
+                    el.gameStatus.className = "text-sm font-bold text-red-600 animate-pulse";
+                } else if (gameDataCache.status === 'finished') {
+                    const winner = (gameDataCache.winner_id === gameDataCache.team1_id) ? gameDataCache.team1_name : gameDataCache.team2_name;
+                    el.gameStatus.innerText = `FINALIZADO (Ganó ${winner})`;
+                    el.gameStatus.className = "text-sm font-bold text-gray-600";
                 } else {
-                    tab.classList.remove('active');
-                    tab.classList.add('inactive');
+                    el.gameStatus.innerText = "PRÓXIMO";
+                    el.gameStatus.className = "text-sm font-bold text-blue-600";
                 }
             });
 
-            // Cargar los puntos para esta pestaña
+            // Listener 2: Sets (Igual que v0.2)
+            db.collection("games").doc(gameId).collection("sets").orderBy("set_number").onSnapshot((snap) => {
+                el.setsTabsContainer.innerHTML = ''; setsDataCache.clear();
+                let latestLiveSet = null; let lastSetNumber = null;
+
+                if (snap.empty) { el.setsTabsContainer.innerHTML = '<span class="text-xs text-gray-400">Esperando sets...</span>'; return; }
+
+                snap.forEach((doc) => {
+                    const d = doc.data(); const sNum = doc.id;
+                    setsDataCache.set(sNum, d);
+                    const tab = document.createElement('button');
+                    tab.className = 'tab-btn inactive whitespace-nowrap';
+                    tab.dataset.setNumber = sNum;
+                    
+                    if (d.status === 'finished') tab.innerText = `Set ${d.set_number}: ${d.team1_current_score}-${d.team2_current_score}`;
+                    else if (d.status === 'live') { tab.innerText = `Set ${d.set_number} (Vivo)`; latestLiveSet = sNum; }
+                    else if (d.status === 'cancelled') { tab.innerText = `Set ${d.set_number} (Anulado)`; tab.classList.add('cancelled'); }
+                    
+                    tab.addEventListener('click', () => handleTabClick(sNum));
+                    el.setsTabsContainer.appendChild(tab);
+                    lastSetNumber = sNum;
+                });
+                
+                const toActivate = latestLiveSet || activeSetNumber || lastSetNumber;
+                handleTabClick(toActivate);
+            });
+        }
+
+        function handleTabClick(setNumber) {
+            if (activeSetNumber === setNumber && currentPointsListener) return;
+            activeSetNumber = setNumber;
+            Array.from(el.setsTabsContainer.children).forEach(tab => {
+                if (tab.dataset.setNumber === setNumber) { tab.classList.remove('inactive'); tab.classList.add('active'); } 
+                else { tab.classList.remove('active'); tab.classList.add('inactive'); }
+            });
             listenToPoints(setNumber);
         }
 
-        // --- 8. (NUEVO) Listener 3: Puntos (Cargado dinámicamente) ---
         function listenToPoints(setNumber) {
-            // Desuscribirse del listener anterior (si existe)
-            if (currentPointsListener) {
-                currentPointsListener();
-            }
-
-            const setData = setsDataCache.get(setNumber);
-
-            // Manejar estados especiales
-            if (!setData) {
-                el.pointsList.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">Error: No se encontraron datos para este set.</td></tr>';
-                return;
-            }
-            if (setData.status === 'cancelled') {
-                el.pointsList.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">Este set fue anulado.</td></tr>';
-                return;
-            }
-            if (setData.status === 'finished' && setData.team1_current_score === 0 && setData.team2_current_score === 0) {
-                 el.pointsList.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">No se anotaron puntos en este set.</td></tr>';
-                return;
-            }
-
-            el.pointsList.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">Cargando puntos...</td></tr>';
+            if (currentPointsListener) currentPointsListener();
+            const sData = setsDataCache.get(setNumber);
             
-            // ¡Crear el nuevo listener!
-            // (Requisito v0.2: "desc" para el más nuevo primero)
+            if (!sData || sData.status === 'cancelled') {
+                 el.pointsList.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-gray-400 italic">Sin datos o set anulado</td></tr>'; return;
+            }
+
+            el.pointsList.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-gray-400">Cargando...</td></tr>';
+            
             currentPointsListener = db.collection("games").doc(gameId).collection("sets").doc(setNumber).collection("points")
               .orderBy("timestamp", "desc")
-              .onSnapshot(
-                (pointsSnapshot) => {
-                    if (pointsSnapshot.empty) {
-                        el.pointsList.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-center text-gray-500">Esperando primer punto...</td></tr>';
-                        return;
-                    }
-
-                    el.pointsList.innerHTML = ''; // Limpiar la lista
-                    
-                    pointsSnapshot.forEach((pointDoc) => {
-                        const pointData = pointDoc.data();
-                        
-                        // Renderizar la fila de la tabla (Formato v0.2)
-                        const tr = document.createElement('tr');
-                        tr.className = 'text-center text-gray-700';
-                        
-                        let td1_class = "px-4 py-3 text-lg font-bold";
-                        let td2_class = "px-4 py-3 text-lg font-bold";
-                        let arrow = "";
-
-                        // (Requisito v0.2: Highlight amarillo)
-                        if (pointData.scoring_team_id === gameDataCache.team1_id) {
-                            td1_class += " bg-yellow-100 text-black";
-                            arrow = "←";
-                        } else if (pointData.scoring_team_id === gameDataCache.team2_id) {
-                            td2_class += " bg-yellow-100 text-black";
-                            arrow = "→";
-                        }
-                        
-                        tr.innerHTML = `
-                            <td class="${td1_class}">${pointData.team1_score_after}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${arrow}</td>
-                            <td class="${td2_class}">${pointData.team2_score_after}</td>
-                        `;
-                        el.pointsList.appendChild(tr);
-                    });
-                },
-                (error) => console.error(`Error al escuchar puntos del set ${setNumber}: `, error)
-              );
+              .onSnapshot((snap) => {
+                  if (snap.empty) { el.pointsList.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-gray-400">0 - 0</td></tr>'; return; }
+                  el.pointsList.innerHTML = '';
+                  snap.forEach((doc) => {
+                      const p = doc.data();
+                      const tr = document.createElement('tr');
+                      
+                      let c1 = "py-3 px-4 text-lg font-bold text-gray-800 text-center";
+                      let c2 = "py-3 px-4 text-lg font-bold text-gray-800 text-center";
+                      let arrow = "";
+                      
+                      if (p.scoring_team_id === gameDataCache.team1_id) { c1 += " bg-yellow-100"; arrow = "←"; }
+                      else if (p.scoring_team_id === gameDataCache.team2_id) { c2 += " bg-yellow-100"; arrow = "→"; }
+                      
+                      tr.innerHTML = `<td class="${c1}">${p.team1_score_after}</td><td class="text-gray-400 text-center text-sm">${arrow}</td><td class="${c2}">${p.team2_score_after}</td>`;
+                      el.pointsList.appendChild(tr);
+                  });
+              });
         }
-
     </script>
 </body>
 </html>

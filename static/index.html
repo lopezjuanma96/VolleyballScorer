@@ -16,19 +16,25 @@
             🏐 Partidos del Torneo
         </h1>
 
-        <h2 class="text-2xl font-semibold mb-4 text-red-600">En Vivo</h2>
-        <div id="live-games-container" class="space-y-4">
-            <p class="text-gray-500" id="live-loading">Cargando partidos en vivo...</p>
+        <h2 class="text-2xl font-semibold mb-4 text-red-600 flex items-center gap-2">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            En Vivo
+        </h2>
+        <div id="live-games-container" class="space-y-4 mb-8">
+            <p class="text-gray-500" id="live-loading">Cargando partidos...</p>
         </div>
 
-        <h2 class="text-2xl font-semibold mt-8 mb-4 text-blue-600">Próximos</h2>
-        <div id="upcoming-games-container" class="space-y-4">
-            <p class="text-gray-500" id="upcoming-loading">Cargando próximos partidos...</p>
+        <h2 class="text-2xl font-semibold mb-4 text-blue-600">Próximos</h2>
+        <div id="upcoming-games-container" class="space-y-4 mb-8">
+            <p class="text-gray-500" id="upcoming-loading">Cargando próximos...</p>
         </div>
 
-        <h2 class="text-2xl font-semibold mt-8 mb-4 text-gray-700">Finalizados</h2>
+        <h2 class="text-2xl font-semibold mb-4 text-gray-500">Finalizados</h2>
         <div id="finished-games-container" class="space-y-4">
-            <p class="text-gray-500" id="finished-loading">Cargando partidos finalizados...</p>
+            <p class="text-gray-500" id="finished-loading">Cargando finalizados...</p>
         </div>
     </div>
 
@@ -47,7 +53,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- 3. Referencias a contenedores ---
         const liveContainer = document.getElementById('live-games-container');
         const upcomingContainer = document.getElementById('upcoming-games-container');
         const finishedContainer = document.getElementById('finished-games-container');
@@ -55,160 +60,116 @@
         const upcomingLoading = document.getElementById('upcoming-loading');
         const finishedLoading = document.getElementById('finished-loading');
 
-        // --- 4. Función para renderizar una tarjeta de partido ---
+        // Helper para banderas
+        const getFlag = (url) => url ? url : '/static/no_flag.png';
+
         function renderGameCard(game) {
-            // game.data() tiene todos los campos del GameDocument
             const data = game.data();
-            
-            // Determina si es "live" o "upcoming"
             const isLive = data.status === 'live';
             const targetContainer = isLive ? liveContainer : upcomingContainer;
             
-            // Buscar si la tarjeta ya existe para actualizarla
             let card = document.getElementById(game.id);
-            
             if (!card) {
-                // Si no existe, crearla
                 card = document.createElement('a');
                 card.id = game.id;
-                card.href = `/game?id=${game.id}`; // Link a la vista de detalle
-                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition";
+                card.href = `/game?id=${game.id}`;
+                card.className = "block bg-white shadow-md rounded-lg p-5 hover:shadow-xl transition border-l-4 " + (isLive ? "border-red-500" : "border-blue-500");
                 targetContainer.appendChild(card);
             }
 
-            // (Re)Renderizar el contenido interno de la tarjeta
-            card.innerHTML = `
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-xl font-bold text-gray-800">${data.team1_name}</span>
-                    <span class="text-xl font-bold text-gray-800">${data.team2_name}</span>
-                </div>
-                
-                <div class="flex justify-between items-center mb-4">
-                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
-                        ${data.current_team1_score}
-                    </span>
-                    <span class="text-sm text-gray-500">Set ${data.current_set_number}</span>
-                    <span class="text-4xl font-bold ${isLive ? 'text-blue-600' : 'text-gray-400'}">
-                        ${data.current_team2_score}
-                    </span>
-                </div>
-                
-                <div class="text-center text-sm font-medium ${isLive ? 'text-red-500' : 'text-blue-500'}">
-                    ${isLive ? '● EN VIVO' : 'PRÓXIMO'}
-                </div>
-            `;
-        }
+            // Fallback seguro para datos legacy
+            const sets1 = data.team1_sets_won || 0;
+            const sets2 = data.team2_sets_won || 0;
+            const catName = data.category_name || 'General';
 
-        function handleGameRemoved(gameId) {
-            const card = document.getElementById(gameId);
-            if (card) {
-                card.remove();
-            }
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400 border border-gray-200 px-2 py-1 rounded">
+                        ${catName}
+                    </span>
+                    <span class="text-xs font-bold ${isLive ? 'text-red-600 animate-pulse' : 'text-blue-600'}">
+                        ${isLive ? '● EN VIVO' : 'PRÓXIMO'}
+                    </span>
+                </div>
+
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-3">
+                        <img src="${getFlag(data.team1_flag)}" class="w-8 h-8 rounded-full object-cover border border-gray-200" alt="">
+                        <span class="text-lg font-bold text-gray-800">${data.team1_name}</span>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold text-gray-800">${data.current_team1_score}</span>
+                        <span class="text-sm text-gray-400 font-medium">(${sets1})</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <img src="${getFlag(data.team2_flag)}" class="w-8 h-8 rounded-full object-cover border border-gray-200" alt="">
+                        <span class="text-lg font-bold text-gray-800">${data.team2_name}</span>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold text-gray-800">${data.current_team2_score}</span>
+                        <span class="text-sm text-gray-400 font-medium">(${sets2})</span>
+                    </div>
+                </div>
+                
+                ${isLive ? `<div class="text-center mt-3 text-xs text-gray-400">Jugando Set ${data.current_set_number}</div>` : ''}
+            `;
         }
 
         function renderFinishedCard(game) {
             const data = game.data();
-            
-            // Buscar si la tarjeta ya existe para actualizarla
             let card = document.getElementById(game.id);
-            
             if (!card) {
-                // Si no existe, crearla
                 card = document.createElement('a');
                 card.id = game.id;
-                card.href = `/game?id=${game.id}`; // Link para ver el historial
-                card.className = "block bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition opacity-80 hover:opacity-100";
+                card.href = `/game?id=${game.id}`;
+                card.className = "block bg-white shadow rounded-lg p-4 hover:bg-gray-50 transition opacity-75 hover:opacity-100";
                 finishedContainer.appendChild(card);
             }
 
-            // (Re)Renderizar el contenido interno
+            const sets1 = data.team1_sets_won || 0;
+            const sets2 = data.team2_sets_won || 0;
             const winnerName = (data.winner_id === data.team1_id) ? data.team1_name : data.team2_name;
-            
+
             card.innerHTML = `
-                <div class="flex justify-between items-center text-gray-600">
-                    <span class="text-lg font-semibold">${data.team1_name}</span>
-                    <span class="text-lg font-semibold">${data.team2_name}</span>
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs text-gray-400 font-bold uppercase">${data.category_name || 'General'}</span>
+                    <span class="text-xs text-green-600 font-bold">FINALIZADO</span>
                 </div>
-                
-                <div class="flex justify-between items-center my-2">
-                    <span class="text-3xl font-bold text-gray-700">
-                        ${data.current_team1_score}
-                    </span>
-                    <span class="text-3xl font-bold text-gray-700">
-                        ${data.current_team2_score}
-                    </span>
-                </div>
-                
-                <div class="text-center text-sm font-medium text-green-700 border-t pt-2 mt-2">
-                    Ganador: <strong>${winnerName}</strong>
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <img src="${getFlag(data.team1_flag)}" class="w-6 h-6 rounded-full object-cover grayscale" alt="">
+                        <span class="font-medium ${data.winner_id === data.team1_id ? 'text-black font-bold' : 'text-gray-500'}">${data.team1_name}</span>
+                    </div>
+                    <div class="font-mono font-bold text-lg">${sets1} - ${sets2}</div>
+                    <div class="flex items-center gap-2 justify-end">
+                        <span class="font-medium ${data.winner_id === data.team2_id ? 'text-black font-bold' : 'text-gray-500'}">${data.team2_name}</span>
+                        <img src="${getFlag(data.team2_flag)}" class="w-6 h-6 rounded-full object-cover grayscale" alt="">
+                    </div>
                 </div>
             `;
         }
 
+        // Listeners (Idénticos a la v0.2)
+        db.collection("games").where("status", "!=", "finished").orderBy("status", "desc").orderBy("created_at", "desc")
+          .onSnapshot((snap) => {
+              liveLoading.style.display = 'none'; upcomingLoading.style.display = 'none';
+              if(snap.empty) { liveContainer.innerHTML = ''; upcomingContainer.innerHTML = ''; return; }
+              
+              // Limpiar para reordenar (simple)
+              liveContainer.innerHTML = ''; upcomingContainer.innerHTML = '';
+              snap.forEach(doc => renderGameCard(doc));
+          });
 
-        // --- Listener 1: Partidos "En Vivo" y "Próximos" ---
-        // (Este bloque de código ya lo tienes. No lo modifiques)
-        db.collection("games")
-          .where("status", "!=", "finished")
-          .orderBy("status", "desc") // 'upcoming' (u) viene antes que 'live' (l) alfabéticamente
-          .orderBy("created_at", "desc")
-          .onSnapshot(
-            (querySnapshot) => {
-                // Snapshot se dispara CADA VEZ que algo cambia
-                
-                // Ocultar "cargando..."
-                liveLoading.style.display = 'none';
-                upcomingLoading.style.display = 'none';
-                if (querySnapshot.empty) {
-                    liveContainer.innerHTML = '<p class="text-gray-500">No hay partidos en vivo.</p>';
-                    upcomingContainer.innerHTML = '<p class="text-gray-500">No hay partidos próximos.</p>';
-                    return;
-                }
-                
-                // Limpiar contenedores (una forma simple de manejar cambios)
-                // Una app más compleja buscaría qué cambió
-                liveContainer.innerHTML = '';
-                upcomingContainer.innerHTML = '';
-
-                querySnapshot.forEach((doc) => {
-                    renderGameCard(doc); // Renderiza la tarjeta finalizada
-                });
-            },
-            (error) => {
-                console.error("Error al escuchar partidos finalizados: ", error);
-                liveLoading.innerText = 'Error al cargar partidos.';
-                upcomingLoading.innerText = 'Error al cargar partidos.';
-            }
-          );
-        
-        // Escuchamos por separado los partidos finalizados
-        db.collection("games")
-          .where("status", "==", "finished")
-          .orderBy("created_at", "desc") // Mostrar los más recientes primero
-          .limit(10) // Traer solo los últimos 10 (buena práctica)
-          .onSnapshot(
-            (querySnapshot) => {
-                finishedLoading.style.display = 'none';
-
-                if (querySnapshot.empty) {
-                    finishedContainer.innerHTML = '<p class="text-gray-500">Aún no hay partidos finalizados.</p>';
-                    return;
-                }
-                
-                finishedContainer.innerHTML = ''; // Limpiar por si acaso
-
-                querySnapshot.forEach((doc) => {
-                    renderFinishedCard(doc); // Renderiza la tarjeta finalizada
-                });
-            },
-            (error) => {
-                console.error("Error al escuchar partidos finalizados: ", error);
-                // ¡IMPORTANTE! Esto seguro te pida un nuevo índice.
-                // Revisa la consola del navegador (F12) por el link para crearlo.
-                finishedLoading.innerText = 'Error al cargar partidos. (Posible índice faltante)';
-            }
-          );
-
+        db.collection("games").where("status", "==", "finished").orderBy("created_at", "desc").limit(10)
+          .onSnapshot((snap) => {
+              finishedLoading.style.display = 'none';
+              if(snap.empty) { finishedContainer.innerHTML = ''; return; }
+              finishedContainer.innerHTML = '';
+              snap.forEach(doc => renderFinishedCard(doc));
+          });
     </script>
 </body>
 </html>
