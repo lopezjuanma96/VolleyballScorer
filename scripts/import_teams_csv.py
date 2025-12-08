@@ -45,7 +45,7 @@ def import_data():
         # Limpieza de datos (strip quita espacios en blanco extra)
         cat_id = str(row['Categoria']).strip()
         team_name = str(row['Nombre del Equipo']).strip()
-        flag_url = str(row['Bandera']).strip()
+        flag_url = str(row['Bandera']).strip() if not pd.isna(row['Bandera']) else None
 
         # 1. Gestión de Categoría
         if cat_id in existing_cats:
@@ -72,11 +72,13 @@ def import_data():
             continue
 
         # Crear equipo
-        teams_ref.add({
+        team_object = {
             'name': team_name,
-            'flag': flag_url,
             'category_id': cat_id
-        })
+        }
+        if flag_url:
+            team_object['flag'] = flag_url
+        teams_ref.add(team_object)
         print(f"✅ Cargado: {team_name}")
         count_created += 1
 
