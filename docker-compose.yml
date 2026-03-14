@@ -5,15 +5,21 @@ services:
     build:
       context: backend
     container_name: volleyball_scorer_app
-    # environment:
-    # volumes:
-      # - db_backup:db_backup
+    environment:
+      - PSQL_HOST=db
+      - PSQL_PORT=${PSQL_PORT}
+      - PSQL_DATABASE=${PSQL_DATABASE}
+      - PSQL_USER=${PSQL_USER}
+      - PSQL_PASSWORD=${PSQL_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
 
   nginx:
     image: nginx:alpine
     container_name: volleyball_scorer_nginx
     ports:
-      - "80:80"
+      - 80:80
     volumes:
       # Option A: replace the entire nginx.conf (requires events {} and http {} wrappers in the file)
       # - ./nginx/nginx.conf:/etc/nginx/nginx.conf
@@ -25,7 +31,7 @@ services:
 
   ngrok:
     image: ngrok/ngrok
-    container_name: volleyball_score_ngrok
+    container_name: volleyball_scorer_ngrok
     volumes:
       - ./ngrok/ngrok.yml:/etc/ngrok/ngrok.yml
     ports:
@@ -35,3 +41,25 @@ services:
     command: "start --all --config /etc/ngrok/ngrok.yml"
     depends_on:
       - nginx
+
+  db:
+    image: postgres
+    container_name: volleyball_scorer_db
+    volumes:
+      - ./db/db_data/:/var/lib/postgresql/
+      - ./db/db_init/psql/:/docker-entrypoint-initdb.d/ # from what I understand I can use this to run init commands like creating the read/write users.
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_DB=${PSQL_DATABASE}
+      - POSTGRES_USER=${PSQL_ADMIN_USER}
+      - POSTGRES_PASSWORD=${PSQL_ADMIN_PASSWORD}
+      - POSTGRES_NEW_USER=${PSQL_USER}
+      - POSTGRES_NEW_PASSWORD=${PSQL_PASSWORD}
+    healthcheck: # found this in one example
+      test: [ "CMD", "pg_isready", "-U", "${PSQL_ADMIN_USER}", "-d", "${PSQL_DATABASE}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+

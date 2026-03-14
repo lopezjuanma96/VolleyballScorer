@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Partido</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
+        <a href="/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
+        <h1 class="text-lg font-bold tracking-wide">Detalle del partido</h1>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4" id="content">
+        <!-- populated by JS -->
+    </main>
+
+    <script>
+        // --- Hardcoded data (same as lobby — TODO: fetch from API) ---
+
+        const clubs = [
+            { id: 1, name: 'Club Atlético' },
+            { id: 2, name: 'Club Norte' },
+            { id: 3, name: 'Club Sur' },
+            { id: 4, name: 'Club Centro' },
+        ]
+
+        const teams = [
+            { id: 1, clubId: 1, categoryId: 1 },
+            { id: 2, clubId: 2, categoryId: 1 },
+            { id: 3, clubId: 3, categoryId: 1 },
+            { id: 4, clubId: 4, categoryId: 1 },
+            { id: 5, clubId: 1, categoryId: 2 },
+            { id: 6, clubId: 2, categoryId: 2 },
+            { id: 7, clubId: 3, categoryId: 3 },
+            { id: 8, clubId: 4, categoryId: 3 },
+        ]
+
+        const matches = [
+            {
+                id: 1, teamHomeId: 1, teamAwayId: 2, categoryId: 1,
+                court: 'court1', scheduledAt: '2026-03-14T10:00',
+                status: 'finished_home',
+                sets: [
+                    {
+                        id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 20,
+                        points: [
+                            { id: 1, scoreHome: 0, scoreAway: 1, homeScored: false },
+                            { id: 2, scoreHome: 1, scoreAway: 1, homeScored: true },
+                            { id: 3, scoreHome: 2, scoreAway: 1, homeScored: true },
+                            { id: 4, scoreHome: 2, scoreAway: 2, homeScored: false },
+                            { id: 5, scoreHome: 25, scoreAway: 20, homeScored: true },
+                        ]
+                    },
+                    {
+                        id: 2, setNumber: 2, status: 'finished_home', scoreHome: 25, scoreAway: 18,
+                        points: [
+                            { id: 6, scoreHome: 1, scoreAway: 0, homeScored: true },
+                            { id: 7, scoreHome: 25, scoreAway: 18, homeScored: true },
+                        ]
+                    },
+                ]
+            },
+            {
+                id: 2, teamHomeId: 3, teamAwayId: 4, categoryId: 1,
+                court: 'court2', scheduledAt: '2026-03-14T10:00',
+                status: 'in_progress',
+                sets: [
+                    {
+                        id: 3, setNumber: 1, status: 'finished_away', scoreHome: 22, scoreAway: 25,
+                        points: [
+                            { id: 8, scoreHome: 0, scoreAway: 1, homeScored: false },
+                            { id: 9, scoreHome: 22, scoreAway: 25, homeScored: false },
+                        ]
+                    },
+                    {
+                        id: 4, setNumber: 2, status: 'in_progress', scoreHome: 14, scoreAway: 11,
+                        points: [
+                            { id: 10, scoreHome: 1, scoreAway: 0, homeScored: true },
+                            { id: 11, scoreHome: 1, scoreAway: 1, homeScored: false },
+                            { id: 12, scoreHome: 14, scoreAway: 11, homeScored: true },
+                        ]
+                    },
+                ]
+            },
+            {
+                id: 3, teamHomeId: 5, teamAwayId: 6, categoryId: 2,
+                court: 'court1', scheduledAt: '2026-03-14T12:00',
+                status: 'upcoming', sets: []
+            },
+            {
+                id: 4, teamHomeId: 7, teamAwayId: 8, categoryId: 3,
+                court: 'court2', scheduledAt: '2026-03-14T12:00',
+                status: 'upcoming', sets: []
+            },
+        ]
+
+        // --- Helpers ---
+
+        function getTeam(id) { return teams.find(t => t.id === id) }
+        function getClub(id) { return clubs.find(c => c.id === id) }
+        function teamName(teamId) { return getClub(getTeam(teamId).clubId).name }
+
+        function setsWon(match, side) {
+            return match.sets.filter(s => s.status === `finished_${side}`).length
+        }
+
+        function courtLabel(court) {
+            return court === 'court1' ? 'Cancha 1' : 'Cancha 2'
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+        }
+
+        function setTabLabel(set) {
+            if (set.status === 'in_progress') return `Set ${set.setNumber} ●`
+            if (set.status === 'cancelled') return `Set ${set.setNumber} ✕`
+            return `Set ${set.setNumber}`
+        }
+
+        function setTabClass(set, active) {
+            const base = 'px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors'
+            if (active) return `${base} bg-surface text-brand`
+            if (set.status === 'in_progress') return `${base} bg-green-100 text-green-700`
+            if (set.status === 'cancelled') return `${base} bg-red-100 text-red-500`
+            return `${base} bg-gray-100 text-gray-600`
+        }
+
+        // --- Render ---
+
+        let activeSetId = null
+
+        function renderSetPoints(set, homeLabel, awayLabel) {
+            if (!set.points || set.points.length === 0) {
+                return '<p class="text-gray-400 text-sm text-center py-4">Sin puntos registrados.</p>'
+            }
+            const rows = set.points.map(p => {
+                const highlightHome = p.homeScored ? 'font-bold text-gray-900' : 'text-gray-500'
+                const highlightAway = !p.homeScored ? 'font-bold text-gray-900' : 'text-gray-500'
+                return `
+                    <tr class="border-t border-gray-100">
+                        <td class="py-1.5 px-3 text-sm ${highlightHome}">${p.scoreHome}</td>
+                        <td class="py-1.5 px-3 text-sm text-center text-gray-300">–</td>
+                        <td class="py-1.5 px-3 text-sm ${highlightAway} text-right">${p.scoreAway}</td>
+                    </tr>
+                `
+            }).join('')
+
+            return `
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-xs text-gray-400 uppercase">
+                            <th class="py-1.5 px-3 text-left font-medium">${homeLabel}</th>
+                            <th></th>
+                            <th class="py-1.5 px-3 text-right font-medium">${awayLabel}</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `
+        }
+
+        function render(match, selectedSetId) {
+            const home = teamName(match.teamHomeId)
+            const away = teamName(match.teamAwayId)
+            const setsHome = setsWon(match, 'home')
+            const setsAway = setsWon(match, 'away')
+            const isLive = match.status === 'in_progress'
+
+            const selectedSet = match.sets.find(s => s.id === selectedSetId) ?? match.sets[match.sets.length - 1]
+
+            const setTabs = match.sets.length > 0 ? `
+                <div class="flex gap-2 overflow-x-auto">
+                    ${match.sets.map(s => `
+                        <button onclick="selectSet(${s.id})"
+                            class="${setTabClass(s, selectedSet?.id === s.id)}">
+                            ${setTabLabel(s)}
+                        </button>
+                    `).join('')}
+                </div>
+            ` : ''
+
+            const pointHistory = selectedSet ? `
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        Set ${selectedSet.setNumber} — Historial de puntos
+                    </h3>
+                    ${renderSetPoints(selectedSet, home, away)}
+                </div>
+            ` : ''
+
+            document.getElementById('content').innerHTML = `
+                <!-- Match header -->
+                <div class="bg-white rounded-xl shadow p-4">
+                    <div class="text-xs text-gray-400 mb-3">${courtLabel(match.court)} · ${formatTime(match.scheduledAt)}</div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-bold text-gray-800 flex-1 text-lg">${home}</span>
+                        <div class="text-center min-w-[5rem]">
+                            ${match.status !== 'upcoming' ? `<div class="text-3xl font-bold text-gray-900">${setsHome} – ${setsAway}</div>` : '<div class="text-gray-400 text-sm">vs</div>'}
+                            ${isLive ? '<div class="text-xs text-green-600 font-semibold mt-1">● En vivo</div>' : ''}
+                        </div>
+                        <span class="font-bold text-gray-800 flex-1 text-lg text-right">${away}</span>
+                    </div>
+                </div>
+
+                <!-- Set tabs -->
+                ${match.sets.length > 0 ? `<div class="bg-white rounded-xl shadow p-4 space-y-3">
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Sets</h3>
+                    ${setTabs}
+                </div>` : ''}
+
+                <!-- Point history -->
+                ${pointHistory}
+            `
+        }
+
+        function selectSet(setId) {
+            activeSetId = setId
+            const id = parseInt(new URLSearchParams(window.location.search).get('id'))
+            const match = matches.find(m => m.id === id)
+            render(match, setId)
+        }
+
+        // Boot
+        const params = new URLSearchParams(window.location.search)
+        const matchId = parseInt(params.get('id'))
+        const match = matches.find(m => m.id === matchId)
+
+        if (!match) {
+            document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm">Partido no encontrado.</p>'
+        } else {
+            const defaultSet = match.sets.find(s => s.status === 'in_progress') ?? match.sets[match.sets.length - 1]
+            activeSetId = defaultSet?.id ?? null
+            render(match, activeSetId)
+        }
+    </script>
+</body>
+</html>

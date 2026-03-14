@@ -9,4 +9,8 @@ __pycache__
 # GCP Credentials
 serviceAccountKey.json
 
+# Environment variables
 .env
+
+# Database files
+db/db_data/*

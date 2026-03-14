@@ -1,11 +1,199 @@
-<!DOCTYPE html>                                                                                                   
-  <html lang="en">                                                                                                  
-    <head>                                                                                                          
-      <meta charset="UTF-8" />                                                                                      
-      <title>Volleyball Scorer</title>                                                                              
-      <link rel="stylesheet" href="/style.css" />                                                                   
-    </head>
-    <body class="bg-gray-100 flex items-center justify-center min-h-screen">                                        
-      <h1 class="text-4xl font-bold text-blue-600">Volleyball Scorer</h1>
-    </body>
-  </html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Torneo de Volleyball</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow">
+        <h1 class="text-xl font-bold tracking-wide">🏐 Torneo de Volleyball</h1>
+    </header>
+
+    <div class="flex gap-2 px-4 py-3 overflow-x-auto bg-white shadow-sm" id="category-tabs">
+        <!-- populated by JS -->
+    </div>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-6" id="match-list">
+        <!-- populated by JS -->
+    </main>
+
+    <script>
+        // --- Hardcoded data (mirrors the DB model) ---
+        // TODO: replace with fetch() calls to the API
+
+        const clubs = [
+            { id: 1, name: 'Club Atlético' },
+            { id: 2, name: 'Club Norte' },
+            { id: 3, name: 'Club Sur' },
+            { id: 4, name: 'Club Centro' },
+        ]
+
+        const categories = [
+            { id: 1, name: 'Masculino A' },
+            { id: 2, name: 'Femenino A' },
+            { id: 3, name: 'Mixto B' },
+        ]
+
+        const teams = [
+            { id: 1, clubId: 1, categoryId: 1 },
+            { id: 2, clubId: 2, categoryId: 1 },
+            { id: 3, clubId: 3, categoryId: 1 },
+            { id: 4, clubId: 4, categoryId: 1 },
+            { id: 5, clubId: 1, categoryId: 2 },
+            { id: 6, clubId: 2, categoryId: 2 },
+            { id: 7, clubId: 3, categoryId: 3 },
+            { id: 8, clubId: 4, categoryId: 3 },
+        ]
+
+        const matches = [
+            {
+                id: 1, teamHomeId: 1, teamAwayId: 2, categoryId: 1,
+                court: 'court1', scheduledAt: '2026-03-14T10:00',
+                status: 'finished_home',
+                sets: [
+                    { id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 20 },
+                    { id: 2, setNumber: 2, status: 'finished_home', scoreHome: 25, scoreAway: 18 },
+                ]
+            },
+            {
+                id: 2, teamHomeId: 3, teamAwayId: 4, categoryId: 1,
+                court: 'court2', scheduledAt: '2026-03-14T10:00',
+                status: 'in_progress',
+                sets: [
+                    { id: 3, setNumber: 1, status: 'finished_away', scoreHome: 22, scoreAway: 25 },
+                    { id: 4, setNumber: 2, status: 'in_progress', scoreHome: 14, scoreAway: 11 },
+                ]
+            },
+            {
+                id: 3, teamHomeId: 5, teamAwayId: 6, categoryId: 2,
+                court: 'court1', scheduledAt: '2026-03-14T12:00',
+                status: 'upcoming',
+                sets: []
+            },
+            {
+                id: 4, teamHomeId: 7, teamAwayId: 8, categoryId: 3,
+                court: 'court2', scheduledAt: '2026-03-14T12:00',
+                status: 'upcoming',
+                sets: []
+            },
+        ]
+
+        // --- Helpers ---
+
+        function getTeam(id) { return teams.find(t => t.id === id) }
+        function getClub(id) { return clubs.find(c => c.id === id) }
+        function teamName(teamId) { return getClub(getTeam(teamId).clubId).name }
+
+        function setsWon(match, side) {
+            return match.sets.filter(s => s.status === `finished_${side}`).length
+        }
+
+        function currentSetScore(match) {
+            const active = match.sets.find(s => s.status === 'in_progress')
+            return active ? `${active.scoreHome} – ${active.scoreAway}` : null
+        }
+
+        function courtLabel(court) {
+            return court === 'court1' ? 'Cancha 1' : 'Cancha 2'
+        }
+
+        function statusBadge(status) {
+            switch (status) {
+                case 'in_progress':   return '<span class="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">● En vivo</span>'
+                case 'upcoming':      return '<span class="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">Próximo</span>'
+                case 'finished_home':
+                case 'finished_away': return '<span class="text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">Finalizado</span>'
+                case 'cancelled':     return '<span class="text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">Cancelado</span>'
+            }
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+        }
+
+        // --- Render ---
+
+        function renderMatch(match) {
+            const home = teamName(match.teamHomeId)
+            const away = teamName(match.teamAwayId)
+            const setsHome = setsWon(match, 'home')
+            const setsAway = setsWon(match, 'away')
+            const liveScore = currentSetScore(match)
+            const isLive = match.status === 'in_progress'
+            const isDone = match.status.startsWith('finished') || match.status === 'cancelled'
+
+            return `
+                <a href="/game.html?id=${match.id}" class="block bg-white rounded-xl shadow p-4 ${isLive ? 'ring-2 ring-green-400' : ''} hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-gray-400">${courtLabel(match.court)} · ${formatTime(match.scheduledAt)}</span>
+                        ${statusBadge(match.status)}
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-semibold text-gray-800 flex-1">${home}</span>
+                        <div class="text-center min-w-[4rem]">
+                            ${(isLive || isDone) ? `<div class="text-2xl font-bold text-gray-900">${setsHome} – ${setsAway}</div>` : ''}
+                            ${isLive && liveScore ? `<div class="text-xs text-gray-400 mt-0.5">${liveScore}</div>` : ''}
+                            ${match.status === 'upcoming' ? `<div class="text-sm text-gray-400">vs</div>` : ''}
+                        </div>
+                        <span class="font-semibold text-gray-800 flex-1 text-right">${away}</span>
+                    </div>
+                </a>
+            `
+        }
+
+        function render(filterCategoryId = null) {
+            const filtered = filterCategoryId
+                ? matches.filter(m => m.categoryId === filterCategoryId)
+                : matches
+
+            const sections = [
+                { label: 'En vivo',    filter: m => m.status === 'in_progress' },
+                { label: 'Próximos',   filter: m => m.status === 'upcoming' },
+                { label: 'Finalizados', filter: m => m.status.startsWith('finished') || m.status === 'cancelled' },
+            ]
+
+            const html = sections.map(section => {
+                const sectionMatches = filtered.filter(section.filter)
+                if (sectionMatches.length === 0) return ''
+                return `
+                    <section>
+                        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">${section.label}</h2>
+                        <div class="space-y-3">${sectionMatches.map(renderMatch).join('')}</div>
+                    </section>
+                `
+            }).join('')
+
+            document.getElementById('match-list').innerHTML = html || '<p class="text-gray-400 text-sm">No hay partidos.</p>'
+        }
+
+        function renderTabs(activeCategoryId) {
+            const all = [{ id: null, name: 'Todos' }, ...categories]
+            document.getElementById('category-tabs').innerHTML = all.map(cat => {
+                const active = cat.id === activeCategoryId
+                return `
+                    <button
+                        onclick="selectCategory(${cat.id})"
+                        class="whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+                               ${active ? 'bg-surface text-brand' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                        ${cat.name}
+                    </button>
+                `
+            }).join('')
+        }
+
+        let activeCategory = null
+
+        function selectCategory(id) {
+            activeCategory = id
+            renderTabs(id)
+            render(id)
+        }
+
+        renderTabs(null)
+        render(null)
+    </script>
+</body>
+</html>
