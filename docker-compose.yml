@@ -5,8 +5,7 @@ services:
     build:
       context: backend
     container_name: volleyball_scorer_app
-    environment:
-      - APP_PORT=${APP_PORT}
+    # environment:
     # volumes:
       # - db_backup:db_backup
 
@@ -20,8 +19,7 @@ services:
       # - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       # Option B: only override the server block, letting the default nginx.conf handle the http {} wrapper
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-    environment:
-      - APP_ADDR=app:${APP_PORT}
+    # environment:
     depends_on:
       - app
 
