@@ -24,3 +24,16 @@ services:
       - APP_ADDR=app:${APP_PORT}
     depends_on:
       - app
+
+  ngrok:
+    image: ngrok/ngrok
+    container_name: volleyball_score_ngrok
+    volumes:
+      - ./ngrok/ngrok.yml:/etc/ngrok/ngrok.yml
+    ports:
+      - 4040:4040
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} 
+    command: "start --all --config /etc/ngrok/ngrok.yml"
+    depends_on:
+      - nginx
