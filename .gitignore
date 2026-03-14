@@ -8,3 +8,5 @@ __pycache__
 
 # GCP Credentials
 serviceAccountKey.json
+
+.env

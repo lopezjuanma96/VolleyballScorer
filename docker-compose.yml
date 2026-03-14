@@ -5,8 +5,22 @@ services:
     build:
       context: backend
     container_name: volleyball_scorer_app
-    # environment: ADD ENV VARS HERE
-    ports:
-      - "3000:3000"
+    environment:
+      - APP_PORT=${APP_PORT}
     # volumes:
       # - db_backup:db_backup
+
+  nginx:
+    image: nginx:alpine
+    container_name: volleyball_scorer_nginx
+    ports:
+      - "80:80"
+    volumes:
+      # Option A: replace the entire nginx.conf (requires events {} and http {} wrappers in the file)
+      # - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      # Option B: only override the server block, letting the default nginx.conf handle the http {} wrapper
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    environment:
+      - APP_ADDR=app:${APP_PORT}
+    depends_on:
+      - app

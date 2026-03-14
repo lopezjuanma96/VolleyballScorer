@@ -25,7 +25,7 @@ Amateur volleyball tournament fixture and real-time scoring web app, built step 
 |------|------|--------|
 | 1 | Bun + Hono server with a Tailwind welcome page | ✓ |
 | 2 | Dockerize, add to Compose, test locally with port forwarding | ✓ |
-| 3 | Add nginx reverse proxy layer, test locally | - |
+| 3 | Add nginx reverse proxy layer, test locally | ✓ |
 | 4 | Add ngrok layer, go public, add HTTP basic auth, verify TLS | - |
 | 4.5 | Environment config: `.env`, Docker secrets, no hardcoded credentials | - |
 | 5 | PostgreSQL + Drizzle ORM, Redis (optional) | - |
