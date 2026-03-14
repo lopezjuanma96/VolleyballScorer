@@ -1,0 +1,12 @@
+# volumes:
+
+services:
+  app:
+    build:
+      context: backend
+    container_name: volleyball_scorer_app
+    # environment: ADD ENV VARS HERE
+    ports:
+      - "3000:3000"
+    # volumes:
+      # - db_backup:db_backup
