@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manager — Crear Partido</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
+        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
+        <h1 class="text-lg font-bold tracking-wide">Nuevo partido</h1>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto">
+        <div class="bg-white rounded-xl shadow p-4 space-y-4">
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select id="category"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">Seleccionar categoría...</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Equipo local</label>
+                <select id="team-home"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">Seleccionar categoría primero...</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Equipo visitante</label>
+                <select id="team-away"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">Seleccionar categoría primero...</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cancha</label>
+                <select id="court"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="court1">Cancha 1</option>
+                    <option value="court2">Cancha 2</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha y hora</label>
+                <input type="datetime-local" id="scheduled-at"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+
+            <p id="form-error" class="text-red-500 text-sm hidden"></p>
+
+            <button onclick="submitForm()"
+                class="w-full bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
+                Crear partido
+            </button>
+        </div>
+    </main>
+
+    <script>
+        let allTeams = []
+
+        async function checkAuth() {
+            const res = await fetch('/api/auth/me')
+            if (!res.ok) window.location.href = '/login.html'
+        }
+
+        async function loadData() {
+            const [catsRes, teamsRes] = await Promise.all([
+                fetch('/api/categories'),
+                fetch('/api/teams'),
+            ])
+            const categories = await catsRes.json()
+            allTeams = await teamsRes.json()
+
+            document.getElementById('category').innerHTML =
+                '<option value="">Seleccionar categoría...</option>' +
+                categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+        }
+
+        document.getElementById('category').addEventListener('change', function () {
+            const catId = Number(this.value)
+            const filtered = catId ? allTeams.filter(t => t.categoryId === catId) : []
+            const options = filtered.length > 0
+                ? filtered.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+                : '<option value="">Sin equipos en esta categoría</option>'
+
+            document.getElementById('team-home').innerHTML = options
+            document.getElementById('team-away').innerHTML = options
+        })
+
+        async function submitForm() {
+            const categoryId = Number(document.getElementById('category').value)
+            const teamHomeId = Number(document.getElementById('team-home').value)
+            const teamAwayId = Number(document.getElementById('team-away').value)
+            const court = document.getElementById('court').value
+            const scheduledAt = document.getElementById('scheduled-at').value
+            const errorEl = document.getElementById('form-error')
+
+            if (!categoryId || !teamHomeId || !teamAwayId || !court || !scheduledAt) {
+                errorEl.textContent = 'Completar todos los campos.'
+                errorEl.classList.remove('hidden')
+                return
+            }
+
+            if (teamHomeId === teamAwayId) {
+                errorEl.textContent = 'El equipo local y visitante deben ser distintos.'
+                errorEl.classList.remove('hidden')
+                return
+            }
+
+            const res = await fetch('/api/matches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamHomeId, teamAwayId, categoryId, court, scheduledAt }),
+            })
+
+            if (res.ok) {
+                window.location.href = '/manager/'
+            } else {
+                errorEl.textContent = 'Error al crear el partido.'
+                errorEl.classList.remove('hidden')
+            }
+        }
+
+        checkAuth().then(loadData)
+    </script>
+</body>
+</html>

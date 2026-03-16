@@ -14,101 +14,15 @@
     </header>
 
     <main class="px-4 py-4 max-w-2xl mx-auto space-y-4" id="content">
-        <!-- populated by JS -->
+        <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
     </main>
 
     <script>
-        // --- Hardcoded data (same as lobby — TODO: fetch from API) ---
-
-        const clubs = [
-            { id: 1, name: 'Club Atlético' },
-            { id: 2, name: 'Club Norte' },
-            { id: 3, name: 'Club Sur' },
-            { id: 4, name: 'Club Centro' },
-        ]
-
-        const teams = [
-            { id: 1, clubId: 1, categoryId: 1 },
-            { id: 2, clubId: 2, categoryId: 1 },
-            { id: 3, clubId: 3, categoryId: 1 },
-            { id: 4, clubId: 4, categoryId: 1 },
-            { id: 5, clubId: 1, categoryId: 2 },
-            { id: 6, clubId: 2, categoryId: 2 },
-            { id: 7, clubId: 3, categoryId: 3 },
-            { id: 8, clubId: 4, categoryId: 3 },
-        ]
-
-        const matches = [
-            {
-                id: 1, teamHomeId: 1, teamAwayId: 2, categoryId: 1,
-                court: 'court1', scheduledAt: '2026-03-14T10:00',
-                status: 'finished_home',
-                sets: [
-                    {
-                        id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 20,
-                        points: [
-                            { id: 1, scoreHome: 0, scoreAway: 1, homeScored: false },
-                            { id: 2, scoreHome: 1, scoreAway: 1, homeScored: true },
-                            { id: 3, scoreHome: 2, scoreAway: 1, homeScored: true },
-                            { id: 4, scoreHome: 2, scoreAway: 2, homeScored: false },
-                            { id: 5, scoreHome: 25, scoreAway: 20, homeScored: true },
-                        ]
-                    },
-                    {
-                        id: 2, setNumber: 2, status: 'finished_home', scoreHome: 25, scoreAway: 18,
-                        points: [
-                            { id: 6, scoreHome: 1, scoreAway: 0, homeScored: true },
-                            { id: 7, scoreHome: 25, scoreAway: 18, homeScored: true },
-                        ]
-                    },
-                ]
-            },
-            {
-                id: 2, teamHomeId: 3, teamAwayId: 4, categoryId: 1,
-                court: 'court2', scheduledAt: '2026-03-14T10:00',
-                status: 'in_progress',
-                sets: [
-                    {
-                        id: 3, setNumber: 1, status: 'finished_away', scoreHome: 22, scoreAway: 25,
-                        points: [
-                            { id: 8, scoreHome: 0, scoreAway: 1, homeScored: false },
-                            { id: 9, scoreHome: 22, scoreAway: 25, homeScored: false },
-                        ]
-                    },
-                    {
-                        id: 4, setNumber: 2, status: 'in_progress', scoreHome: 14, scoreAway: 11,
-                        points: [
-                            { id: 10, scoreHome: 1, scoreAway: 0, homeScored: true },
-                            { id: 11, scoreHome: 1, scoreAway: 1, homeScored: false },
-                            { id: 12, scoreHome: 14, scoreAway: 11, homeScored: true },
-                        ]
-                    },
-                ]
-            },
-            {
-                id: 3, teamHomeId: 5, teamAwayId: 6, categoryId: 2,
-                court: 'court1', scheduledAt: '2026-03-14T12:00',
-                status: 'upcoming', sets: []
-            },
-            {
-                id: 4, teamHomeId: 7, teamAwayId: 8, categoryId: 3,
-                court: 'court2', scheduledAt: '2026-03-14T12:00',
-                status: 'upcoming', sets: []
-            },
-        ]
-
         // --- Helpers ---
 
-        function getTeam(id) { return teams.find(t => t.id === id) }
-        function getClub(id) { return clubs.find(c => c.id === id) }
-        function teamName(teamId) { return getClub(getTeam(teamId).clubId).name }
-
-        function setsWon(match, side) {
-            return match.sets.filter(s => s.status === `finished_${side}`).length
-        }
-
         function courtLabel(court) {
-            return court === 'court1' ? 'Cancha 1' : 'Cancha 2'
+            const labels = { court1: 'Cancha 1', court2: 'Cancha 2' }
+            return labels[court] ?? court
         }
 
         function formatTime(iso) {
@@ -129,9 +43,14 @@
             return `${base} bg-gray-100 text-gray-600`
         }
 
+        function setsWon(match, side) {
+            return match.sets.filter(s => s.status === `finished_${side}`).length
+        }
+
         // --- Render ---
 
         let activeSetId = null
+        let currentMatch = null
 
         function renderSetPoints(set, homeLabel, awayLabel) {
             if (!set.points || set.points.length === 0) {
@@ -163,9 +82,16 @@
             `
         }
 
+        function teamDisplay(team) {
+            const logo = team.clubLogo
+                ? `<img src="${team.clubLogo}" class="inline-block w-6 h-6 object-contain rounded-sm mr-1 align-middle" />`
+                : ''
+            return `${logo}${team.name}`
+        }
+
         function render(match, selectedSetId) {
-            const home = teamName(match.teamHomeId)
-            const away = teamName(match.teamAwayId)
+            const home = teamDisplay(match.teamHome)
+            const away = teamDisplay(match.teamAway)
             const setsHome = setsWon(match, 'home')
             const setsAway = setsWon(match, 'away')
             const isLive = match.status === 'in_progress'
@@ -219,23 +145,28 @@
 
         function selectSet(setId) {
             activeSetId = setId
-            const id = parseInt(new URLSearchParams(window.location.search).get('id'))
-            const match = matches.find(m => m.id === id)
-            render(match, setId)
+            render(currentMatch, setId)
         }
 
-        // Boot
-        const params = new URLSearchParams(window.location.search)
-        const matchId = parseInt(params.get('id'))
-        const match = matches.find(m => m.id === matchId)
+        async function init() {
+            try {
+                const params = new URLSearchParams(window.location.search)
+                const matchId = params.get('id')
+                if (!matchId) throw new Error('no-id')
 
-        if (!match) {
-            document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm">Partido no encontrado.</p>'
-        } else {
-            const defaultSet = match.sets.find(s => s.status === 'in_progress') ?? match.sets[match.sets.length - 1]
-            activeSetId = defaultSet?.id ?? null
-            render(match, activeSetId)
+                const res = await fetch(`/api/matches/${matchId}`)
+                if (!res.ok) throw new Error('not-found')
+
+                currentMatch = await res.json()
+                const defaultSet = currentMatch.sets.find(s => s.status === 'in_progress') ?? currentMatch.sets[currentMatch.sets.length - 1]
+                activeSetId = defaultSet?.id ?? null
+                render(currentMatch, activeSetId)
+            } catch {
+                document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm text-center py-8">Partido no encontrado.</p>'
+            }
         }
+
+        init()
     </script>
 </body>
 </html>

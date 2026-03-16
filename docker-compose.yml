@@ -11,6 +11,10 @@ services:
       - PSQL_DATABASE=${PSQL_DATABASE}
       - PSQL_USER=${PSQL_USER}
       - PSQL_PASSWORD=${PSQL_PASSWORD}
+      - MANAGER_USER=${MANAGER_USER}
+      - MANAGER_PASSWORD=${MANAGER_PASSWORD}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - COOKIE_SECURE=${COOKIE_SECURE}
     depends_on:
       db:
         condition: service_healthy

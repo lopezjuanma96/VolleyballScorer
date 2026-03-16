@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manager — Marcador</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
+        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
+        <h1 class="text-lg font-bold tracking-wide">Marcador</h1>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4" id="content">
+        <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
+    </main>
+
+    <script>
+        let currentMatch = null
+        const matchId = new URLSearchParams(window.location.search).get('id')
+
+        async function checkAuth() {
+            const res = await fetch('/api/auth/me')
+            if (!res.ok) window.location.href = '/login.html'
+        }
+
+        async function loadMatch() {
+            const res = await fetch(`/api/matches/${matchId}`)
+            if (!res.ok) {
+                document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm">Partido no encontrado.</p>'
+                return
+            }
+            currentMatch = await res.json()
+            render()
+        }
+
+        function courtLabel(court) {
+            const labels = { court1: 'Cancha 1', court2: 'Cancha 2' }
+            return labels[court] ?? court
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+        }
+
+        function setsWon(side) {
+            return currentMatch.sets.filter(s => s.status === `finished_${side}`).length
+        }
+
+        function activeSet() {
+            return currentMatch.sets.find(s => s.status === 'in_progress') ?? null
+        }
+
+        function render() {
+            const m = currentMatch
+            const home = m.teamHome.name
+            const away = m.teamAway.name
+            const setsHome = setsWon('home')
+            const setsAway = setsWon('away')
+            const active = activeSet()
+
+            const currentScore = active
+                ? `${active.scoreHome} – ${active.scoreAway}`
+                : '–'
+
+            const isLive = m.status === 'in_progress'
+
+            // Set tabs
+            const setTabs = m.sets.map(s => {
+                let label = `Set ${s.setNumber}`
+                let cls = 'px-3 py-1.5 rounded-full text-sm font-medium'
+                if (s.status === 'in_progress') { label += ' ●'; cls += ' bg-green-100 text-green-700' }
+                else if (s.status === 'cancelled') { label += ' ✕'; cls += ' bg-red-100 text-red-500' }
+                else { cls += ' bg-gray-100 text-gray-600' }
+                return `<span class="${cls}">${label}</span>`
+            }).join('')
+
+            // Scoring controls (only if match is in progress and has active set)
+            const scoringControls = (isLive && active) ? `
+                <div class="bg-white rounded-xl shadow p-4 space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                        Set ${active.setNumber} — Marcador en vivo
+                    </h3>
+                    <div class="text-4xl font-bold text-center text-gray-900">${currentScore}</div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="addPoint(true)"
+                            class="bg-blue-600 text-white font-semibold py-4 rounded-xl text-lg hover:bg-blue-700 active:scale-95 transition-all">
+                            + ${home}
+                        </button>
+                        <button onclick="addPoint(false)"
+                            class="bg-orange-500 text-white font-semibold py-4 rounded-xl text-lg hover:bg-orange-600 active:scale-95 transition-all">
+                            + ${away}
+                        </button>
+                    </div>
+                    <button onclick="undoLastPoint()"
+                        class="w-full border border-gray-300 text-gray-600 font-medium py-2 rounded-xl text-sm hover:bg-gray-50 transition-colors">
+                        ↩ Deshacer último punto
+                    </button>
+                </div>
+
+                <!-- Finish set -->
+                <div class="bg-white rounded-xl shadow p-4 space-y-3">
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Finalizar set con marcador final</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">${home}</label>
+                            <input type="number" id="final-home" min="0" value="${active.scoreHome}"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">${away}</label>
+                            <input type="number" id="final-away" min="0" value="${active.scoreAway}"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="finishSet('finished_home')"
+                            class="bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700 transition-colors">
+                            Ganó ${home}
+                        </button>
+                        <button onclick="finishSet('finished_away')"
+                            class="bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700 transition-colors">
+                            Ganó ${away}
+                        </button>
+                    </div>
+                    <button onclick="cancelSet()"
+                        class="w-full border border-red-300 text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors">
+                        Cancelar set
+                    </button>
+                </div>
+            ` : ''
+
+            // Match status controls
+            const statusOptions = ['upcoming', 'in_progress', 'finished_home', 'finished_away', 'cancelled']
+            const statusLabels = {
+                upcoming: 'Próximo',
+                in_progress: 'En vivo',
+                finished_home: `Finalizado (ganó ${home})`,
+                finished_away: `Finalizado (ganó ${away})`,
+                cancelled: 'Cancelado',
+            }
+
+            document.getElementById('content').innerHTML = `
+                <!-- Match header -->
+                <div class="bg-white rounded-xl shadow p-4">
+                    <div class="text-xs text-gray-400 mb-2">${courtLabel(m.court)} · ${formatTime(m.scheduledAt)} · ${m.categoryName}</div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-bold text-gray-800 flex-1 text-lg">${home}</span>
+                        <div class="text-center min-w-[5rem]">
+                            <div class="text-3xl font-bold text-gray-900">${setsHome} – ${setsAway}</div>
+                        </div>
+                        <span class="font-bold text-gray-800 flex-1 text-lg text-right">${away}</span>
+                    </div>
+                    ${m.sets.length > 0 ? `<div class="flex gap-2 mt-3 flex-wrap">${setTabs}</div>` : ''}
+                </div>
+
+                ${scoringControls}
+
+                <!-- Match status -->
+                <div class="bg-white rounded-xl shadow p-4 space-y-3">
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Estado del partido</h3>
+                    <div class="flex flex-wrap gap-2">
+                        ${statusOptions.map(s => `
+                            <button onclick="updateMatchStatus('${s}')"
+                                class="text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${m.status === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                ${statusLabels[s]}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Public view link -->
+                <a href="/game.html?id=${m.id}" target="_blank"
+                    class="block text-center text-sm text-blue-600 hover:underline py-2">
+                    Ver vista pública →
+                </a>
+            `
+        }
+
+        async function addPoint(homeScored) {
+            const active = activeSet()
+            if (!active) return
+            await fetch('/api/points', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ setId: active.id, homeScored }),
+            })
+            await loadMatch()
+        }
+
+        async function undoLastPoint() {
+            const active = activeSet()
+            if (!active || active.points.length === 0) {
+                alert('No hay puntos para deshacer.')
+                return
+            }
+            const lastPoint = active.points[active.points.length - 1]
+            const res = await fetch(`/api/points/${lastPoint.id}`, { method: 'DELETE' })
+            if (!res.ok) {
+                const body = await res.json()
+                alert(body.error ?? 'Error al deshacer el punto.')
+                return
+            }
+            await loadMatch()
+        }
+
+        async function finishSet(status) {
+            const active = activeSet()
+            if (!active) return
+            const scoreHome = Number(document.getElementById('final-home').value)
+            const scoreAway = Number(document.getElementById('final-away').value)
+            await fetch(`/api/sets/${active.id}/finish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scoreHome, scoreAway, status }),
+            })
+            await loadMatch()
+        }
+
+        async function cancelSet() {
+            const active = activeSet()
+            if (!active) return
+            if (!confirm('¿Cancelar el set actual?')) return
+            await fetch(`/api/sets/${active.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'cancelled' }),
+            })
+            await loadMatch()
+        }
+
+        async function updateMatchStatus(status) {
+            await fetch(`/api/matches/${matchId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status }),
+            })
+            await loadMatch()
+        }
+
+        checkAuth().then(loadMatch)
+    </script>
+</body>
+</html>

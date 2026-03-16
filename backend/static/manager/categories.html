@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manager — Categorías</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
+        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
+        <h1 class="text-lg font-bold tracking-wide">Categorías</h1>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4">
+
+        <!-- Add / Edit form -->
+        <div class="bg-white rounded-xl shadow p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider" id="form-title">Agregar categoría</h2>
+            <input type="hidden" id="edit-id" value="" />
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                <input type="text" id="category-name" placeholder="Ej: Masculino A"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div class="flex gap-2">
+                <button onclick="submitForm()"
+                    class="bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
+                    Guardar
+                </button>
+                <button onclick="resetForm()" id="cancel-btn"
+                    class="hidden text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    Cancelar
+                </button>
+            </div>
+            <p id="form-error" class="text-red-500 text-sm hidden"></p>
+        </div>
+
+        <!-- List -->
+        <div id="category-list">
+            <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
+        </div>
+    </main>
+
+    <script>
+        async function checkAuth() {
+            const res = await fetch('/api/auth/me')
+            if (!res.ok) window.location.href = '/login.html'
+        }
+
+        async function loadCategories() {
+            try {
+                const res = await fetch('/api/categories')
+                if (!res.ok) throw new Error()
+                const categories = await res.json()
+
+                if (categories.length === 0) {
+                    document.getElementById('category-list').innerHTML =
+                        '<p class="text-gray-400 text-sm text-center py-4">No hay categorías.</p>'
+                    return
+                }
+
+                document.getElementById('category-list').innerHTML = `
+                    <div class="space-y-2">
+                        ${categories.map(c => `
+                            <div class="bg-white rounded-xl shadow p-4 flex items-center gap-4">
+                                <span class="flex-1 font-medium text-gray-800">${c.name}</span>
+                                <div class="flex gap-3">
+                                    <button onclick="editCategory(${c.id}, '${c.name.replace(/'/g, "\\'")}')"
+                                        class="text-sm text-brand font-medium hover:underline">Editar</button>
+                                    <button onclick="deleteCategory(${c.id})"
+                                        class="text-sm text-red-500 hover:underline">Eliminar</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+            } catch {
+                document.getElementById('category-list').innerHTML =
+                    '<p class="text-red-500 text-sm text-center py-4">Error al cargar las categorías.</p>'
+            }
+        }
+
+        function editCategory(id, name) {
+            document.getElementById('edit-id').value = id
+            document.getElementById('category-name').value = name
+            document.getElementById('form-title').textContent = 'Editar categoría'
+            document.getElementById('cancel-btn').classList.remove('hidden')
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+
+        function resetForm() {
+            document.getElementById('edit-id').value = ''
+            document.getElementById('category-name').value = ''
+            document.getElementById('form-title').textContent = 'Agregar categoría'
+            document.getElementById('cancel-btn').classList.add('hidden')
+            document.getElementById('form-error').classList.add('hidden')
+        }
+
+        async function submitForm() {
+            const id = document.getElementById('edit-id').value
+            const name = document.getElementById('category-name').value.trim()
+            const errorEl = document.getElementById('form-error')
+
+            if (!name) {
+                errorEl.textContent = 'El nombre es obligatorio.'
+                errorEl.classList.remove('hidden')
+                return
+            }
+
+            const url = id ? `/api/categories/${id}` : '/api/categories'
+            const method = id ? 'PUT' : 'POST'
+
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                })
+                if (!res.ok) throw new Error()
+                resetForm()
+                loadCategories()
+            } catch {
+                errorEl.textContent = 'Error al guardar la categoría.'
+                errorEl.classList.remove('hidden')
+            }
+        }
+
+        async function deleteCategory(id) {
+            if (!confirm('¿Eliminar esta categoría?')) return
+            const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' })
+            if (res.ok) loadCategories()
+            else alert('Error al eliminar. Puede que tenga equipos o partidos asociados.')
+        }
+
+        checkAuth().then(loadCategories)
+    </script>
+</body>
+</html>

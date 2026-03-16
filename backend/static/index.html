@@ -8,6 +8,8 @@
 </head>
 <body class="bg-gray-100 min-h-screen">
 
+    <div class="fixed inset-0 -z-10 bg-[url('/images/bg.png')] bg-cover opacity-10"></div>
+
     <header class="bg-surface text-brand px-4 py-4 shadow">
         <h1 class="text-xl font-bold tracking-wide">🏐 Torneo de Volleyball</h1>
     </header>
@@ -17,75 +19,11 @@
     </div>
 
     <main class="px-4 py-4 max-w-2xl mx-auto space-y-6" id="match-list">
-        <!-- populated by JS -->
+        <p class="text-gray-400 text-sm text-center py-8">Cargando partidos...</p>
     </main>
 
     <script>
-        // --- Hardcoded data (mirrors the DB model) ---
-        // TODO: replace with fetch() calls to the API
-
-        const clubs = [
-            { id: 1, name: 'Club Atlético' },
-            { id: 2, name: 'Club Norte' },
-            { id: 3, name: 'Club Sur' },
-            { id: 4, name: 'Club Centro' },
-        ]
-
-        const categories = [
-            { id: 1, name: 'Masculino A' },
-            { id: 2, name: 'Femenino A' },
-            { id: 3, name: 'Mixto B' },
-        ]
-
-        const teams = [
-            { id: 1, clubId: 1, categoryId: 1 },
-            { id: 2, clubId: 2, categoryId: 1 },
-            { id: 3, clubId: 3, categoryId: 1 },
-            { id: 4, clubId: 4, categoryId: 1 },
-            { id: 5, clubId: 1, categoryId: 2 },
-            { id: 6, clubId: 2, categoryId: 2 },
-            { id: 7, clubId: 3, categoryId: 3 },
-            { id: 8, clubId: 4, categoryId: 3 },
-        ]
-
-        const matches = [
-            {
-                id: 1, teamHomeId: 1, teamAwayId: 2, categoryId: 1,
-                court: 'court1', scheduledAt: '2026-03-14T10:00',
-                status: 'finished_home',
-                sets: [
-                    { id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 20 },
-                    { id: 2, setNumber: 2, status: 'finished_home', scoreHome: 25, scoreAway: 18 },
-                ]
-            },
-            {
-                id: 2, teamHomeId: 3, teamAwayId: 4, categoryId: 1,
-                court: 'court2', scheduledAt: '2026-03-14T10:00',
-                status: 'in_progress',
-                sets: [
-                    { id: 3, setNumber: 1, status: 'finished_away', scoreHome: 22, scoreAway: 25 },
-                    { id: 4, setNumber: 2, status: 'in_progress', scoreHome: 14, scoreAway: 11 },
-                ]
-            },
-            {
-                id: 3, teamHomeId: 5, teamAwayId: 6, categoryId: 2,
-                court: 'court1', scheduledAt: '2026-03-14T12:00',
-                status: 'upcoming',
-                sets: []
-            },
-            {
-                id: 4, teamHomeId: 7, teamAwayId: 8, categoryId: 3,
-                court: 'court2', scheduledAt: '2026-03-14T12:00',
-                status: 'upcoming',
-                sets: []
-            },
-        ]
-
         // --- Helpers ---
-
-        function getTeam(id) { return teams.find(t => t.id === id) }
-        function getClub(id) { return clubs.find(c => c.id === id) }
-        function teamName(teamId) { return getClub(getTeam(teamId).clubId).name }
 
         function setsWon(match, side) {
             return match.sets.filter(s => s.status === `finished_${side}`).length
@@ -97,7 +35,8 @@
         }
 
         function courtLabel(court) {
-            return court === 'court1' ? 'Cancha 1' : 'Cancha 2'
+            const labels = { court1: 'Cancha 1', court2: 'Cancha 2' }
+            return labels[court] ?? court
         }
 
         function statusBadge(status) {
@@ -116,9 +55,16 @@
 
         // --- Render ---
 
+        function teamDisplay(team) {
+            const logo = team.clubLogo
+                ? `<img src="${team.clubLogo}" class="inline-block w-5 h-5 object-contain rounded-sm mr-1 align-middle" />`
+                : ''
+            return `${logo}${team.name}`
+        }
+
         function renderMatch(match) {
-            const home = teamName(match.teamHomeId)
-            const away = teamName(match.teamAwayId)
+            const home = teamDisplay(match.teamHome)
+            const away = teamDisplay(match.teamAway)
             const setsHome = setsWon(match, 'home')
             const setsAway = setsWon(match, 'away')
             const liveScore = currentSetScore(match)
@@ -146,8 +92,8 @@
 
         function render(filterCategoryId = null) {
             const filtered = filterCategoryId
-                ? matches.filter(m => m.categoryId === filterCategoryId)
-                : matches
+                ? allMatches.filter(m => m.categoryId === filterCategoryId)
+                : allMatches
 
             const sections = [
                 { label: 'En vivo',    filter: m => m.status === 'in_progress' },
@@ -170,7 +116,7 @@
         }
 
         function renderTabs(activeCategoryId) {
-            const all = [{ id: null, name: 'Todos' }, ...categories]
+            const all = [{ id: null, name: 'Todos' }, ...allCategories]
             document.getElementById('category-tabs').innerHTML = all.map(cat => {
                 const active = cat.id === activeCategoryId
                 return `
@@ -184,6 +130,8 @@
             }).join('')
         }
 
+        let allMatches = []
+        let allCategories = []
         let activeCategory = null
 
         function selectCategory(id) {
@@ -192,8 +140,24 @@
             render(id)
         }
 
-        renderTabs(null)
-        render(null)
+        async function init() {
+            try {
+                const [matchesRes, categoriesRes] = await Promise.all([
+                    fetch('/api/matches'),
+                    fetch('/api/categories'),
+                ])
+                if (!matchesRes.ok || !categoriesRes.ok) throw new Error()
+                allMatches = await matchesRes.json()
+                allCategories = await categoriesRes.json()
+                renderTabs(null)
+                render(null)
+            } catch {
+                document.getElementById('match-list').innerHTML =
+                    '<p class="text-red-500 text-sm text-center py-8">Error al cargar los partidos.</p>'
+            }
+        }
+
+        init()
     </script>
 </body>
 </html>

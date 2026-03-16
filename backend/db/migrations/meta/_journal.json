@@ -8,6 +8,13 @@
       "when": 1773526959554,
       "tag": "0000_cool_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773620933143,
+      "tag": "0001_flashy_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

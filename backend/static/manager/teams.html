@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manager — Equipos</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
+        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
+        <h1 class="text-lg font-bold tracking-wide">Equipos</h1>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4">
+
+        <!-- Add / Edit form -->
+        <div class="bg-white rounded-xl shadow p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider" id="form-title">Agregar equipo</h2>
+            <input type="hidden" id="edit-id" value="" />
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del equipo</label>
+                <input type="text" id="team-name"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Club</label>
+                <select id="team-club"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                    <option value="">Seleccionar club...</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select id="team-category"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                    <option value="">Seleccionar categoría...</option>
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="submitForm()"
+                    class="bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
+                    Guardar
+                </button>
+                <button onclick="resetForm()" id="cancel-btn"
+                    class="hidden text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    Cancelar
+                </button>
+            </div>
+            <p id="form-error" class="text-red-500 text-sm hidden"></p>
+        </div>
+
+        <!-- List -->
+        <div id="team-list">
+            <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
+        </div>
+    </main>
+
+    <script>
+        let allClubs = []
+        let allCategories = []
+
+        async function checkAuth() {
+            const res = await fetch('/api/auth/me')
+            if (!res.ok) window.location.href = '/login.html'
+        }
+
+        async function loadSelectors() {
+            const [clubsRes, catsRes] = await Promise.all([
+                fetch('/api/clubs'),
+                fetch('/api/categories'),
+            ])
+            allClubs = await clubsRes.json()
+            allCategories = await catsRes.json()
+
+            document.getElementById('team-club').innerHTML =
+                '<option value="">Seleccionar club...</option>' +
+                allClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+
+            document.getElementById('team-category').innerHTML =
+                '<option value="">Seleccionar categoría...</option>' +
+                allCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+        }
+
+        function clubName(id) { return allClubs.find(c => c.id === id)?.name ?? id }
+        function categoryName(id) { return allCategories.find(c => c.id === id)?.name ?? id }
+
+        async function loadTeams() {
+            try {
+                const res = await fetch('/api/teams')
+                if (!res.ok) throw new Error()
+                const teams = await res.json()
+
+                if (teams.length === 0) {
+                    document.getElementById('team-list').innerHTML =
+                        '<p class="text-gray-400 text-sm text-center py-4">No hay equipos.</p>'
+                    return
+                }
+
+                document.getElementById('team-list').innerHTML = `
+                    <div class="space-y-2">
+                        ${teams.map(t => `
+                            <div class="bg-white rounded-xl shadow p-4 flex items-center gap-4">
+                                <div class="flex-1">
+                                    <div class="font-medium text-gray-800">${t.name}</div>
+                                    <div class="text-xs text-gray-400 mt-0.5">${clubName(t.clubId)} · ${categoryName(t.categoryId)}</div>
+                                </div>
+                                <div class="flex gap-3">
+                                    <button onclick="editTeam(${t.id}, '${t.name.replace(/'/g, "\\'")}', ${t.clubId}, ${t.categoryId})"
+                                        class="text-sm text-brand font-medium hover:underline">Editar</button>
+                                    <button onclick="deleteTeam(${t.id})"
+                                        class="text-sm text-red-500 hover:underline">Eliminar</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+            } catch {
+                document.getElementById('team-list').innerHTML =
+                    '<p class="text-red-500 text-sm text-center py-4">Error al cargar los equipos.</p>'
+            }
+        }
+
+        function editTeam(id, name, clubId, categoryId) {
+            document.getElementById('edit-id').value = id
+            document.getElementById('team-name').value = name
+            document.getElementById('team-club').value = clubId
+            document.getElementById('team-category').value = categoryId
+            document.getElementById('form-title').textContent = 'Editar equipo'
+            document.getElementById('cancel-btn').classList.remove('hidden')
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+
+        function resetForm() {
+            document.getElementById('edit-id').value = ''
+            document.getElementById('team-name').value = ''
+            document.getElementById('team-club').value = ''
+            document.getElementById('team-category').value = ''
+            document.getElementById('form-title').textContent = 'Agregar equipo'
+            document.getElementById('cancel-btn').classList.add('hidden')
+            document.getElementById('form-error').classList.add('hidden')
+        }
+
+        async function submitForm() {
+            const id = document.getElementById('edit-id').value
+            const name = document.getElementById('team-name').value.trim()
+            const clubId = Number(document.getElementById('team-club').value)
+            const categoryId = Number(document.getElementById('team-category').value)
+            const errorEl = document.getElementById('form-error')
+
+            if (!name || !clubId || !categoryId) {
+                errorEl.textContent = 'Completar todos los campos.'
+                errorEl.classList.remove('hidden')
+                return
+            }
+
+            const url = id ? `/api/teams/${id}` : '/api/teams'
+            const method = id ? 'PUT' : 'POST'
+
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, clubId, categoryId }),
+                })
+                if (!res.ok) throw new Error()
+                resetForm()
+                loadTeams()
+            } catch {
+                errorEl.textContent = 'Error al guardar el equipo.'
+                errorEl.classList.remove('hidden')
+            }
+        }
+
+        async function deleteTeam(id) {
+            if (!confirm('¿Eliminar este equipo?')) return
+            const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' })
+            if (res.ok) loadTeams()
+            else alert('Error al eliminar. Puede que tenga partidos asociados.')
+        }
+
+        checkAuth().then(() => Promise.all([loadSelectors(), loadTeams()]))
+    </script>
+</body>
+</html>
