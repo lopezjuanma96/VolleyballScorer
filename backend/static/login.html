@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acceso Manager</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+
+    <div class="bg-white rounded-xl shadow p-8 w-full max-w-sm">
+        <h1 class="text-xl font-bold text-gray-800 mb-6 text-center">🏐 Acceso Manager</h1>
+
+        <form id="login-form" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                <input type="text" id="username" name="username" required
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                <input type="password" id="password" name="password" required
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <p id="error-msg" class="text-red-500 text-sm hidden"></p>
+            <button type="submit"
+                class="w-full bg-surface text-brand rounded-lg px-4 py-2 text-sm font-semibold hover:bg-surface-light transition-colors">
+                Ingresar
+            </button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault()
+            const username = document.getElementById('username').value
+            const password = document.getElementById('password').value
+            const errorMsg = document.getElementById('error-msg')
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+            })
+
+            if (res.ok) {
+                window.location.href = '/manager/'
+            } else {
+                errorMsg.textContent = 'Usuario o contraseña incorrectos.'
+                errorMsg.classList.remove('hidden')
+            }
+        })
+    </script>
+</body>
+</html>

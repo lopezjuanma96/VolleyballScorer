@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manager — Partidos</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center justify-between">
+        <h1 class="text-xl font-bold tracking-wide">🏐 Manager</h1>
+        <div class="flex gap-3 text-sm">
+            <a href="/manager/categories.html" class="text-brand hover:underline">Categorías</a>
+            <a href="/manager/clubs.html" class="text-brand hover:underline">Clubes</a>
+            <a href="/manager/teams.html" class="text-brand hover:underline">Equipos</a>
+            <button onclick="logout()" class="text-gray-500 hover:text-red-500">Salir</button>
+        </div>
+    </header>
+
+    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-700">Partidos</h2>
+            <a href="/manager/match-form.html"
+                class="bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
+                + Nuevo partido
+            </a>
+        </div>
+
+        <div id="match-list">
+            <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
+        </div>
+    </main>
+
+    <script>
+        async function checkAuth() {
+            const res = await fetch('/api/auth/me')
+            if (!res.ok) window.location.href = '/login.html'
+        }
+
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' })
+            window.location.href = '/login.html'
+        }
+
+        function courtLabel(court) {
+            const labels = { court1: 'Cancha 1', court2: 'Cancha 2' }
+            return labels[court] ?? court
+        }
+
+        function statusLabel(status) {
+            const labels = {
+                upcoming: 'Próximo',
+                in_progress: 'En vivo',
+                finished_home: 'Finalizado (local)',
+                finished_away: 'Finalizado (visitante)',
+                cancelled: 'Cancelado',
+            }
+            return labels[status] ?? status
+        }
+
+        function formatDateTime(iso) {
+            return new Date(iso).toLocaleString('es', {
+                day: '2-digit', month: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            })
+        }
+
+        async function deleteMatch(id) {
+            if (!confirm('¿Eliminar este partido y todos sus datos?')) return
+            const res = await fetch(`/api/matches/${id}`, { method: 'DELETE' })
+            if (res.ok) loadMatches()
+            else alert('Error al eliminar el partido.')
+        }
+
+        async function loadMatches() {
+            try {
+            const res = await fetch('/api/matches')
+            if (!res.ok) throw new Error()
+            const matches = await res.json()
+
+            if (matches.length === 0) {
+                document.getElementById('match-list').innerHTML =
+                    '<p class="text-gray-400 text-sm text-center py-8">No hay partidos creados.</p>'
+                return
+            }
+
+            document.getElementById('match-list').innerHTML = matches.map(m => `
+                <div class="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-gray-800 truncate">
+                            ${m.teamHome.name} vs ${m.teamAway.name}
+                        </div>
+                        <div class="text-xs text-gray-400 mt-0.5">
+                            ${m.categoryName} · ${courtLabel(m.court)} · ${formatDateTime(m.scheduledAt)}
+                        </div>
+                        <div class="text-xs mt-1">
+                            <span class="font-medium text-gray-600">${statusLabel(m.status)}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <a href="/manager/game.html?id=${m.id}"
+                            class="text-sm bg-green-100 text-green-700 font-medium px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors">
+                            Gestionar
+                        </a>
+                        <a href="/game.html?id=${m.id}"
+                            class="text-sm bg-gray-100 text-gray-600 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors">
+                            Ver
+                        </a>
+                        <button onclick="deleteMatch(${m.id})"
+                            class="text-sm bg-red-100 text-red-600 font-medium px-3 py-1.5 rounded-lg hover:bg-red-200 transition-colors">
+                            Eliminar
+                        </button>
+                    </div>
+                </div>
+            `).join('')
+            } catch {
+                document.getElementById('match-list').innerHTML =
+                    '<p class="text-red-500 text-sm text-center py-8">Error al cargar los partidos.</p>'
+            }
+        }
+
+        checkAuth().then(loadMatches)
+    </script>
+</body>
+</html>

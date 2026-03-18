@@ -1,0 +1,93 @@
+When there are no matches, in the root page ("/"), there is no empty list catch, the console shows the error 'Uncaught (in promise) SyntaxError: JSON.parse: unexpected character at line 1 column 1 of the JSON data' and the app stays in "Cargando partidos..". The same happens in the root manager page ("/manager/"), the base page for clubs, etc.
+
+##
+
+When I tried accessing /api/categories there was an internal server error, this are the logs:
+
+volleyball_scorer_app    | 37 |     if (this.cache === void 0 || is(this.cache, NoopCache) || this.queryMetadata === void 0) {
+volleyball_scorer_app    | 38 |       try {
+volleyball_scorer_app    | 39 |         return await query();
+volleyball_scorer_app    | 40 |       } catch (e) {
+volleyball_scorer_app    | 41 |         throw new DrizzleQueryError(queryString, params, e);
+volleyball_scorer_app    |                    ^
+volleyball_scorer_app    | error: Failed query: select "id", "name" from "categories"
+volleyball_scorer_app    | params: 
+volleyball_scorer_app    |   query: "select \"id\", \"name\" from \"categories\"",
+volleyball_scorer_app    |  params: [],
+volleyball_scorer_app    | 
+volleyball_scorer_app    |       at queryWithCache (/app/node_modules/drizzle-orm/pg-core/session.js:41:15)
+volleyball_scorer_app    | 
+volleyball_scorer_app    | 810 |   }
+volleyball_scorer_app    | 811 | 
+volleyball_scorer_app    | 812 |   function ErrorResponse(x) {
+volleyball_scorer_app    | 813 |     if (query) {
+volleyball_scorer_app    | 814 |       (query.cursorFn || query.describeFirst) && write(Sync)
+volleyball_scorer_app    | 815 |       errorResponse = Errors.postgres(parseError(x))
+volleyball_scorer_app    |                                    ^
+volleyball_scorer_app    | PostgresError: permission denied for table categories
+volleyball_scorer_app    |  severity_local: "ERROR",
+volleyball_scorer_app    |    severity: "ERROR",
+volleyball_scorer_app    |        file: "aclchk.c",
+volleyball_scorer_app    |     routine: "aclcheck_error",
+volleyball_scorer_app    |        code: "42501"
+volleyball_scorer_app    | 
+volleyball_scorer_app    |       at ErrorResponse (/app/node_modules/postgres/src/connection.js:815:30)
+volleyball_scorer_app    |       at handle (/app/node_modules/postgres/src/connection.js:765:5)
+volleyball_scorer_app    |       at data (/app/node_modules/postgres/src/connection.js:457:5)
+volleyball_scorer_app    |       at emit (node:events:95:22)
+volleyball_scorer_app    |       at addChunk (internal:streams/readable:265:47)
+volleyball_scorer_app    |       at readableAddChunkPushByteMode (internal:streams/readable:243:18)
+volleyball_scorer_app    |       at data (node:net:280:52)
+
+##
+
+- Adding a club: the Browse.. button for the image logo looks like text because it has no background or shape, it's also in English instead of spanish. The create button ("Guardar") does not use the color palette. The image seems to load fine but when I tried adding a club i got another error. These are the logs:
+
+volleyball_scorer_app    | 36 |   async queryWithCache(queryString, params, query) {
+volleyball_scorer_app    | 37 |     if (this.cache === void 0 || is(this.cache, NoopCache) || this.queryMetadata === void 0) {
+volleyball_scorer_app    | 38 |       try {
+volleyball_scorer_app    | 39 |         return await query();
+volleyball_scorer_app    | 40 |       } catch (e) {
+volleyball_scorer_app    | 41 |         throw new DrizzleQueryError(queryString, params, e);
+volleyball_scorer_app    |                    ^
+volleyball_scorer_app    | error: Failed query: insert into "clubs" ("id", "name", "logo") values (default, $1, $2) returning "id", "name", "logo"
+volleyball_scorer_app    | params: Hienas,/uploads/1773621731818_screenshot-2025-10-30_21-40-34.png
+volleyball_scorer_app    |   query: "insert into \"clubs\" (\"id\", \"name\", \"logo\") values (default, $1, $2) returning \"id\", \"name\", \"logo\"",
+volleyball_scorer_app    |  params: [
+volleyball_scorer_app    |   "Hienas", "/uploads/1773621731818_screenshot-2025-10-30_21-40-34.png"
+volleyball_scorer_app    | ],
+volleyball_scorer_app    | 
+volleyball_scorer_app    |       at queryWithCache (/app/node_modules/drizzle-orm/pg-core/session.js:41:15)
+volleyball_scorer_app    | 
+volleyball_scorer_app    | 810 |   }
+volleyball_scorer_app    | 811 | 
+volleyball_scorer_app    | 812 |   function ErrorResponse(x) {
+volleyball_scorer_app    | 813 |     if (query) {
+volleyball_scorer_app    | 814 |       (query.cursorFn || query.describeFirst) && write(Sync)
+volleyball_scorer_app    | 815 |       errorResponse = Errors.postgres(parseError(x))
+volleyball_scorer_app    |                                    ^
+volleyball_scorer_app    | PostgresError: permission denied for table clubs
+volleyball_scorer_app    |  severity_local: "ERROR",
+volleyball_scorer_app    |    severity: "ERROR",
+volleyball_scorer_app    |        file: "aclchk.c",
+volleyball_scorer_app    |     routine: "aclcheck_error",
+volleyball_scorer_app    |        code: "42501"
+volleyball_scorer_app    | 
+volleyball_scorer_app    |       at ErrorResponse (/app/node_modules/postgres/src/connection.js:815:30)
+volleyball_scorer_app    |       at handle (/app/node_modules/postgres/src/connection.js:765:5)
+
+volleyball_scorer_nginx  | 172.18.0.5 - - [16/Mar/2026:00:42:11 +0000] "POST /api/clubs HTTP/1.1" 500 21 "https://c663-200-61-165-54.ngrok-free.app/manager/clubs.html" "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0" "2800:40:86:ae7:73a1:39d3:8bf7:9df"
+volleyball_scorer_app    |       at data (/app/node_modules/postgres/src/connection.js:457:5)
+volleyball_scorer_app    |       at emit (node:events:95:22)
+volleyball_scorer_app    |       at addChunk (internal:streams/readable:265:47)
+volleyball_scorer_app    |       at readableAddChunkPushByteMode (internal:streams/readable:243:18)
+volleyball_scorer_app    |       at data (node:net:280:52)
+
+##
+
+The login/logout works perfectly, and I even tried accessing the manager root page after login out and it redirected me to login. Minimal issue: the Login button ("Ingresar") does not follow the color palette.
+
+##
+
+could not run tests on the other modules because without clubs I can not create teams or matches without it.
+

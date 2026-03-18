@@ -1,155 +1,155 @@
-### `README.md` (v0.3)
+# VolleyballScorer 🏐
 
-````markdown
-# 🏐 Volleyball Scorer (v0.3)
+Real-time fixture and scoring web app for amateur volleyball tournaments. Designed to be shared publicly via a tunnel so watchers can follow live scores from their phones while one person manages the matches from a tablet or laptop.
 
-App web progresiva para gestionar y visualizar puntajes de torneos de voley en tiempo real. Construida con **FastAPI**, **Google Firestore** y **Tailwind CSS**.
+## What it does
 
-Esta versión introduce gestión por categorías, autenticación por cookies, interfaz optimista para el manager y visualización rica (banderas, sets ganados) para los espectadores.
+- **Public lobby** — lists all matches grouped by status (live, upcoming, finished), filterable by category
+- **Match detail** — shows set scores and point-by-point history for any match
+- **Manager panel** — authenticated area to create and manage everything: categories, clubs, teams, and matches
+- **Live scoring** — add points one by one, or enter a final set score directly if tracking point-by-point isn't practical
+- **Club logos** — shown next to team names in all views
 
----
+## Tech stack
 
-## 🚀 Stack Tecnológico
+Bun · Hono · TypeScript · Tailwind CSS · Drizzle ORM · PostgreSQL · Docker Compose · nginx · ngrok
 
-* **Backend:** Python 3.10+, **FastAPI**
-* **Servidor:** **Uvicorn**
-* **Base de Datos:** Google **Firestore** (Modo Nativo)
-* **Frontend:** HTML5, **Tailwind CSS** (Play CDN), **Firebase JS SDK** (Real-time)
-* **Infraestructura:** Google **Cloud Run** (Serverless)
-* **Gestión de Paquetes:** `uv`
+## Prerequisites
 
----
+- [Docker](https://docs.docker.com/get-docker/) with the Compose plugin
+- A free [ngrok account](https://ngrok.com/) and auth token (for public access)
 
-## ✨ Características (v0.3)
+## Setup
 
-### 🔐 Autenticación & Seguridad
-* **Login Separado:** Página dedicada de inicio de sesión (`/login`).
-* **Cookies HttpOnly:** Gestión de sesión segura mediante cookies (adiós a los popups de navegador).
-* **Protección de Rutas:** Middleware que redirige a usuarios no autenticados fuera del panel de manager.
-
-### 📺 Panel Watcher (Público)
-* **Lobby (`/`):**
-    * Listas en tiempo real: "En Vivo", "Próximos" y "Finalizados".
-    * Visualización de **Categorías** y **Banderas** de los equipos.
-    * Indicadores de **Sets Ganados** en cada tarjeta.
-* **Vista de Partido (`/game?id=...`):**
-    * Encabezado con banderas grandes y score global.
-    * **Pestañas de Sets:** Navegación entre sets activos, finalizados y anulados.
-    * **Historial de Puntos:** Tabla que carga bajo demanda, con resaltado visual (amarillo) del equipo que anotó.
-
-### 👨‍💼 Panel Manager (Admin)
-* **Dashboard (`/manager`):**
-    * Filtrado de creación de partidos por **Categoría**.
-    * Lista de partidos activos con botón "Gestionar" individual.
-* **Controlador de Partido (`/manager/game?id=...`):**
-    * **Optimistic UI:** El marcador se actualiza instantáneamente al tocar un botón (sin esperar al servidor).
-    * **Gestión Completa:** Sumar puntos, Finalizar Sets, Finalizar Partido.
-    * **Corrección de Errores:** Deshacer último punto, Anular Set actual, Anular Partido completo.
-
----
-
-## 📋 Estructura del Proyecto
-
-```text
-.
-├── static/
-│   ├── index.html          # Lobby (Watcher)
-│   ├── watcher_game.html   # Vista de partido (Watcher)
-│   ├── login.html          # Página de Login
-│   ├── manager.html        # Dashboard del Manager (Lista)
-│   ├── manager_game.html   # Controlador de Partido
-│   └── no_flag.png         # Imagen fallback para equipos sin bandera
-│
-├── .venv/                  # Entorno virtual
-├── main.py                 # Servidor FastAPI (Lógica de negocio y Auth)
-├── models.py               # Modelos de datos Pydantic
-├── requirements.txt        # Dependencias
-├── Dockerfile              # Configuración para Cloud Run
-└── serviceAccountKey.json  # Credenciales Admin (¡NO SUBIR A GIT!)
-````
-
------
-
-## 🏃 Puesta en Marcha (Local)
-
-### 1\. Clonar y Preparar
+### 1. Clone and configure
 
 ```bash
-git clone [URL_DEL_REPO]
-cd [NOMBRE_DEL_REPO]
-
-# Crear entorno virtual e instalar dependencias
-python -m venv .venv
-source .venv/bin/activate  # o .\.venv\Scripts\activate en Windows
-pip install uv
-uv pip install -r requirements.txt
+git clone <repo-url>
+cd VolleyballScorer
+cp .env.example .env
 ```
 
-### 2\. Configuración de Google Cloud / Firebase
+Edit `.env` and fill in every value:
 
-1.  **Proyecto:** Crea un proyecto en GCP y habilita **Firestore**.
-2.  **Backend (Admin):**
-      * Crea una Service Account en GCP con rol `Editor de Cloud Datastore`.
-      * Descarga la key JSON, renómbrala a `serviceAccountKey.json` y ponla en la raíz.
-      * **¡Importante\!** Agrega este archivo a tu `.gitignore`.
-3.  **Frontend (Cliente):**
-      * En la consola de Firebase, registra una Web App.
-      * Copia el objeto `firebaseConfig`.
-      * **Pégalo dentro** de las etiquetas `<script>` en `static/index.html` y `static/watcher_game.html`.
+```env
+NGROK_AUTHTOKEN=your_ngrok_token
 
-### 3\. Poblar la Base de Datos (Requisito v0.3)
+PSQL_HOST=localhost
+PSQL_PORT=5432
+PSQL_DATABASE=scorer
 
-Para que el sistema funcione, debes crear manualmente algunas estructuras en Firestore:
+PSQL_ADMIN_USER=admin
+PSQL_ADMIN_PASSWORD=choose_a_strong_password
 
-1.  **Colección `categories`:** Crea documentos con los campos:
-      * `name` (string): ej: "Femenino A"
-      * `order` (number): ej: 1
-2.  **Colección `teams`:** Crea documentos para los equipos:
-      * `name` (string): "Nombre Equipo"
-      * `flag` (string): URL de la imagen de la bandera.
-      * `category_id` (string): ID del documento de la categoría correspondiente.
+PSQL_USER=scorer
+PSQL_PASSWORD=choose_a_strong_password
 
-### 4\. Ejecutar
+MANAGER_USER=manager
+MANAGER_PASSWORD=choose_a_strong_password
+SESSION_SECRET=any_long_random_string_here
+COOKIE_SECURE=false        # keep false for local HTTP; set true if using HTTPS
+```
+
+### 2. Configure ngrok
+
+Edit `ngrok/ngrok.yml` and set your desired tunnel. The app is accessible through the ngrok URL shown in the dashboard at `localhost:4040`.
+
+### 3. Start the stack
 
 ```bash
-uvicorn main:app --reload
+docker compose up --build
 ```
 
-### 5\. Accesos
+This starts four containers: the Bun app, nginx (port 80), ngrok (port 4040), and PostgreSQL (port 5432).
 
-  * **Lobby:** `http://127.0.0.1:8000/`
-  * **Manager:** `http://127.0.0.1:8000/login`
-      * Credenciales (Default): `manager` / `voley123` (Modificar `ADMIN_USER` y `ADMIN_PASS` en `main.py`).
+### 4. Run migrations
 
------
+With the stack running, open a second terminal and run:
 
-## 🐳 Deploy en Cloud Run
+```bash
+bun --env-file .env --cwd backend run db:migrate
+```
 
-1.  Subir código al repositorio.
-2.  Ejecutar deploy:
-    ```bash
-    gcloud run deploy volleyball-scorer \
-      --source . \
-      --platform managed \
-      --region [TU_REGION] \
-      --allow-unauthenticated
-    ```
-3.  **Permisos:** Asegúrate de que la Service Account que usa Cloud Run tenga el rol **Editor de Cloud Datastore** en IAM.
+> If `bun` isn't in your PATH, use the full path: `~/.bun/bin/bun`
 
------
+After migrating, grant table permissions to the app user:
 
-## 🔒 Seguridad y Reglas
+```bash
+docker exec volleyball_scorer_db psql -U admin -d scorer \
+  -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scorer; \
+      GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scorer;"
+```
 
-Asegúrate de configurar las reglas de Firestore en la consola de Firebase para permitir lectura pública pero escritura solo vía backend:
+> **Why?** PostgreSQL's `GRANT ON DATABASE` only allows connecting — it doesn't grant access to tables. This step gives the app user the read/write access it needs. A fresh stack created after this fix will do it automatically via the init script, but existing databases need the manual grant.
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-  }
-}
+### 5. Add a background image (optional)
+
+Place an image at `backend/static/images/bg.png`. It will appear as a faint watermark behind the public lobby. The directory needs to be created:
+
+```bash
+mkdir -p backend/static/images
+```
+
+## First run — manager workflow
+
+Open the ngrok URL (or `http://localhost`) and navigate to `/login.html`. After logging in:
+
+1. **Categorías** — add the tournament categories (e.g. Masculino A, Femenino B)
+2. **Clubes** — add participating clubs, optionally uploading a logo for each
+3. **Equipos** — add teams, assigning each one a club and category
+4. **Nuevo partido** — create a match; the first set is created automatically
+
+Then open **Gestionar** next to a match to start scoring.
+
+## Scoring a match
+
+From the manager game page (`/manager/game.html?id=X`):
+
+- **Point by point** — tap `+ Local` or `+ Visitante` after each rally; tap `↩ Deshacer` to remove the last point
+- **Final score** — enter the final set score in the two number fields and press the winner button; this records the score as a single point row and auto-creates the next set
+- **Match status** — use the status buttons at the bottom to mark the overall match as in progress, finished, or cancelled
+
+Watchers can follow along at the public URL (`/` and `/game.html?id=X`). The page does not auto-refresh yet — watchers need to reload manually.
+
+## Development
+
+To run the backend without Docker:
+
+```bash
+cd backend
+bun run dev     # starts Hono with hot reload + Tailwind watch
+```
+
+Make sure PostgreSQL is running and the env vars are exported in your shell (or place a `.env` file inside `backend/`).
+
+### Schema changes
+
+After editing `backend/src/db/schema.ts`:
+
+```bash
+bun --env-file .env --cwd backend run db:generate
+bun --env-file .env --cwd backend run db:migrate
+```
+
+Then re-run the `GRANT` command if running in Docker.
+
+## Project layout
+
+```
+VolleyballScorer/
+├── backend/
+│   ├── src/
+│   │   ├── index.ts           # app entry, route wiring
+│   │   ├── middleware/auth.ts  # session cookie check
+│   │   ├── routes/            # one file per resource
+│   │   └── db/                # Drizzle schema, client, config
+│   └── static/
+│       ├── index.html         # public lobby
+│       ├── game.html          # public match detail
+│       ├── login.html         # manager login
+│       └── manager/           # manager pages (auth-gated by API)
+├── nginx/nginx.conf
+├── ngrok/ngrok.yml
+├── db/db_init/psql/           # runs once on fresh DB
+└── docker-compose.yml
 ```

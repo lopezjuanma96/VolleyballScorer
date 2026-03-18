@@ -1,0 +1,9 @@
+web_addr: 0.0.0.0:4040
+update: false
+log: stdout
+version: 1
+
+tunnels:
+  app-nginx:
+    addr: nginx:80
+    proto: http 
