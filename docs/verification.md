@@ -2,6 +2,7 @@
 
 Ejecutado en el workspace local, con PostgreSQL 17 en Docker y una base independiente `scorer_test`. Los datos de demostración del navegador se crearon en `scorer_preview`, separados de la base vacía destinada al torneo.
 
+- GitHub Actions: ejecución remota correcta de tipos, CSS, migraciones, pruebas y build Docker. Runner fijado en Ubuntu 24.04 y checkout actualizado a Node 24.
 - TypeScript: `bun run check`, sin errores.
 - CSS: compilación minificada con Tailwind, correcta.
 - Docker: imagen completa y runtime sin dependencias de desarrollo, build correcto.

@@ -2,7 +2,7 @@ name: Check
 on: [push, pull_request]
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -21,7 +21,7 @@ jobs:
       SESSION_SECRET: test-session-secret-at-least-32-characters
       RUN_DB_TESTS: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
