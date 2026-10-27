@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manager — Marcador</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
@@ -22,12 +24,12 @@
         const matchId = new URLSearchParams(window.location.search).get('id')
 
         async function checkAuth() {
-            const res = await fetch('/api/auth/me')
-            if (!res.ok) window.location.href = '/login.html'
+            const res = await App.fetch('/api/auth/me')
+            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
         }
 
         async function loadMatch() {
-            const res = await fetch(`/api/matches/${matchId}`)
+            const res = await App.fetch(`/api/matches/${matchId}`)
             if (!res.ok) {
                 document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm">Partido no encontrado.</p>'
                 return
@@ -42,7 +44,7 @@
         }
 
         function formatTime(iso) {
-            return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+            return App.time(iso)
         }
 
         function setsWon(side) {
@@ -55,8 +57,8 @@
 
         function render() {
             const m = currentMatch
-            const home = m.teamHome.name
-            const away = m.teamAway.name
+            const home = App.escape(m.teamHome.name)
+            const away = App.escape(m.teamAway.name)
             const setsHome = setsWon('home')
             const setsAway = setsWon('away')
             const active = activeSet()
@@ -86,7 +88,7 @@
                     <div class="text-4xl font-bold text-center text-gray-900">${currentScore}</div>
                     <div class="grid grid-cols-2 gap-3">
                         <button onclick="addPoint(true)"
-                            class="bg-blue-600 text-white font-semibold py-4 rounded-xl text-lg hover:bg-blue-700 active:scale-95 transition-all">
+                            class="bg-surface text-brand font-semibold py-4 rounded-xl text-lg hover:bg-surface-light active:scale-95 transition-all">
                             + ${home}
                         </button>
                         <button onclick="addPoint(false)"
@@ -145,7 +147,7 @@
             document.getElementById('content').innerHTML = `
                 <!-- Match header -->
                 <div class="bg-white rounded-xl shadow p-4">
-                    <div class="text-xs text-gray-400 mb-2">${courtLabel(m.court)} · ${formatTime(m.scheduledAt)} · ${m.categoryName}</div>
+                    <div class="text-xs text-gray-400 mb-2">${courtLabel(m.court)} · ${formatTime(m.scheduledAt)} · ${App.escape(m.categoryName)}</div>
                     <div class="flex items-center justify-between gap-2">
                         <span class="font-bold text-gray-800 flex-1 text-lg">${home}</span>
                         <div class="text-center min-w-[5rem]">
@@ -164,7 +166,7 @@
                     <div class="flex flex-wrap gap-2">
                         ${statusOptions.map(s => `
                             <button onclick="updateMatchStatus('${s}')"
-                                class="text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${m.status === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                class="text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${m.status === s ? 'bg-surface text-brand' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
                                 ${statusLabels[s]}
                             </button>
                         `).join('')}
@@ -179,10 +181,10 @@
             `
         }
 
-        async function addPoint(homeScored) {
+        async function performaddPoint(homeScored) {
             const active = activeSet()
             if (!active) return
-            await fetch('/api/points', {
+            await App.fetch('/api/points', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ setId: active.id, homeScored }),
@@ -190,14 +192,14 @@
             await loadMatch()
         }
 
-        async function undoLastPoint() {
+        async function performundoLastPoint() {
             const active = activeSet()
             if (!active || active.points.length === 0) {
                 alert('No hay puntos para deshacer.')
                 return
             }
             const lastPoint = active.points[active.points.length - 1]
-            const res = await fetch(`/api/points/${lastPoint.id}`, { method: 'DELETE' })
+            const res = await App.fetch(`/api/points/${lastPoint.id}`, { method: 'DELETE' })
             if (!res.ok) {
                 const body = await res.json()
                 alert(body.error ?? 'Error al deshacer el punto.')
@@ -206,12 +208,12 @@
             await loadMatch()
         }
 
-        async function finishSet(status) {
+        async function performfinishSet(status) {
             const active = activeSet()
             if (!active) return
             const scoreHome = Number(document.getElementById('final-home').value)
             const scoreAway = Number(document.getElementById('final-away').value)
-            await fetch(`/api/sets/${active.id}/finish`, {
+            await App.fetch(`/api/sets/${active.id}/finish`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ scoreHome, scoreAway, status }),
@@ -219,11 +221,11 @@
             await loadMatch()
         }
 
-        async function cancelSet() {
+        async function performcancelSet() {
             const active = activeSet()
             if (!active) return
             if (!confirm('¿Cancelar el set actual?')) return
-            await fetch(`/api/sets/${active.id}`, {
+            await App.fetch(`/api/sets/${active.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'cancelled' }),
@@ -231,8 +233,8 @@
             await loadMatch()
         }
 
-        async function updateMatchStatus(status) {
-            await fetch(`/api/matches/${matchId}`, {
+        async function performupdateMatchStatus(status) {
+            await App.fetch(`/api/matches/${matchId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status }),
@@ -240,7 +242,21 @@
             await loadMatch()
         }
 
-        checkAuth().then(loadMatch)
+        let busy = false
+        async function scoringAction(fn, ...args) {
+            if (busy) return
+            busy = true
+            document.querySelectorAll('#content button').forEach(b => { b.disabled = true })
+            try { await fn(...args) }
+            catch { App.toast('No pudimos guardar el cambio. Revisá el marcador antes de reintentar.', true) }
+            finally { busy = false; document.querySelectorAll('#content button').forEach(b => { b.disabled = false }) }
+        }
+        const addPoint = (...args) => scoringAction(performaddPoint, ...args)
+        const undoLastPoint = (...args) => scoringAction(performundoLastPoint, ...args)
+        const finishSet = (...args) => scoringAction(performfinishSet, ...args)
+        const cancelSet = (...args) => scoringAction(performcancelSet, ...args)
+        const updateMatchStatus = (...args) => scoringAction(performupdateMatchStatus, ...args)
+        App.ready.then(checkAuth).then(loadMatch)
     </script>
 </body>
 </html>

@@ -1,21 +1,31 @@
 {
-  "name": "backend",
+  "name": "volleyball-scorer",
   "scripts": {
-    "app": "bun run src/index.ts",
-    "dev": "bun run css --watch & bun run --hot src/index.ts",
-    "css": "bunx tailwindcss -i ./static/input.css -o ./static/style.css",
+    "start": "bun run src/start.ts",
+    "app": "bun run start",
+    "dev": "bun run src/dev.ts",
+    "css": "bunx @tailwindcss/cli -i ./static/input.css -o ./static/style.css --minify",
+    "check": "tsc --noEmit",
+    "test": "bun test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "bun run src/db/migrate.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.1",
-    "hono": "^4.12.8",
-    "postgres": "^3.4.8"
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.11",
+    "postgres": "^3.4.8",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.1",
     "@types/bun": "latest",
     "drizzle-kit": "^0.31.9",
-    "tailwindcss": "^4.2.1"
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3"
+  },
+  "private": true,
+  "type": "module",
+  "overrides": {
+    "esbuild": "0.25.12"
   }
 }

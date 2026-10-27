@@ -1,155 +1,79 @@
-# VolleyballScorer 🏐
+# VolleyballScorer
 
-Real-time fixture and scoring web app for amateur volleyball tournaments. Designed to be shared publicly via a tunnel so watchers can follow live scores from their phones while one person manages the matches from a tablet or laptop.
+Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación, una rama activa (`main`) y tres despliegues elegidos por configuración.
 
-## What it does
+- Público: partidos por categoría, resultados y punto a punto; actualización automática con SSE.
+- Organización: categorías, clubes con logos, equipos, fixture, anotación, deshacer y cierre manual de sets/partidos.
+- Sin reglas rígidas de puntuación: el organizador decide ganadores y cierres.
 
-- **Public lobby** — lists all matches grouped by status (live, upcoming, finished), filterable by category
-- **Match detail** — shows set scores and point-by-point history for any match
-- **Manager panel** — authenticated area to create and manage everything: categories, clubs, teams, and matches
-- **Live scoring** — add points one by one, or enter a final set score directly if tracking point-by-point isn't practical
-- **Club logos** — shown next to team names in all views
+Bun · Hono · TypeScript · Drizzle · PostgreSQL · Tailwind · Docker Compose.
 
-## Tech stack
+## Inicio local
 
-Bun · Hono · TypeScript · Tailwind CSS · Drizzle ORM · PostgreSQL · Docker Compose · nginx · ngrok
-
-## Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) with the Compose plugin
-- A free [ngrok account](https://ngrok.com/) and auth token (for public access)
-
-## Setup
-
-### 1. Clone and configure
+Necesitás Docker con Compose y Bun 1.4.0.
 
 ```bash
-git clone <repo-url>
-cd VolleyballScorer
-cp .env.example .env
+bun scripts/setup.ts
+scripts/stack.sh up -d --build
 ```
 
-Edit `.env` and fill in every value:
+Abrí <http://localhost:3000>. La organización entra por `/manager/`; usuario `manager`, contraseña aleatoria en `MANAGER_PASSWORD` del `.env` local. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
 
-```env
-NGROK_AUTHTOKEN=your_ngrok_token
+Las migraciones se aplican antes de aceptar tráfico. PostgreSQL y los logos usan volúmenes persistentes. El puerto de la base no se publica.
 
-PSQL_HOST=localhost
-PSQL_PORT=5432
-PSQL_DATABASE=scorer
+## Elegir despliegue
 
-PSQL_ADMIN_USER=admin
-PSQL_ADMIN_PASSWORD=choose_a_strong_password
+Editá `.env` y usá siempre el mismo comando `scripts/stack.sh up -d --build`. El script selecciona el perfil de Compose a partir de `DEPLOY_MODE`.
 
-PSQL_USER=scorer
-PSQL_PASSWORD=choose_a_strong_password
+| Modo | Configuración | Servicios |
+| --- | --- | --- |
+| `local` | `DEPLOY_MODE=local`, `PUBLIC_URL=http://localhost:3000` | app + PostgreSQL |
+| `onprem` | `DEPLOY_MODE=onprem`, `PUBLIC_URL=https://tu-dominio.ngrok-free.app`, `NGROK_AUTHTOKEN` | app + PostgreSQL + ngrok |
+| `cloud` | `DEPLOY_MODE=cloud`, `PUBLIC_URL=https://voley.tudominio.com`, `DOMAIN=voley.tudominio.com` | app + PostgreSQL + Caddy |
 
-MANAGER_USER=manager
-MANAGER_PASSWORD=choose_a_strong_password
-SESSION_SECRET=any_long_random_string_here
-COOKIE_SECURE=false        # keep false for local HTTP; set true if using HTTPS
-```
+Onprem usa el dominio asignado en tu cuenta ngrok y no requiere abrir puertos del router. El inspector sólo se publica en `127.0.0.1:4040`. Cloud funciona en cualquier VPS con Docker: apuntá el DNS al servidor y permití TCP 80/443. Caddy emite y renueva HTTPS. Al cambiar de modo, retirás el servicio anterior con `scripts/stack.sh up -d --build --remove-orphans`.
 
-### 2. Configure ngrok
+En Railway/Render se despliega la misma imagen con `DATABASE_URL` y un volumen para logos; la plataforma provee HTTPS. [Guía completa](docs/operations.md#cloud-con-plataforma-administrada).
 
-Edit `ngrok/ngrok.yml` and set your desired tunnel. The app is accessible through the ngrok URL shown in the dashboard at `localhost:4040`.
+## Identidad del torneo
 
-### 3. Start the stack
+Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
+
+## Preparar el fixture
+
+1. Entrá a `/manager/`.
+2. Creá categorías y clubes; logos PNG/JPG/WebP de hasta 2 MB.
+3. Creá equipos y partidos, o importá equipos por CSV.
+4. Marcá el partido «En vivo» antes de anotar.
+5. Sumá puntos o ingresá el resultado final de cada set. Cerrá el partido manualmente.
+
+Importación CSV opcional con Python 3, sin paquetes externos:
 
 ```bash
-docker compose up --build
+# Valida sin modificar datos.
+bun scripts/import-teams.ts docs/teams.example.csv
+# Crea categorías, clubes y equipos faltantes; salta equipos existentes.
+bun scripts/import-teams.ts equipos.csv --apply
 ```
 
-This starts four containers: the Bun app, nginx (port 80), ngrok (port 4040), and PostgreSQL (port 5432).
+Columnas: `Categoria,Club,Nombre del Equipo`. La contraseña se toma del entorno cargado por Bun desde `.env`; no se pasa en argumentos. `--url https://...` permite apuntar a otro despliegue con las credenciales correspondientes. La importación es secuencial: si se interrumpe, puede repetirse sin duplicar los equipos ya importados. No convierte automáticamente datos de Firestore.
 
-### 4. Run migrations
-
-With the stack running, open a second terminal and run:
-
-```bash
-bun --env-file .env --cwd backend run db:migrate
-```
-
-> If `bun` isn't in your PATH, use the full path: `~/.bun/bin/bun`
-
-After migrating, grant table permissions to the app user:
-
-```bash
-docker exec volleyball_scorer_db psql -U admin -d scorer \
-  -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scorer; \
-      GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scorer;"
-```
-
-> **Why?** PostgreSQL's `GRANT ON DATABASE` only allows connecting — it doesn't grant access to tables. This step gives the app user the read/write access it needs. A fresh stack created after this fix will do it automatically via the init script, but existing databases need the manual grant.
-
-### 5. Add a background image (optional)
-
-Place an image at `backend/static/images/bg.png`. It will appear as a faint watermark behind the public lobby. The directory needs to be created:
-
-```bash
-mkdir -p backend/static/images
-```
-
-## First run — manager workflow
-
-Open the ngrok URL (or `http://localhost`) and navigate to `/login.html`. After logging in:
-
-1. **Categorías** — add the tournament categories (e.g. Masculino A, Femenino B)
-2. **Clubes** — add participating clubs, optionally uploading a logo for each
-3. **Equipos** — add teams, assigning each one a club and category
-4. **Nuevo partido** — create a match; the first set is created automatically
-
-Then open **Gestionar** next to a match to start scoring.
-
-## Scoring a match
-
-From the manager game page (`/manager/game.html?id=X`):
-
-- **Point by point** — tap `+ Local` or `+ Visitante` after each rally; tap `↩ Deshacer` to remove the last point
-- **Final score** — enter the final set score in the two number fields and press the winner button; this records the score as a single point row and auto-creates the next set
-- **Match status** — use the status buttons at the bottom to mark the overall match as in progress, finished, or cancelled
-
-Watchers can follow along at the public URL (`/` and `/game.html?id=X`). The page does not auto-refresh yet — watchers need to reload manually.
-
-## Development
-
-To run the backend without Docker:
+## Desarrollo y verificación
 
 ```bash
 cd backend
-bun run dev     # starts Hono with hot reload + Tailwind watch
+bun install --frozen-lockfile
+bun run check
+bun run css
+bun test
 ```
 
-Make sure PostgreSQL is running and the env vars are exported in your shell (or place a `.env` file inside `backend/`).
+Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `DATABASE_URL`; desde la raíz: `bun --env-file .env --cwd backend run dev`. No publiques el PostgreSQL de producción para desarrollar. Las [pruebas de integración](docs/operations.md#pruebas) usan otra base, nunca datos del torneo. GitHub Actions comprueba tipos, CSS, migraciones, tests y build Docker.
 
-### Schema changes
+## Operación y decisiones
 
-After editing `backend/src/db/schema.ts`:
+- [Backup, restauración, migración y despliegues](docs/operations.md)
+- [Arquitectura, ramas y límites](docs/architecture.md)
+- [Hosting: costos y recomendación, investigado el 26/10/2026](docs/hosting.md)
 
-```bash
-bun --env-file .env --cwd backend run db:generate
-bun --env-file .env --cwd backend run db:migrate
-```
-
-Then re-run the `GRANT` command if running in Docker.
-
-## Project layout
-
-```
-VolleyballScorer/
-├── backend/
-│   ├── src/
-│   │   ├── index.ts           # app entry, route wiring
-│   │   ├── middleware/auth.ts  # session cookie check
-│   │   ├── routes/            # one file per resource
-│   │   └── db/                # Drizzle schema, client, config
-│   └── static/
-│       ├── index.html         # public lobby
-│       ├── game.html          # public match detail
-│       ├── login.html         # manager login
-│       └── manager/           # manager pages (auth-gated by API)
-├── nginx/nginx.conf
-├── ngrok/ngrok.yml
-├── db/db_init/psql/           # runs once on fresh DB
-└── docker-compose.yml
-```
+Los backups y secretos quedan fuera de Git. Un volumen persistente no reemplaza una copia fuera del servidor.

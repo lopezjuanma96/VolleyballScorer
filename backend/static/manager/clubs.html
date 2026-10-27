@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manager — Clubes</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
@@ -31,7 +33,7 @@
                         Seleccionar imagen
                     </span>
                     <span id="logo-filename" class="text-sm text-gray-400 truncate">Ningún archivo seleccionado</span>
-                    <input type="file" id="club-logo" accept="image/*" class="hidden"
+                    <input type="file" id="club-logo" accept="image/png,image/jpeg,image/webp" class="sr-only"
                         onchange="document.getElementById('logo-filename').textContent = this.files[0]?.name ?? 'Ningún archivo seleccionado'" />
                 </label>
             </div>
@@ -56,13 +58,13 @@
 
     <script>
         async function checkAuth() {
-            const res = await fetch('/api/auth/me')
-            if (!res.ok) window.location.href = '/login.html'
+            const res = await App.fetch('/api/auth/me')
+            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
         }
 
         async function loadClubs() {
             try {
-                const res = await fetch('/api/clubs')
+                const res = await App.fetch('/api/clubs')
                 if (!res.ok) throw new Error()
                 const clubs = await res.json()
 
@@ -77,11 +79,11 @@
                         ${clubs.map(c => `
                             <div class="bg-white rounded-xl shadow p-4 flex items-center gap-4">
                                 ${c.logo
-                                    ? `<img src="${c.logo}" class="w-10 h-10 object-contain rounded shrink-0" />`
+                                    ? `<img src="${App.escape(c.logo)}" class="w-10 h-10 object-contain rounded shrink-0" />`
                                     : '<div class="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs shrink-0">Sin logo</div>'}
-                                <span class="flex-1 font-medium text-gray-800">${c.name}</span>
+                                <span class="flex-1 font-medium text-gray-800">${App.escape(c.name)}</span>
                                 <div class="flex gap-3">
-                                    <button onclick="editClub(${c.id}, '${c.name.replace(/'/g, "\\'")}')"
+                                    <button onclick="editClub(${c.id}, this.dataset.name)" data-name="${App.escape(c.name)}"
                                         class="text-sm text-brand font-medium hover:underline">Editar</button>
                                     <button onclick="deleteClub(${c.id})"
                                         class="text-sm text-red-500 hover:underline">Eliminar</button>
@@ -134,7 +136,7 @@
             const method = id ? 'PUT' : 'POST'
 
             try {
-                const res = await fetch(url, { method, body: formData })
+                const res = await App.fetch(url, { method, body: formData })
                 if (!res.ok) throw new Error()
                 resetForm()
                 loadClubs()
@@ -146,12 +148,12 @@
 
         async function deleteClub(id) {
             if (!confirm('¿Eliminar este club?')) return
-            const res = await fetch(`/api/clubs/${id}`, { method: 'DELETE' })
+            const res = await App.fetch(`/api/clubs/${id}`, { method: 'DELETE' })
             if (res.ok) loadClubs()
             else alert('Error al eliminar. Puede que tenga equipos asociados.')
         }
 
-        checkAuth().then(loadClubs)
+        App.ready.then(checkAuth).then(loadClubs)
     </script>
 </body>
 </html>

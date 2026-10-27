@@ -2,56 +2,30 @@ import { Hono } from 'hono'
 import { db } from '../db'
 import { sets, points } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { HTTPException } from 'hono/http-exception'
 import { authMiddleware } from '../middleware/auth'
+import { lockActiveSet } from '../scoring'
 
 const setRoutes = new Hono()
-
-setRoutes.put('/:id', authMiddleware, async (c) => {
-    const id = Number(c.req.param('id'))
+async function transition(id: number, status: typeof sets.$inferSelect.status, score?: { scoreHome: number; scoreAway: number }) {
+    if (status === 'in_progress') throw new HTTPException(400, { message: 'No se puede reabrir un set desde esta operación.' })
+    return db.transaction(async tx => {
+        const current = await lockActiveSet(tx, id)
+        if (score) await tx.insert(points).values({ setId: id, ...score, homeScored: status === 'finished_home' })
+        const [updated] = await tx.update(sets).set({ status }).where(eq(sets.id, id)).returning()
+        const allSets = await tx.select().from(sets).where(eq(sets.matchId, current.matchId))
+        // Cancellation also creates a replacement so the match remains playable.
+        await tx.insert(sets).values({ matchId: current.matchId, setNumber: Math.max(...allSets.map(s => s.setNumber)) + 1 })
+        return updated
+    })
+}
+setRoutes.put('/:id', authMiddleware, async c => {
     const { status } = await c.req.json()
-
-    const result = await db.transaction(async (tx) => {
-        const [updated] = await tx.update(sets).set({ status }).where(eq(sets.id, id)).returning()
-        if (!updated) return null
-
-        if (status === 'finished_home' || status === 'finished_away') {
-            const existingSets = await tx.select().from(sets).where(eq(sets.matchId, updated.matchId))
-            const nextSetNumber = Math.max(...existingSets.map(s => s.setNumber)) + 1
-            await tx.insert(sets).values({ matchId: updated.matchId, setNumber: nextSetNumber, status: 'in_progress' })
-        }
-
-        return updated
-    })
-
-    if (!result) return c.json({ error: 'Not found' }, 404)
-    return c.json(result)
+    return c.json(await transition(Number(c.req.param('id')), status))
 })
-
-// Enter final score and mark set as finished
-setRoutes.post('/:id/finish', authMiddleware, async (c) => {
-    const id = Number(c.req.param('id'))
+setRoutes.post('/:id/finish', authMiddleware, async c => {
     const { scoreHome, scoreAway, status } = await c.req.json()
-    // status must be 'finished_home' or 'finished_away'
-
-    const result = await db.transaction(async (tx) => {
-        const [currentSet] = await tx.select().from(sets).where(eq(sets.id, id))
-        if (!currentSet) return null
-
-        const homeScored = status === 'finished_home'
-
-        await tx.insert(points).values({ setId: id, scoreHome, scoreAway, homeScored })
-
-        const [updated] = await tx.update(sets).set({ status }).where(eq(sets.id, id)).returning()
-
-        const allSets = await tx.select().from(sets).where(eq(sets.matchId, currentSet.matchId))
-        const nextSetNumber = Math.max(...allSets.map(s => s.setNumber)) + 1
-        await tx.insert(sets).values({ matchId: currentSet.matchId, setNumber: nextSetNumber, status: 'in_progress' })
-
-        return updated
-    })
-
-    if (!result) return c.json({ error: 'Not found' }, 404)
-    return c.json(result)
+    // Tournament-specific scoring rules and match winners remain manual.
+    return c.json(await transition(Number(c.req.param('id')), status, { scoreHome, scoreAway }))
 })
-
 export default setRoutes

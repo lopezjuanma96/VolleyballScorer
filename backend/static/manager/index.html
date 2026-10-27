@@ -4,18 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manager — Partidos</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
     <header class="bg-surface text-brand px-4 py-4 shadow flex items-center justify-between">
         <h1 class="text-xl font-bold tracking-wide">🏐 Manager</h1>
-        <div class="flex gap-3 text-sm">
-            <a href="/manager/categories.html" class="text-brand hover:underline">Categorías</a>
-            <a href="/manager/clubs.html" class="text-brand hover:underline">Clubes</a>
-            <a href="/manager/teams.html" class="text-brand hover:underline">Equipos</a>
-            <button onclick="logout()" class="text-gray-500 hover:text-red-500">Salir</button>
-        </div>
+        <button onclick="logout()" class="text-sm text-gray-300 hover:text-red-300">Salir</button>
     </header>
 
     <main class="px-4 py-4 max-w-2xl mx-auto space-y-4">
@@ -34,12 +31,12 @@
 
     <script>
         async function checkAuth() {
-            const res = await fetch('/api/auth/me')
-            if (!res.ok) window.location.href = '/login.html'
+            const res = await App.fetch('/api/auth/me')
+            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
         }
 
         async function logout() {
-            await fetch('/api/auth/logout', { method: 'POST' })
+            await App.fetch('/api/auth/logout', { method: 'POST' })
             window.location.href = '/login.html'
         }
 
@@ -60,22 +57,19 @@
         }
 
         function formatDateTime(iso) {
-            return new Date(iso).toLocaleString('es', {
-                day: '2-digit', month: '2-digit',
-                hour: '2-digit', minute: '2-digit'
-            })
+            return `${App.date(iso)} · ${App.time(iso)}`
         }
 
         async function deleteMatch(id) {
             if (!confirm('¿Eliminar este partido y todos sus datos?')) return
-            const res = await fetch(`/api/matches/${id}`, { method: 'DELETE' })
+            const res = await App.fetch(`/api/matches/${id}`, { method: 'DELETE' })
             if (res.ok) loadMatches()
             else alert('Error al eliminar el partido.')
         }
 
         async function loadMatches() {
             try {
-            const res = await fetch('/api/matches')
+            const res = await App.fetch('/api/matches')
             if (!res.ok) throw new Error()
             const matches = await res.json()
 
@@ -89,10 +83,10 @@
                 <div class="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-4">
                     <div class="flex-1 min-w-0">
                         <div class="font-semibold text-gray-800 truncate">
-                            ${m.teamHome.name} vs ${m.teamAway.name}
+                            ${App.escape(m.teamHome.name)} vs ${App.escape(m.teamAway.name)}
                         </div>
                         <div class="text-xs text-gray-400 mt-0.5">
-                            ${m.categoryName} · ${courtLabel(m.court)} · ${formatDateTime(m.scheduledAt)}
+                            ${App.escape(m.categoryName)} · ${courtLabel(m.court)} · ${formatDateTime(m.scheduledAt)}
                         </div>
                         <div class="text-xs mt-1">
                             <span class="font-medium text-gray-600">${statusLabel(m.status)}</span>
@@ -120,7 +114,7 @@
             }
         }
 
-        checkAuth().then(loadMatches)
+        App.ready.then(checkAuth).then(loadMatches)
     </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, serial, varchar, integer, boolean, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, serial, varchar, integer, boolean, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // --- Enums ---
@@ -48,14 +48,14 @@ export const matches = pgTable('matches', {
     court: courtEnum('court').notNull(),
     scheduledAt: timestamp('scheduled_at').notNull(),
     status: matchStatusEnum('status').notNull().default('upcoming'),
-})
+}, table => [index('matches_category_schedule_idx').on(table.categoryId, table.scheduledAt)])
 
 export const sets = pgTable('sets', {
     id: serial('id').primaryKey(),
     matchId: integer('match_id').notNull().references(() => matches.id),
     setNumber: integer('set_number').notNull(),
     status: setStatusEnum('status').notNull().default('in_progress'),
-})
+}, table => [uniqueIndex('sets_match_number_idx').on(table.matchId, table.setNumber), index('sets_match_idx').on(table.matchId)])
 
 export const points = pgTable('points', {
     id: serial('id').primaryKey(),
@@ -63,7 +63,7 @@ export const points = pgTable('points', {
     scoreHome: integer('score_home').notNull(),
     scoreAway: integer('score_away').notNull(),
     homeScored: boolean('home_scored').notNull(),
-})
+}, table => [index('points_set_id_idx').on(table.setId, table.id)])
 
 // --- Relations ---
 

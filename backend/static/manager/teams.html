@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manager — Equipos</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
@@ -62,25 +64,25 @@
         let allCategories = []
 
         async function checkAuth() {
-            const res = await fetch('/api/auth/me')
-            if (!res.ok) window.location.href = '/login.html'
+            const res = await App.fetch('/api/auth/me')
+            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
         }
 
         async function loadSelectors() {
             const [clubsRes, catsRes] = await Promise.all([
-                fetch('/api/clubs'),
-                fetch('/api/categories'),
+                App.fetch('/api/clubs'),
+                App.fetch('/api/categories'),
             ])
             allClubs = await clubsRes.json()
             allCategories = await catsRes.json()
 
             document.getElementById('team-club').innerHTML =
                 '<option value="">Seleccionar club...</option>' +
-                allClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+                allClubs.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
 
             document.getElementById('team-category').innerHTML =
                 '<option value="">Seleccionar categoría...</option>' +
-                allCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+                allCategories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
         }
 
         function clubName(id) { return allClubs.find(c => c.id === id)?.name ?? id }
@@ -88,7 +90,7 @@
 
         async function loadTeams() {
             try {
-                const res = await fetch('/api/teams')
+                const res = await App.fetch('/api/teams')
                 if (!res.ok) throw new Error()
                 const teams = await res.json()
 
@@ -103,11 +105,11 @@
                         ${teams.map(t => `
                             <div class="bg-white rounded-xl shadow p-4 flex items-center gap-4">
                                 <div class="flex-1">
-                                    <div class="font-medium text-gray-800">${t.name}</div>
-                                    <div class="text-xs text-gray-400 mt-0.5">${clubName(t.clubId)} · ${categoryName(t.categoryId)}</div>
+                                    <div class="font-medium text-gray-800">${App.escape(t.name)}</div>
+                                    <div class="text-xs text-gray-400 mt-0.5">${App.escape(clubName(t.clubId))} · ${App.escape(categoryName(t.categoryId))}</div>
                                 </div>
                                 <div class="flex gap-3">
-                                    <button onclick="editTeam(${t.id}, '${t.name.replace(/'/g, "\\'")}', ${t.clubId}, ${t.categoryId})"
+                                    <button onclick="editTeam(${t.id}, this.dataset.name, ${t.clubId}, ${t.categoryId})" data-name="${App.escape(t.name)}"
                                         class="text-sm text-brand font-medium hover:underline">Editar</button>
                                     <button onclick="deleteTeam(${t.id})"
                                         class="text-sm text-red-500 hover:underline">Eliminar</button>
@@ -159,7 +161,7 @@
             const method = id ? 'PUT' : 'POST'
 
             try {
-                const res = await fetch(url, {
+                const res = await App.fetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, clubId, categoryId }),
@@ -175,12 +177,12 @@
 
         async function deleteTeam(id) {
             if (!confirm('¿Eliminar este equipo?')) return
-            const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' })
+            const res = await App.fetch(`/api/teams/${id}`, { method: 'DELETE' })
             if (res.ok) loadTeams()
             else alert('Error al eliminar. Puede que tenga partidos asociados.')
         }
 
-        checkAuth().then(() => Promise.all([loadSelectors(), loadTeams()]))
+        App.ready.then(checkAuth).then(loadSelectors).then(loadTeams)
     </script>
 </body>
 </html>

@@ -1,0 +1,32 @@
+name: Check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: scorer
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: scorer_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U scorer -d scorer_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://scorer:test-only-password@localhost:5432/scorer_test
+      MANAGER_USER: manager
+      MANAGER_PASSWORD: test-manager-password
+      SESSION_SECRET: test-session-secret-at-least-32-characters
+      RUN_DB_TESTS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+        working-directory: backend
+      - run: bun run check && bun run css && bun run db:migrate && bun test
+        working-directory: backend
+      - run: docker build -t volleyball-scorer ./backend

@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manager — Crear Partido</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
@@ -68,28 +70,28 @@
         let allTeams = []
 
         async function checkAuth() {
-            const res = await fetch('/api/auth/me')
-            if (!res.ok) window.location.href = '/login.html'
+            const res = await App.fetch('/api/auth/me')
+            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
         }
 
         async function loadData() {
             const [catsRes, teamsRes] = await Promise.all([
-                fetch('/api/categories'),
-                fetch('/api/teams'),
+                App.fetch('/api/categories'),
+                App.fetch('/api/teams'),
             ])
             const categories = await catsRes.json()
             allTeams = await teamsRes.json()
 
             document.getElementById('category').innerHTML =
                 '<option value="">Seleccionar categoría...</option>' +
-                categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+                categories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
         }
 
         document.getElementById('category').addEventListener('change', function () {
             const catId = Number(this.value)
             const filtered = catId ? allTeams.filter(t => t.categoryId === catId) : []
             const options = filtered.length > 0
-                ? filtered.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+                ? filtered.map(t => `<option value="${t.id}">${App.escape(t.name)}</option>`).join('')
                 : '<option value="">Sin equipos en esta categoría</option>'
 
             document.getElementById('team-home').innerHTML = options
@@ -116,10 +118,10 @@
                 return
             }
 
-            const res = await fetch('/api/matches', {
+            const res = await App.fetch('/api/matches', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ teamHomeId, teamAwayId, categoryId, court, scheduledAt }),
+                body: JSON.stringify({ teamHomeId, teamAwayId, categoryId, court, scheduledAt: new Date(scheduledAt).toISOString() }),
             })
 
             if (res.ok) {
@@ -130,7 +132,7 @@
             }
         }
 
-        checkAuth().then(loadData)
+        App.ready.then(checkAuth).then(loadData)
     </script>
 </body>
 </html>

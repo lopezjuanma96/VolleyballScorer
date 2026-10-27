@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { db } from '../db'
-import { teams } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { teams, matches } from '../db/schema'
+import { HTTPException } from 'hono/http-exception'
+import { eq, and, or } from 'drizzle-orm'
 import { authMiddleware } from '../middleware/auth'
 
 const teamRoutes = new Hono()
@@ -30,7 +31,16 @@ teamRoutes.post('/', authMiddleware, async (c) => {
 teamRoutes.put('/:id', authMiddleware, async (c) => {
     const id = Number(c.req.param('id'))
     const { clubId, categoryId, name } = await c.req.json()
-    const [row] = await db.update(teams).set({ clubId, categoryId, name }).where(eq(teams.id, id)).returning()
+    const row = await db.transaction(async tx => {
+        const [current] = await tx.select().from(teams).where(eq(teams.id, id)).for('update')
+        if (!current) return null
+        if (current.categoryId !== categoryId) {
+            const [used] = await tx.select({ id: matches.id }).from(matches).where(or(eq(matches.teamHomeId, id), eq(matches.teamAwayId, id))).limit(1)
+            if (used) throw new HTTPException(409, { message: 'Un equipo con partidos no puede cambiar de categoría.' })
+        }
+        const [updated] = await tx.update(teams).set({ clubId, categoryId, name }).where(eq(teams.id, id)).returning()
+        return updated
+    })
     if (!row) return c.json({ error: 'Not found' }, 404)
     return c.json(row)
 })

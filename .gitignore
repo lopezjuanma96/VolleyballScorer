@@ -1,16 +1,24 @@
-# Python
-*.pyc
-__pycache__
-.ipynb
-
-.venv
-
-
-# GCP Credentials
-serviceAccountKey.json
-
-# Environment variables
+# Local configuration and secrets
 .env
+.env.*
+!.env.example
+!.env.*.example
+serviceAccountKey.json
+# Dependencies and generated assets
+node_modules/
+backend/static/style.css
+# Runtime state and backups
+backend/static/uploads/
+backups/
+db/db_data/
+*.bundle
+*.log
+# Editors / legacy Python environments
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
 
-# Database files
-db/db_data/*
+# Manual migration exports
+*.dump
+old-uploads/

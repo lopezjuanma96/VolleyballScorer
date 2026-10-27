@@ -1,8 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
 import * as schema from './schema'
-import { dbConfig } from './config'
+import { createClient } from './config'
 
-const client = postgres({ ...dbConfig, username: process.env.PSQL_USER })
-
+export const client = createClient()
 export const db = drizzle(client, { schema })

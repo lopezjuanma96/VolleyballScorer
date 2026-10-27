@@ -1,15 +1,22 @@
 import { Hono } from 'hono'
 import { db } from '../db'
-import { matches, sets, points } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { matches, sets, points, teams, clubs, categories } from '../db/schema'
+import { HTTPException } from 'hono/http-exception'
+import { eq, and, inArray } from 'drizzle-orm'
 import { authMiddleware } from '../middleware/auth'
 
 const matchRoutes = new Hono()
 
-function buildMatchShape(match: any) {
-    const setsWithScores = (match.sets as any[])
-        .sort((a: any, b: any) => a.setNumber - b.setNumber)
-        .map((s: any) => {
+type MatchWithRelations = typeof matches.$inferSelect & {
+    category: typeof categories.$inferSelect
+    teamHome: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
+    teamAway: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
+    sets: (typeof sets.$inferSelect & { points: (typeof points.$inferSelect)[] })[]
+}
+function buildMatchShape(match: MatchWithRelations) {
+    const setsWithScores = match.sets
+        .sort((a, b) => a.setNumber - b.setNumber)
+        .map((s) => {
             const lastPoint = s.points.length > 0 ? s.points[s.points.length - 1] : null
             return {
                 id: s.id,
@@ -44,14 +51,15 @@ function buildMatchShape(match: any) {
 }
 
 const withClause = {
-    category: true,
-    teamHome: { with: { club: true } },
-    teamAway: { with: { club: true } },
+    category: true as const,
+    teamHome: { with: { club: true as const } },
+    teamAway: { with: { club: true as const } },
     sets: {
         orderBy: (s: any, { asc }: any) => [asc(s.setNumber)],
         with: {
             points: {
-                orderBy: (p: any, { asc }: any) => [asc(p.id)],
+                orderBy: (p: any, { desc }: any) => [desc(p.id)],
+                limit: 1,
             },
         },
     },
@@ -78,16 +86,16 @@ matchRoutes.get('/:id', async (c) => {
 
     const match = await db.query.matches.findFirst({
         where: eq(matches.id, id),
-        with: withClause,
+        with: { ...withClause, sets: { ...withClause.sets, with: { points: { orderBy: (p, { asc }) => [asc(p.id)] } } } },
     })
 
     if (!match) return c.json({ error: 'Not found' }, 404)
 
     const base = buildMatchShape(match)
-    const sortedSets = [...(match.sets as any[])].sort((a, b) => a.setNumber - b.setNumber)
+    const sortedSets = [...match.sets].sort((a, b) => a.setNumber - b.setNumber)
     const setsWithPoints = base.sets.map((s, i) => ({
         ...s,
-        points: sortedSets[i].points.map((p: any) => ({
+        points: sortedSets[i].points.map((p) => ({
             id: p.id,
             scoreHome: p.scoreHome,
             scoreAway: p.scoreAway,
@@ -102,6 +110,7 @@ matchRoutes.post('/', authMiddleware, async (c) => {
     const { teamHomeId, teamAwayId, categoryId, court, scheduledAt } = await c.req.json()
 
     const result = await db.transaction(async (tx) => {
+        await validateTeams(tx, teamHomeId, teamAwayId, categoryId)
         const [match] = await tx.insert(matches).values({
             teamHomeId, teamAwayId, categoryId, court,
             scheduledAt: new Date(scheduledAt),
@@ -124,7 +133,22 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
     if (body.teamHomeId !== undefined) updates.teamHomeId = body.teamHomeId
     if (body.teamAwayId !== undefined) updates.teamAwayId = body.teamAwayId
 
-    const [row] = await db.update(matches).set(updates).where(eq(matches.id, id)).returning()
+    const row = await db.transaction(async tx => {
+        const [current] = await tx.select().from(matches).where(eq(matches.id, id)).for('update')
+        if (!current) return null
+        await validateTeams(tx, updates.teamHomeId ?? current.teamHomeId, updates.teamAwayId ?? current.teamAwayId, current.categoryId)
+        if (body.status && body.status !== 'in_progress' && body.status !== 'upcoming') {
+            await tx.update(sets).set({ status: 'cancelled' }).where(and(eq(sets.matchId, id), eq(sets.status, 'in_progress')))
+        }
+        if (body.status === 'in_progress') {
+            const allSets = await tx.select().from(sets).where(eq(sets.matchId, id))
+            if (!allSets.some(s => s.status === 'in_progress')) {
+                await tx.insert(sets).values({ matchId: id, setNumber: Math.max(0, ...allSets.map(s => s.setNumber)) + 1 })
+            }
+        }
+        const [updated] = await tx.update(matches).set(updates).where(eq(matches.id, id)).returning()
+        return updated
+    })
     if (!row) return c.json({ error: 'Not found' }, 404)
     return c.json(row)
 })
@@ -133,6 +157,8 @@ matchRoutes.delete('/:id', authMiddleware, async (c) => {
     const id = Number(c.req.param('id'))
 
     await db.transaction(async (tx) => {
+        const [current] = await tx.select().from(matches).where(eq(matches.id, id)).for('update')
+        if (!current) throw new HTTPException(404, { message: 'Partido no encontrado.' })
         const matchSets = await tx.select().from(sets).where(eq(sets.matchId, id))
         for (const s of matchSets) {
             await tx.delete(points).where(eq(points.setId, s.id))
@@ -144,4 +170,11 @@ matchRoutes.delete('/:id', authMiddleware, async (c) => {
     return c.json({ ok: true })
 })
 
+async function validateTeams(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], home: number, away: number, categoryId: number) {
+    if (home === away) throw new HTTPException(400, { message: 'Elegí dos equipos distintos.' })
+    const selected = await tx.select().from(teams).where(inArray(teams.id, [home, away])).for('share')
+    if (![home, away].every(id => selected.some(t => t.id === id && t.categoryId === categoryId))) {
+        throw new HTTPException(400, { message: 'Los equipos deben pertenecer a la categoría del partido.' })
+    }
+}
 export default matchRoutes
