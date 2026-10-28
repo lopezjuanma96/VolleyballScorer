@@ -57,13 +57,10 @@ La oferta internacional KVM 1 consultada publica **USD 6,49/mes efectivos**, con
 
 La tienda argentina consultada publica KVM 1 a **ARS 12.099/mes efectivos**, contrato de **ARS 290.376 por 24 meses** (ofrece hasta 12 cuotas) y renovación a **ARS 24.199/mes**. No es una cotización del pago final: revisar impuestos/recargos y condiciones del checkout. [Hostinger Argentina](https://www.hostinger.com/ar/vps-argentina).
 
-Para publicar este torneo con poco mantenimiento, mantendría Railway como primera opción. Un VPS de Hostinger tiene más sentido si se usará todo el año o también para otros proyectos, y se quiere asumir su administración. Para uno o pocos eventos, el compromiso promocional de 24 meses pesa más que una diferencia pequeña en la cifra mensual anunciada.
+La recomendación inicial de Railway priorizaba poco mantenimiento para uno o pocos eventos. Después, el usuario aclaró que también quiere alojar su portfolio y experimentar durante el año, asumiendo la administración del servidor. Con ese uso, la opción elegida para la próxima etapa es Hostinger KVM 1; el día del torneo la VPS se dedicará al evento.
 
 ## Decisión práctica
 
-1. Ensayar local con el flujo de torneo y algunos teléfonos.
-2. Usar ngrok para comprobar acceso remoto y practicar operación onprem.
-3. Para el evento, preferir Railway con presupuesto inicial USD 5–10, dos servicios y backups, o el VPS si querés mantener el aprendizaje de administrar el host.
-4. Probar carga y latencia en la región elegida, restaurar un backup de ensayo y recién entonces publicar la URL.
+La [carga local](load-testing.md) ya se ensayó con hasta 450 espectadores y dos canchas, incluida una corrida sostenida de 100 espectadores. Queda validar la VPS concreta, HTTPS y conectividad de la sede. Contratación, conexión del MCP oficial, despliegue y autenticación con Google están anotados en [TODO.md](../TODO.md) para retomar el 29 o 30/10/2026. No se añadió una nueva dependencia de hosting.
 
 La limpieza no creó cuentas, recursos cloud ni gastos. La elección del proveedor no cambia la rama ni el modelo de datos.

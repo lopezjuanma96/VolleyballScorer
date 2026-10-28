@@ -74,6 +74,7 @@ Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `D
 
 ## Operación y decisiones
 
+- [TODO: Google por invitación y puesta en marcha en Hostinger](TODO.md)
 - [Backup, restauración, migración y despliegues](docs/operations.md)
 - [Arquitectura, ramas y límites](docs/architecture.md)
 - [Revisión independiente y mejoras pendientes](docs/independent-review.md)
