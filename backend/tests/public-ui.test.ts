@@ -77,6 +77,11 @@ const fixture = (status: string) => ({
 })
 const pageScript = async (path: string) => (await Bun.file(path).text()).match(/<script>([\s\S]*?)<\/script>/)![1]
 describe('official match result', () => {
+    test('timezone aliases do not produce a false scheduling warning', () => {
+        const view = browser()
+        expect(view.context.App.sameTimeZone('America/Cordoba', 'America/Argentina/Cordoba')).toBe(true)
+        expect(view.context.App.sameTimeZone('Europe/Madrid', 'America/Argentina/Cordoba')).toBe(false)
+    })
     test('lobby announces the adjudicated winner even when set totals disagree', async () => {
         const view = browser()
         runInContext(await pageScript('./static/index.html'), view.context)

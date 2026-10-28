@@ -1,0 +1,717 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    "Local HTTP benchmark, not Hostinger capacity certification.",
+    "Baseline results normalized to the same correctness and latency/throughput thresholds as optimized runs.",
+    "Original container samples remain in ignored backups/ reports."
+  ],
+  "runs": [
+    {
+      "createdAt": "2026-10-28T04:35:32.154Z",
+      "host": {
+        "model": "AMD Ryzen 5 4500 6-Core Processor",
+        "logicalCpus": 12
+      },
+      "budget": {
+        "sharedCpu": "0",
+        "appMemoryGiB": 1,
+        "dbMemoryGiB": 2
+      },
+      "fixture": {
+        "matches": 120,
+        "categories": 6,
+        "teams": 48,
+        "historicalRecords": 10800
+      },
+      "parameters": {
+        "stages": [
+          50,
+          150,
+          300,
+          450
+        ],
+        "duration": 30,
+        "pointInterval": 1000
+      },
+      "stopped": false,
+      "label": "before-read-coalescing",
+      "results": [
+        {
+          "spectators": 50,
+          "actualSeconds": 30.5,
+          "connected": 50,
+          "caughtUp": 50,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 61,
+          "reads": {
+            "count": 2582,
+            "errors": 0,
+            "bytes": 55109339,
+            "p50Ms": 769.82,
+            "p95Ms": 1066.51,
+            "p99Ms": 1166.64
+          },
+          "writes": {
+            "count": 61,
+            "errors": 0,
+            "bytes": 4226,
+            "p50Ms": 831.83,
+            "p95Ms": 1017.56,
+            "p99Ms": 1078.82
+          },
+          "pointToRefresh": {
+            "count": 2124,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1216.25,
+            "p95Ms": 1925.72,
+            "p99Ms": 2071.81
+          },
+          "connection": {
+            "count": 50,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 10.11,
+            "p95Ms": 22.81,
+            "p99Ms": 23.1
+          },
+          "requestsPerSecond": 86.66,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 31,
+              "records": 31,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 30,
+              "records": 30,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "intendedPoints": 60.0,
+          "withinTargets": false,
+          "passed": false,
+          "sampledCombinedMemoryPeakMiB": 165.27
+        },
+        {
+          "spectators": 150,
+          "actualSeconds": 30.5,
+          "connected": 150,
+          "caughtUp": 150,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 60,
+          "reads": {
+            "count": 4950,
+            "errors": 0,
+            "bytes": 110463224,
+            "p50Ms": 722.75,
+            "p95Ms": 1171.68,
+            "p99Ms": 1305.74
+          },
+          "writes": {
+            "count": 60,
+            "errors": 0,
+            "bytes": 4230,
+            "p50Ms": 503.49,
+            "p95Ms": 1157.08,
+            "p99Ms": 1282.91
+          },
+          "pointToRefresh": {
+            "count": 4838,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1196.71,
+            "p95Ms": 1926.3,
+            "p99Ms": 2133.46
+          },
+          "connection": {
+            "count": 150,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 2.65,
+            "p95Ms": 5.51,
+            "p99Ms": 5.76
+          },
+          "requestsPerSecond": 164.27,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 61,
+              "records": 61,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 60,
+              "records": 60,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "intendedPoints": 60.0,
+          "withinTargets": false,
+          "passed": false,
+          "sampledCombinedMemoryPeakMiB": 206.58
+        },
+        {
+          "spectators": 300,
+          "actualSeconds": 31.17,
+          "connected": 300,
+          "caughtUp": 300,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 41,
+          "reads": {
+            "count": 5949,
+            "errors": 0,
+            "bytes": 135961795,
+            "p50Ms": 2298.63,
+            "p95Ms": 2745.67,
+            "p99Ms": 2965.96
+          },
+          "writes": {
+            "count": 41,
+            "errors": 0,
+            "bytes": 2890,
+            "p50Ms": 1569.22,
+            "p95Ms": 2988.06,
+            "p99Ms": 3273.02
+          },
+          "pointToRefresh": {
+            "count": 5155,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 2533.28,
+            "p95Ms": 5102.88,
+            "p99Ms": 5411.13
+          },
+          "connection": {
+            "count": 300,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1.73,
+            "p95Ms": 3.39,
+            "p99Ms": 4.09
+          },
+          "requestsPerSecond": 192.16,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 82,
+              "records": 82,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 80,
+              "records": 80,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "intendedPoints": 60.0,
+          "withinTargets": false,
+          "passed": false,
+          "sampledCombinedMemoryPeakMiB": 298.14
+        },
+        {
+          "spectators": 450,
+          "actualSeconds": 34.06,
+          "connected": 450,
+          "caughtUp": 450,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 29,
+          "reads": {
+            "count": 6800,
+            "errors": 0,
+            "bytes": 157914018,
+            "p50Ms": 4072.9,
+            "p95Ms": 4403.61,
+            "p99Ms": 4549.17
+          },
+          "writes": {
+            "count": 29,
+            "errors": 0,
+            "bytes": 2044,
+            "p50Ms": 2976.86,
+            "p95Ms": 4268.69,
+            "p99Ms": 4455.58
+          },
+          "pointToRefresh": {
+            "count": 5394,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 5363.62,
+            "p95Ms": 8062.2,
+            "p99Ms": 8404.46
+          },
+          "connection": {
+            "count": 450,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1.62,
+            "p95Ms": 108.4,
+            "p99Ms": 175.11
+          },
+          "requestsPerSecond": 200.49,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 97,
+              "records": 97,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 94,
+              "records": 94,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "intendedPoints": 60.0,
+          "withinTargets": false,
+          "passed": false,
+          "sampledCombinedMemoryPeakMiB": 355.11
+        }
+      ],
+      "passed": false
+    },
+    {
+      "createdAt": "2026-10-28T04:39:26.223Z",
+      "host": {
+        "model": "AMD Ryzen 5 4500 6-Core Processor",
+        "logicalCpus": 12
+      },
+      "budget": {
+        "sharedCpu": "0",
+        "appMemoryGiB": 1,
+        "dbMemoryGiB": 2
+      },
+      "fixture": {
+        "matches": 120,
+        "categories": 6,
+        "teams": 48,
+        "historicalRecords": 10800
+      },
+      "parameters": {
+        "stages": [
+          50,
+          100,
+          150,
+          300,
+          450
+        ],
+        "duration": 30,
+        "pointInterval": 1000
+      },
+      "stopped": false,
+      "label": "after-read-coalescing",
+      "results": [
+        {
+          "spectators": 50,
+          "actualSeconds": 30.5,
+          "connected": 50,
+          "caughtUp": 50,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 61,
+          "intendedPoints": 60.0,
+          "reads": {
+            "count": 4575,
+            "errors": 0,
+            "bytes": 99273442,
+            "p50Ms": 17.98,
+            "p95Ms": 84.93,
+            "p99Ms": 104.61
+          },
+          "writes": {
+            "count": 61,
+            "errors": 0,
+            "bytes": 4226,
+            "p50Ms": 12.78,
+            "p95Ms": 19.54,
+            "p99Ms": 230.39
+          },
+          "pointToRefresh": {
+            "count": 2288,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 248.6,
+            "p95Ms": 300.86,
+            "p99Ms": 468.13
+          },
+          "connection": {
+            "count": 50,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 12.77,
+            "p95Ms": 18.82,
+            "p99Ms": 23.6
+          },
+          "requestsPerSecond": 151.99,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 31,
+              "records": 31,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 30,
+              "records": 30,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 102.61
+        },
+        {
+          "spectators": 100,
+          "actualSeconds": 30.5,
+          "connected": 100,
+          "caughtUp": 100,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 60,
+          "intendedPoints": 60.0,
+          "reads": {
+            "count": 9000,
+            "errors": 0,
+            "bytes": 200848875,
+            "p50Ms": 21.77,
+            "p95Ms": 67.38,
+            "p99Ms": 82.35
+          },
+          "writes": {
+            "count": 60,
+            "errors": 0,
+            "bytes": 4230,
+            "p50Ms": 12.25,
+            "p95Ms": 16.69,
+            "p99Ms": 34.13
+          },
+          "pointToRefresh": {
+            "count": 4500,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 238.17,
+            "p95Ms": 276.7,
+            "p99Ms": 290.3
+          },
+          "connection": {
+            "count": 100,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 4.94,
+            "p95Ms": 6.72,
+            "p99Ms": 7.29
+          },
+          "requestsPerSecond": 297.03,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 61,
+              "records": 61,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 60,
+              "records": 60,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 112.91
+        },
+        {
+          "spectators": 150,
+          "actualSeconds": 30.5,
+          "connected": 150,
+          "caughtUp": 150,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 60,
+          "intendedPoints": 60.0,
+          "reads": {
+            "count": 13500,
+            "errors": 0,
+            "bytes": 309578535,
+            "p50Ms": 21.04,
+            "p95Ms": 83.82,
+            "p99Ms": 108.5
+          },
+          "writes": {
+            "count": 60,
+            "errors": 0,
+            "bytes": 4230,
+            "p50Ms": 10.86,
+            "p95Ms": 21.29,
+            "p99Ms": 30.02
+          },
+          "pointToRefresh": {
+            "count": 6750,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 245.25,
+            "p95Ms": 293.78,
+            "p99Ms": 314.74
+          },
+          "connection": {
+            "count": 150,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1.38,
+            "p95Ms": 2.12,
+            "p99Ms": 2.52
+          },
+          "requestsPerSecond": 444.58,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 91,
+              "records": 91,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 90,
+              "records": 90,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 119.15
+        },
+        {
+          "spectators": 300,
+          "actualSeconds": 30.5,
+          "connected": 300,
+          "caughtUp": 300,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 60,
+          "intendedPoints": 60.0,
+          "reads": {
+            "count": 27000,
+            "errors": 0,
+            "bytes": 635756625,
+            "p50Ms": 31.16,
+            "p95Ms": 143.59,
+            "p99Ms": 173.19
+          },
+          "writes": {
+            "count": 60,
+            "errors": 0,
+            "bytes": 4230,
+            "p50Ms": 11.09,
+            "p95Ms": 18.95,
+            "p99Ms": 42.33
+          },
+          "pointToRefresh": {
+            "count": 13500,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 280.14,
+            "p95Ms": 357.87,
+            "p99Ms": 384.33
+          },
+          "connection": {
+            "count": 300,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1.69,
+            "p95Ms": 4.62,
+            "p99Ms": 5.03
+          },
+          "requestsPerSecond": 887.15,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 121,
+              "records": 121,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 120,
+              "records": 120,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 123.95
+        },
+        {
+          "spectators": 450,
+          "actualSeconds": 30.5,
+          "connected": 450,
+          "caughtUp": 450,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 61,
+          "intendedPoints": 60.0,
+          "reads": {
+            "count": 41175,
+            "errors": 0,
+            "bytes": 995065283,
+            "p50Ms": 70.74,
+            "p95Ms": 206.26,
+            "p99Ms": 251.3
+          },
+          "writes": {
+            "count": 61,
+            "errors": 0,
+            "bytes": 4300,
+            "p50Ms": 11.68,
+            "p95Ms": 21.57,
+            "p99Ms": 34.65
+          },
+          "pointToRefresh": {
+            "count": 20588,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 330.73,
+            "p95Ms": 433.59,
+            "p99Ms": 473.35
+          },
+          "connection": {
+            "count": 450,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 1.47,
+            "p95Ms": 19.27,
+            "p99Ms": 24.79
+          },
+          "requestsPerSecond": 1352.01,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 152,
+              "records": 152,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 150,
+              "records": 150,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 133.17
+        }
+      ],
+      "passed": true
+    },
+    {
+      "createdAt": "2026-10-28T04:41:58.366Z",
+      "host": {
+        "model": "AMD Ryzen 5 4500 6-Core Processor",
+        "logicalCpus": 12
+      },
+      "budget": {
+        "sharedCpu": "0",
+        "appMemoryGiB": 1,
+        "dbMemoryGiB": 2
+      },
+      "fixture": {
+        "matches": 120,
+        "categories": 6,
+        "teams": 48,
+        "historicalRecords": 10800
+      },
+      "parameters": {
+        "stages": [
+          100
+        ],
+        "duration": 120,
+        "pointInterval": 1000
+      },
+      "stopped": false,
+      "label": "sustained-100",
+      "results": [
+        {
+          "spectators": 100,
+          "actualSeconds": 120.5,
+          "connected": 100,
+          "caughtUp": 100,
+          "disconnects": 0,
+          "refreshFailures": 0,
+          "acceptedPoints": 240,
+          "intendedPoints": 240.0,
+          "reads": {
+            "count": 36000,
+            "errors": 0,
+            "bytes": 814121600,
+            "p50Ms": 26.26,
+            "p95Ms": 80.27,
+            "p99Ms": 111.94
+          },
+          "writes": {
+            "count": 240,
+            "errors": 0,
+            "bytes": 16846,
+            "p50Ms": 10.51,
+            "p95Ms": 14.63,
+            "p99Ms": 21.16
+          },
+          "pointToRefresh": {
+            "count": 18000,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 243.48,
+            "p95Ms": 286.99,
+            "p99Ms": 320.71
+          },
+          "connection": {
+            "count": 100,
+            "errors": 0,
+            "bytes": 0,
+            "p50Ms": 16.57,
+            "p95Ms": 29.02,
+            "p99Ms": 30.14
+          },
+          "requestsPerSecond": 300.74,
+          "integrity": [
+            {
+              "matchId": 1,
+              "accepted": 120,
+              "records": 120,
+              "ok": true
+            },
+            {
+              "matchId": 2,
+              "accepted": 120,
+              "records": 120,
+              "ok": true
+            }
+          ],
+          "correct": true,
+          "withinTargets": true,
+          "passed": true,
+          "sampledCombinedMemoryPeakMiB": 115.46
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

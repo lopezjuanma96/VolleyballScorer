@@ -12,7 +12,7 @@
 
     <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
         <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
-        <h1 class="text-lg font-bold tracking-wide">Nuevo partido</h1>
+        <h1 id="form-title" class="text-lg font-bold tracking-wide">Nuevo partido</h1>
     </header>
 
     <main class="px-4 py-4 max-w-2xl mx-auto">
@@ -57,9 +57,12 @@
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
 
+            <p id="timezone-info" class="text-sm text-gray-600" role="note"></p>
+            <p id="tournament-preview" class="text-sm font-medium text-gray-700" aria-live="polite"></p>
+            <p id="edit-note" class="text-sm text-gray-500 hidden">Editás horario y cancha. Los equipos y la categoría se conservan.</p>
             <p id="form-error" class="text-red-500 text-sm hidden"></p>
 
-            <button onclick="submitForm()"
+            <button id="save-button" onclick="submitForm()"
                 class="w-full bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
                 Crear partido
             </button>
@@ -68,6 +71,15 @@
 
     <script>
         let allTeams = []
+        const editingId = new URLSearchParams(location.search).get('id')
+        function updateTimezonePreview() {
+            const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+            document.getElementById('timezone-info').textContent = `Ingresá la hora de tu dispositivo (${deviceZone}). Zona del torneo: ${App.config.timeZone}.${!App.sameTimeZone(deviceZone, App.config.timeZone) ? ' Son zonas distintas: revisá la equivalencia antes de guardar.' : ''}`
+            const value = document.getElementById('scheduled-at').value
+            const date = new Date(value)
+            document.getElementById('tournament-preview').textContent = value && !Number.isNaN(date.valueOf()) ? `En el torneo: ${new Intl.DateTimeFormat('es-AR', { timeZone: App.config.timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(date)}` : ''
+        }
+        document.getElementById('scheduled-at').addEventListener('input', updateTimezonePreview)
 
         async function checkAuth() {
             const res = await App.fetch('/api/auth/me')
@@ -85,6 +97,22 @@
             document.getElementById('category').innerHTML =
                 '<option value="">Seleccionar categoría...</option>' +
                 categories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
+            if (editingId) {
+                const match = await App.json(`/api/matches/${editingId}`)
+                document.title = 'Manager — Editar partido'
+                document.getElementById('form-title').textContent = 'Editar partido'
+                document.getElementById('save-button').textContent = 'Guardar cambios'
+                document.getElementById('edit-note').classList.remove('hidden')
+                document.getElementById('category').value = match.categoryId
+                document.getElementById('category').dispatchEvent(new Event('change'))
+                document.getElementById('team-home').value = match.teamHome.id
+                document.getElementById('team-away').value = match.teamAway.id
+                for (const id of ['category', 'team-home', 'team-away']) document.getElementById(id).disabled = true
+                document.getElementById('court').value = match.court
+                const local = new Date(match.scheduledAt)
+                document.getElementById('scheduled-at').value = `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,'0')}-${String(local.getDate()).padStart(2,'0')}T${String(local.getHours()).padStart(2,'0')}:${String(local.getMinutes()).padStart(2,'0')}`
+            }
+            updateTimezonePreview()
         }
 
         document.getElementById('category').addEventListener('change', function () {
@@ -118,18 +146,22 @@
                 return
             }
 
-            const res = await App.fetch('/api/matches', {
-                method: 'POST',
+            const button = document.getElementById('save-button')
+            button.disabled = true
+            try {
+            const res = await App.fetch(editingId ? `/api/matches/${editingId}` : '/api/matches', {
+                method: editingId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ teamHomeId, teamAwayId, categoryId, court, scheduledAt: new Date(scheduledAt).toISOString() }),
+                body: JSON.stringify({ ...(editingId ? {} : { teamHomeId, teamAwayId, categoryId }), court, scheduledAt: new Date(scheduledAt).toISOString() }),
             })
 
             if (res.ok) {
                 window.location.href = '/manager/'
             } else {
-                errorEl.textContent = 'Error al crear el partido.'
+                errorEl.textContent = (await res.json()).error ?? 'No se pudo guardar el partido.'
                 errorEl.classList.remove('hidden')
             }
+            } finally { button.disabled = false }
         }
 
         App.ready.then(checkAuth).then(loadData)

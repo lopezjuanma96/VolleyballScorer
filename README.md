@@ -47,6 +47,8 @@ Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCEN
 4. Marcá el partido «En vivo» antes de anotar.
 5. Sumá puntos o ingresá el resultado final de cada set. Cerrá el partido manualmente.
 
+Desde «Editar» podés cambiar horario y cancha. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. El marcador permite corregir sets cerrados con motivo e historial y recuperar el último set cancelado al cerrar accidentalmente un partido; el ganador del partido siempre se decide por separado.
+
 Importación CSV opcional con Python 3, sin paquetes externos:
 
 ```bash
@@ -75,6 +77,7 @@ Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `D
 - [Backup, restauración, migración y despliegues](docs/operations.md)
 - [Arquitectura, ramas y límites](docs/architecture.md)
 - [Revisión independiente y mejoras pendientes](docs/independent-review.md)
+- [Prueba de carga local y resultados](docs/load-testing.md)
 - [Hosting: costos y recomendación, investigado el 26/10/2026](docs/hosting.md)
 
 Los backups y secretos quedan fuera de Git. Un volumen persistente no reemplaza una copia fuera del servidor.

@@ -80,7 +80,7 @@
             }
 
             document.getElementById('match-list').innerHTML = matches.map(m => `
-                <div class="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-4">
+                <div class="bg-white rounded-xl shadow p-4 flex flex-wrap items-center justify-between gap-4">
                     <div class="flex-1 min-w-0">
                         <div class="font-semibold text-gray-800 truncate">
                             ${App.escape(m.teamHome.name)} vs ${App.escape(m.teamAway.name)}
@@ -92,11 +92,12 @@
                             <span class="font-medium text-gray-600">${statusLabel(m.status)}</span>
                         </div>
                     </div>
-                    <div class="flex gap-2 shrink-0">
+                    <div class="flex flex-wrap gap-2 shrink-0">
                         <a href="/manager/game.html?id=${m.id}"
                             class="text-sm bg-green-100 text-green-700 font-medium px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors">
                             Gestionar
                         </a>
+                        <a href="/manager/match-form.html?id=${m.id}" class="text-sm bg-gray-100 text-gray-600 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200">Editar</a>
                         <a href="/game.html?id=${m.id}"
                             class="text-sm bg-gray-100 text-gray-600 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors">
                             Ver

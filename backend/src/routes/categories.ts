@@ -3,12 +3,12 @@ import { db } from '../db'
 import { categories } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { authMiddleware } from '../middleware/auth'
+import { publicReads } from '../read-cache'
 
 const categoryRoutes = new Hono()
 
 categoryRoutes.get('/', async (c) => {
-    const rows = await db.select().from(categories)
-    return c.json(rows)
+    return c.body(await publicReads.get('categories', () => db.select().from(categories)), 200, { 'Content-Type': 'application/json; charset=UTF-8' })
 })
 
 categoryRoutes.post('/', authMiddleware, async (c) => {

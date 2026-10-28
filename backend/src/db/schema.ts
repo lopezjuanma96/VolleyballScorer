@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, serial, varchar, integer, boolean, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, serial, varchar, integer, boolean, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // --- Enums ---
@@ -55,7 +55,20 @@ export const sets = pgTable('sets', {
     matchId: integer('match_id').notNull().references(() => matches.id),
     setNumber: integer('set_number').notNull(),
     status: setStatusEnum('status').notNull().default('in_progress'),
+    revision: integer('revision').notNull().default(0),
 }, table => [uniqueIndex('sets_match_number_idx').on(table.matchId, table.setNumber), index('sets_match_idx').on(table.matchId)])
+
+export const scoringAudit = pgTable('scoring_audit', {
+    id: serial('id').primaryKey(),
+    matchId: integer('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    setId: integer('set_id').references(() => sets.id, { onDelete: 'cascade' }),
+    action: varchar('action', { length: 40 }).notNull(),
+    actor: varchar('actor', { length: 100 }).notNull(),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    before: jsonb('before').notNull(),
+    after: jsonb('after').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [index('scoring_audit_match_idx').on(table.matchId, table.id)])
 
 export const points = pgTable('points', {
     id: serial('id').primaryKey(),

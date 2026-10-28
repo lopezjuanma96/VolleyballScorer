@@ -25,6 +25,14 @@ window.App = {
     },
     time(value) { return new Date(value).toLocaleTimeString('es-AR', { timeZone: App.config.timeZone, hour: '2-digit', minute: '2-digit' }) },
     date(value) { return new Date(value).toLocaleDateString('es-AR', { timeZone: App.config.timeZone, day: 'numeric', month: 'short' }) },
+    sameTimeZone(a, b) {
+        // Some Intl implementations preserve the old Córdoba alias instead of canonicalizing it.
+        const canonical = zone => {
+            const name = new Intl.DateTimeFormat('es-AR', { timeZone: zone }).resolvedOptions().timeZone
+            return name === 'America/Cordoba' ? 'America/Argentina/Cordoba' : name
+        }
+        return canonical(a) === canonical(b)
+    },
     court(value) { return { court1: 'Cancha 1', court2: 'Cancha 2' }[value] ?? value },
     winner(match) { return match.status === 'finished_home' ? match.teamHome : match.status === 'finished_away' ? match.teamAway : null },
     toast(message, error = false) {

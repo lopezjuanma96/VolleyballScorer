@@ -29,6 +29,9 @@ header.bg-surface { padding: 24px max(20px, calc((100vw - 1040px)/2)); box-shado
 .manager-nav a { padding: 8px 12px; border-radius: 8px; color: #d4dfd6; font-size: 13px; }
 .manager-nav a:hover, .manager-nav [aria-current] { background: #ffffff12; color: var(--accent); }
 input, select { background: #fff; }
+dialog { margin: auto; width: calc(100% - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #dfe5d8; box-shadow: 0 20px 80px #0003; }
+dialog::backdrop { background: #18211c80; }
+textarea { resize: vertical; }
 input[type=file]::file-selector-button { background: var(--ink); color: var(--accent); border: 0; border-radius: 8px; padding: 10px 14px; margin-right: 12px; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; background: var(--ink); color: white; border: 1px solid #ffffff20; padding: 14px 20px; border-radius: 12px; box-shadow: 0 8px 32px #0002; max-width: min(90vw, 520px); font-size: 14px; }
 .toast.error { background: #7b292b; }

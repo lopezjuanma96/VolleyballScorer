@@ -12,8 +12,14 @@ export const matchInput = z.object({
     teamHomeId: positiveId, teamAwayId: positiveId, categoryId: positiveId,
     court: z.enum(['court1', 'court2']), scheduledAt: z.iso.datetime({ offset: true }),
 })
-export const matchUpdate = matchInput.omit({ categoryId: true }).partial().extend({ status: matchStatus.optional() })
-    .refine(value => Object.keys(value).length > 0, 'Indicá algún cambio.')
+export const matchUpdate = matchInput.omit({ categoryId: true }).partial().extend({
+    status: matchStatus.optional(),
+    expectedStatus: matchStatus.optional(),
+    expectedActiveSet: z.object({ id: positiveId, lastPointId: positiveId.nullable() }).nullable().optional(),
+    startNewSet: z.boolean().optional(),
+}).refine(value => ['status', 'court', 'scheduledAt', 'teamHomeId', 'teamAwayId'].some(key => key in value), 'Indicá algún cambio.')
+const setSnapshot = { expectedLastPointId: positiveId.nullable(), expectedRevision: z.number().int().nonnegative(), expectedStatus: setStatus }
+const reason = z.string().trim().min(3).max(500)
 const schemas: Record<string, z.ZodType> = {
     categories: z.object({ name }), teams: teamInput, matches: matchInput,
     points: z.object({ setId: positiveId, homeScored: z.boolean() }),
@@ -31,7 +37,11 @@ export async function validateRequest(c: Context, next: Next) {
     if (['POST', 'PUT'].includes(c.req.method) && parts[1] !== 'clubs' && parts[1] !== 'auth') {
         let schema = schemas[parts[1]]
         if (parts[1] === 'matches' && c.req.method === 'PUT') schema = matchUpdate
-        if (parts[1] === 'sets') schema = parts[3] === 'finish'
+        if (parts[1] === 'sets') schema = parts[3] === 'correct'
+            ? z.object({ ...setSnapshot, scoreHome: score, scoreAway: score, status: z.enum(['finished_home', 'finished_away', 'cancelled']), reason })
+            : parts[3] === 'recover'
+            ? z.object({ ...setSnapshot, expectedMatchStatus: matchStatus, reason })
+            : parts[3] === 'finish'
             ? z.object({ scoreHome: score, scoreAway: score, status: z.enum(['finished_home', 'finished_away']), expectedLastPointId: positiveId.nullable() })
             : z.object({ status: setStatus, expectedLastPointId: positiveId.nullable() })
         if (schema) {

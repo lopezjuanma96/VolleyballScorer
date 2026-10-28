@@ -1,0 +1,41 @@
+# Isolated disposable benchmark; scripts/load-test.ts supplies every variable.
+services:
+  db:
+    image: postgres:17-alpine
+    cpuset: ${LOAD_CPU:?}
+    mem_limit: 2g
+    environment:
+      POSTGRES_USER: load
+      POSTGRES_PASSWORD: ${LOAD_DB_PASSWORD:?}
+      POSTGRES_DB: volleyball_load_test
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U load -d volleyball_load_test']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  app:
+    build: ../backend
+    cpuset: ${LOAD_CPU:?}
+    mem_limit: 1g
+    environment:
+      DEPLOY_MODE: local
+      PSQL_HOST: db
+      PSQL_DATABASE: volleyball_load_test
+      PSQL_USER: load
+      PSQL_PASSWORD: ${LOAD_DB_PASSWORD:?}
+      MANAGER_USER: load-manager
+      MANAGER_PASSWORD: ${LOAD_MANAGER_PASSWORD:?}
+      SESSION_SECRET: ${LOAD_SESSION_SECRET:?}
+      TOURNAMENT_NAME: ${LOAD_ID:?}
+      PUBLIC_URL: http://127.0.0.1:${LOAD_PORT:?}
+    ports:
+      - '127.0.0.1:${LOAD_PORT:?}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../scripts/load-fixtures.ts:/app/load-fixtures.ts:ro
+volumes:
+  database:

@@ -18,6 +18,7 @@ import teamRoutes from './routes/teams'
 import matchRoutes from './routes/matches'
 import setRoutes from './routes/sets'
 import pointRoutes from './routes/points'
+import { publicReads } from './read-cache'
 
 mkdirSync(config.UPLOAD_DIR, { recursive: true })
 const app = new Hono()
@@ -31,7 +32,10 @@ app.use('/api/*', async (c, next) => {
         if (origin && origin !== expected) return c.json({ error: 'Origen no permitido.' }, 403)
     }
     await next()
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.res.ok && !c.req.path.startsWith('/api/auth')) publishChange()
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.res.ok && !c.req.path.startsWith('/api/auth')) {
+        publicReads.invalidate()
+        publishChange()
+    }
 })
 app.get('/healthz', async c => {
     try { await db.execute(sql`select 1`); return c.json({ ok: true }) }

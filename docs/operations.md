@@ -74,6 +74,27 @@ Al cerrar o cancelar un set, la pantalla envía `expectedLastPointId`: el ID del
 
 La pantalla carga el marcador actual. Para ingresar un resultado manual distinto ofrece una confirmación con el resultado solicitado y el actual; una nueva modificación concurrente vuelve a detener la operación. No se aplican reglas automáticas de ganador. Los clientes de API anteriores deben enviar este campo en `POST /api/sets/:id/finish` y `PUT /api/sets/:id`; después de actualizar la app, recargá las pantallas de anotación que estuvieran abiertas.
 
+## Correcciones y recuperación
+
+En el marcador, «Corregir» permite cambiar puntaje y adjudicación de un set cerrado o cancelado. Requiere motivo y confirmación; agrega un registro de marcador sin borrar los puntos anteriores. El «Historial de decisiones» registra antes/después, fecha, cuenta de organización y motivo. Como hay una cuenta compartida, identifica la cuenta, no a cada persona que la usa. El ganador oficial del partido se mantiene: si también estaba equivocado, cambialo explícitamente desde «Estado del partido».
+
+Al finalizar/cancelar un partido con puntos en curso se muestra una advertencia. El set activo queda cancelado con sus puntos intactos. «Recuperar último set» lo devuelve a juego y pone el partido en vivo. Sólo puede recuperarse el último set cancelado, sin un set posterior ni otro set activo. Si se elige iniciar uno nuevo desde 0–0, se pide confirmación y se conserva el anterior. No se reabren automáticamente sets adjudicados: se corrigen administrativamente.
+
+API autenticada:
+
+- `POST /api/sets/:id/correct`: `scoreHome`, `scoreAway`, `status` (`finished_home`, `finished_away`, `cancelled`), `reason`, `expectedStatus`, `expectedRevision`, `expectedLastPointId`.
+- `POST /api/sets/:id/recover`: `reason`, `expectedMatchStatus`, `expectedStatus`, `expectedRevision`, `expectedLastPointId`.
+- `GET /api/matches/:id/history`: historial de decisiones; no es público.
+- Al cerrar un partido con puntos pendientes, `PUT /api/matches/:id` exige `expectedActiveSet: { id, lastPointId }`. La interfaz envía también `expectedStatus`. Una pantalla desactualizada recibe 409 y debe volver a revisar. Para iniciar un nuevo set en lugar de recuperar el último cancelado con puntos, hace falta `startNewSet: true`.
+
+La migración `0003_chubby_scorpion` añade la revisión del set y el historial; se aplica al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
+
+## Lecturas bajo carga
+
+Fixture, categorías y detalle comparten respuestas JSON en memoria dentro de la única réplica, durante como máximo un segundo. Cada escritura exitosa invalida la caché **antes** de notificar por SSE. Las peticiones simultáneas de la misma información comparten una consulta; el límite es de 128 claves y 16 MiB de JSON retenido. No se cachean sesiones ni el historial administrativo. No agrega Redis ni cambia el `Cache-Control: no-store` del navegador. Las escrituras directas a la base pueden tardar hasta un segundo en aparecer; durante el torneo usá la API.
+
+No aumentar las réplicas sin rediseñar tanto esta invalidación como las notificaciones SSE. Ver [pruebas y límites de carga](load-testing.md).
+
 ## Logs, actualización y apagado
 
 ```bash
@@ -127,7 +148,7 @@ bun test
 bun audit
 ```
 
-Sin `RUN_DB_TESTS` se ejecutan sólo las pruebas de configuración. Para integración con el stack local:
+Sin `RUN_DB_TESTS` se ejecutan las pruebas de configuración, límite de login, cliente público y caché. Para integración con el stack local:
 
 ```bash
 # Desde la raíz; crear una vez esta base dedicada:
@@ -140,4 +161,4 @@ docker compose run --rm --no-deps -T \
 
 La imagen debe estar actualizada (`scripts/stack.sh build app`). La suite rechaza bases cuyo nombre no termina en `_test` y elimina sólo sus fixtures, nunca hace `TRUNCATE`. Si tu `.env` define `DATABASE_URL`, reemplazala también por la URL de la base de prueba: tiene prioridad sobre `PSQL_DATABASE`. No uses las credenciales ni la URL del torneo en CI.
 
-La suite verifica concurrencia de puntos, undo, cierre duplicado, cancelaciones, validación, referencias, sesiones vencidas, protección por origen, uploads y canal SSE. No es una prueba de capacidad del torneo completo. Antes del evento conviene un ensayo con el número esperado de espectadores y la conexión real de la sede.
+La suite verifica concurrencia de puntos, undo, cierre duplicado, cancelaciones, corrección y recuperación con historial, validación, referencias, sesiones vencidas, protección por origen, uploads y canal SSE. La [prueba de carga](load-testing.md) usa otro stack descartable. Antes del evento conviene un ensayo de anotación con la conexión real de la sede.
