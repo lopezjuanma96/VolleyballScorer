@@ -10,6 +10,8 @@ const envSchema = z.object({
     COOKIE_SECURE: z.enum(['true', 'false']).optional(),
     UPLOAD_DIR: z.string().default('./static/uploads'),
     AUTO_MIGRATE: z.enum(['true', 'false']).default('true'),
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
+    CLIENT_IP_HEADER: z.enum(['x-forwarded-for', 'x-real-ip']).default('x-forwarded-for'),
     TOURNAMENT_NAME: z.string().trim().min(1).max(100).default('Torneo de vóley'),
     TOURNAMENT_SUBTITLE: z.string().max(200).default('Cada punto cuenta.'),
     TOURNAMENT_ACCENT: z.string().regex(/^#[0-9a-f]{6}$/i).default('#b9ed64'),
@@ -28,7 +30,10 @@ export function parseConfig(env: Record<string, string | undefined>) {
     }
     try { new Intl.DateTimeFormat('es-AR', { timeZone: config.TOURNAMENT_TIMEZONE }) }
     catch { throw new Error('Invalid TOURNAMENT_TIMEZONE') }
-    return Object.freeze({ ...config, secureCookie: config.COOKIE_SECURE ? config.COOKIE_SECURE === 'true' : config.DEPLOY_MODE !== 'local' })
+    return Object.freeze({ ...config,
+        TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.DEPLOY_MODE === 'local' ? 0 : 1),
+        secureCookie: config.COOKIE_SECURE ? config.COOKIE_SECURE === 'true' : config.DEPLOY_MODE !== 'local',
+    })
 }
 
 export const config = parseConfig(process.env)

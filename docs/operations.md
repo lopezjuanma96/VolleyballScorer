@@ -20,6 +20,8 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 | `MANAGER_USER/PASSWORD` | Acceso de organización; contraseña mínima de 12 caracteres |
 | `SESSION_SECRET` | Firma de sesión; mínimo 32 caracteres; cambiarlo invalida sesiones anteriores |
 | `COOKIE_SECURE` | Automático: false en local, true en onprem/cloud. No puede desactivarse en público |
+| `TRUST_PROXY_HOPS` | Cantidad de proxies confiables: default 0 en local, 1 en onprem/cloud; origen inaccesible desde internet por otra ruta |
+| `CLIENT_IP_HEADER` | `x-forwarded-for` para Caddy/ngrok; configurar `x-real-ip` en Railway |
 | `UPLOAD_DIR` | Carpeta persistente para logos; default `./static/uploads` |
 | `NGROK_AUTHTOKEN` | Token del túnel, sólo onprem |
 | `TOURNAMENT_NAME/SUBTITLE/ACCENT/TIMEZONE` | Identidad pública y zona horaria |
@@ -51,11 +53,26 @@ Railway: un servicio app y un servicio PostgreSQL. Misma aplicación y misma ram
 - Root directory del servicio app: `backend/`. Dockerfile `Dockerfile`. La configuración opcional está en `/deploy/railway.toml` (ruta desde la raíz del repo).
 - Variables de app: `DEPLOY_MODE=cloud`, `DATABASE_URL` de la conexión privada a PostgreSQL, usuario/password/secret, `PUBLIC_URL` HTTPS del dominio de la plataforma y las variables visuales. Railway define `PORT`.
 - Montá un volumen persistente en `/app/static/uploads`. La imagen usa usuario `bun` (UID 1000): asegurá que el volumen sea escribible por ese usuario. Si el proveedor lo monta como root, ajustá su propiedad una vez desde su consola. No cambies el proceso a root por comodidad.
+- Configurá `CLIENT_IP_HEADER=x-real-ip` y `TRUST_PROXY_HOPS=1`: Railway publica la IP del cliente en ese header.
 - Una réplica de la app; no habilites suspensión mientras haya un torneo. Healthcheck `/healthz`, timeout inicial 120 segundos. La app aplica migraciones antes de aceptar conexiones.
 - La plataforma termina HTTPS: no agregues Caddy ni ngrok. Usá conexión privada a la DB; si la base exige TLS, conservá la opción de su URL.
 - Habilitá y verificá backups de base y volumen. Nuestros scripts Compose se usan para Compose; en Railway hay que exportar/importar con su conexión y herramientas del proveedor.
 
 Render: mismo Dockerfile, `DATABASE_URL`, variables, una réplica y disco persistente en la misma carpeta. Usá servicios pagos; su PostgreSQL gratuito vence. Elegir plan o crear recursos requiere una decisión de despliegue, no es parte de la limpieza del código.
+
+## Identidad del cliente para el límite de login
+
+El límite es de 30 intentos por cliente por minuto, con almacenamiento acotado en memoria; no hay una cuota de intentos compartida por todos los visitantes. El login limita además su cuerpo a 4 KB. Clientes detrás de una misma IP pública comparten cuota.
+
+En local (`TRUST_PROXY_HOPS=0`) se usa la IP de la conexión que informa Bun y se ignoran los headers que envía el visitante. En onprem/cloud el default 1 corresponde a un único proxy de entrada. Con `x-forwarded-for`, la app cuenta desde la derecha y omite prefijos que el cliente pudiera falsificar. Caddy/ngrok agregan o reconstruyen ese header. Railway documenta `x-real-ip`: usá `CLIENT_IP_HEADER=x-real-ip` y un solo salto.
+
+Esta confianza exige que internet sólo pueda alcanzar la app a través del proxy elegido. El Compose mantiene la app en loopback por defecto; no cambies `APP_BIND` a `0.0.0.0` en un VPS público. Si cambiás la cadena de proxies, revisá cantidad de saltos y header antes de habilitar el login. Fuentes: [ngrok](https://ngrok.com/docs/gateway/endpoints/http#upstream-headers), [Caddy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers), [Railway](https://docs.railway.com/networking/public-networking/specs-and-limits).
+
+## Cierre seguro de sets
+
+Al cerrar o cancelar un set, la pantalla envía `expectedLastPointId`: el ID del último punto que mostró, o `null` si aún no había puntos. La API lo compara dentro de la transacción que bloquea partido y set. Si otro anotador cambió el marcador, responde 409 sin guardar ni crear otro set.
+
+La pantalla carga el marcador actual. Para ingresar un resultado manual distinto ofrece una confirmación con el resultado solicitado y el actual; una nueva modificación concurrente vuelve a detener la operación. No se aplican reglas automáticas de ganador. Los clientes de API anteriores deben enviar este campo en `POST /api/sets/:id/finish` y `PUT /api/sets/:id`; después de actualizar la app, recargá las pantallas de anotación que estuvieran abiertas.
 
 ## Logs, actualización y apagado
 

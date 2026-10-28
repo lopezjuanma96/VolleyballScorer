@@ -19,6 +19,7 @@
         function render() {
             const m = currentMatch
             const live = m.status === 'in_progress'
+            const winner = App.winner(m)
             const active = live && m.sets.find(s => s.status === 'in_progress')
             const selected = m.sets.find(s => s.id === activeSetId) ?? m.sets.at(-1)
             const won = side => m.sets.filter(s => s.status === `finished_${side}`).length
@@ -27,6 +28,7 @@
             document.getElementById('content').innerHTML = `
                 <section class="score-panel">
                     <div class="match-meta"><span>${esc(m.categoryName)} · ${App.court(m.court)}</span><span class="match-badge">${status}</span></div>
+                    ${winner ? `<p class="official-winner">Resultado oficial · Ganó ${esc(winner.name)}</p>` : ''}
                     <div class="score-pair"><div class="score-team">${esc(m.teamHome.name)}<small>LOCAL · ${esc(m.teamHome.clubName)}</small></div><div class="score-number">${active ? `${active.scoreHome} : ${active.scoreAway}` : `${won('home')} : ${won('away')}`}</div><div class="score-team">${esc(m.teamAway.name)}<small>VISITANTE · ${esc(m.teamAway.clubName)}</small></div></div>
                     <div class="match-bottom"><span>${active ? `Set ${active.setNumber} · Sets ${won('home')}–${won('away')}` : 'Sets ganados'}</span><span>${App.date(m.scheduledAt)} · ${App.time(m.scheduledAt)}</span></div>
                 </section>

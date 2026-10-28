@@ -5,16 +5,19 @@ import { sign } from 'hono/jwt'
 import { timingSafeEqual } from 'node:crypto'
 import { authMiddleware } from '../middleware/auth'
 import { config } from '../config'
+import { bodyLimit } from 'hono/body-limit'
+import { clientAddress, LoginLimiter } from '../login-limit'
 
-const auth = new Hono()
-// A bounded process-local limiter also works behind tunnels without trusting forwarded IPs.
-let attempts = 0
-let windowStart = Date.now()
+const auth = new Hono<{ Bindings: { clientAddress?: string } }>()
+const attempts = new LoginLimiter()
+// Bound request work separately from the per-client attempt quota.
+auth.use('/login', bodyLimit({ maxSize: 4096, onError: c => c.json({ error: 'Solicitud de acceso demasiado grande.' }, 413) }))
 const same = (a: unknown, b: string) => typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 auth.get('/me', authMiddleware, c => c.json({ ok: true }))
 auth.post('/login', async c => {
-    if (Date.now() - windowStart > 60_000) { attempts = 0; windowStart = Date.now() }
-    if (++attempts > 30) { c.header('Retry-After', '60'); return c.json({ error: 'Demasiados intentos. Esperá un minuto.' }, 429) }
+    const address = clientAddress(c.env?.clientAddress, c.req.header(config.CLIENT_IP_HEADER), config.TRUST_PROXY_HOPS)
+    const retryAfter = attempts.consume(address)
+    if (retryAfter) { c.header('Retry-After', String(retryAfter)); return c.json({ error: 'Demasiados intentos desde este cliente. Esperá un minuto.' }, 429) }
     const { username, password } = z.object({ username: z.string().max(100), password: z.string().max(1024) }).parse(await c.req.json())
     if (!same(username, config.MANAGER_USER) || !same(password, config.MANAGER_PASSWORD)) {
         return c.json({ error: 'Usuario o contraseña incorrectos.' }, 401)

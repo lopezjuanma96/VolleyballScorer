@@ -213,12 +213,23 @@
             if (!active) return
             const scoreHome = Number(document.getElementById('final-home').value)
             const scoreAway = Number(document.getElementById('final-away').value)
-            await App.fetch(`/api/sets/${active.id}/finish`, {
+            const submit = expectedLastPointId => App.fetch(`/api/sets/${active.id}/finish`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scoreHome, scoreAway, status }),
+                body: JSON.stringify({ scoreHome, scoreAway, status, expectedLastPointId }),
             })
+            let response = await submit(active.points.at(-1)?.id ?? null)
+            if (response.status === 409) {
+                await loadMatch()
+                const latest = activeSet()
+                if (currentMatch.status !== 'in_progress' || latest?.id !== active.id) return
+                const winner = status === 'finished_home' ? currentMatch.teamHome.name : currentMatch.teamAway.name
+                if (!confirm(`Otro anotador cambió el marcador. Ahora está ${latest.scoreHome}–${latest.scoreAway}.\n\n¿Confirmás registrar manualmente ${scoreHome}–${scoreAway} y dar el set a ${winner}?`)) return
+                // One explicit confirmation, never an automatic retry of a stale result.
+                response = await submit(latest.points.at(-1)?.id ?? null)
+            }
             await loadMatch()
+            if (response.ok) App.toast('Resultado del set guardado.')
         }
 
         async function performcancelSet() {
@@ -228,7 +239,7 @@
             await App.fetch(`/api/sets/${active.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'cancelled' }),
+                body: JSON.stringify({ status: 'cancelled', expectedLastPointId: active.points.at(-1)?.id ?? null }),
             })
             await loadMatch()
         }

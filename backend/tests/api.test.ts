@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { sql } from 'drizzle-orm'
 import { sign } from 'hono/jwt'
+import { readdir } from 'node:fs/promises'
 
 const integration = describe.skipIf(process.env.RUN_DB_TESTS !== 'true')
 integration('API against an isolated PostgreSQL database', () => {
@@ -49,7 +50,7 @@ integration('API against an isolated PostgreSQL database', () => {
         await db.execute(sql`delete from teams where category_id = ${categoryId}`)
         await db.execute(sql`delete from clubs where id = ${clubId}`)
         await db.execute(sql`delete from categories where id = ${categoryId}`)
-        for (const path of paths) await Bun.file(path).delete()
+        for (const path of paths) if (await Bun.file(path).exists()) await Bun.file(path).delete()
         await client.end()
     })
     test('readiness, API 404, invalid input, authorization and CSRF', async () => {
@@ -94,15 +95,50 @@ integration('API against an isolated PostgreSQL database', () => {
     test('rejects negative/fractional scores and duplicate set finish; cancellation creates playable replacement', async () => {
         expect((await request(`/api/sets/${setId}/finish`, 'POST', { scoreHome: -1, scoreAway: 1, status: 'finished_home' })).status).toBe(400)
         expect((await request('/api/points', 'POST', { setId, homeScored: 'false' })).status).toBe(400)
-        const results = await Promise.all([1, 2].map(() => request(`/api/sets/${setId}/finish`, 'POST', { scoreHome: 25, scoreAway: 23, status: 'finished_home' })))
+        const before: any = await (await request(`/api/matches/${matchId}`)).json()
+        const expectedLastPointId = before.sets[0].points.at(-1)?.id ?? null
+        const results = await Promise.all([1, 2].map(() => request(`/api/sets/${setId}/finish`, 'POST', { scoreHome: 25, scoreAway: 23, status: 'finished_home', expectedLastPointId })))
         expect(results.map(r => r.status).sort()).toEqual([200, 409])
         let match: any = await (await request(`/api/matches/${matchId}`)).json()
         expect(match.sets).toHaveLength(2)
-        expect((await request(`/api/sets/${match.sets[1].id}`, 'PUT', { status: 'cancelled' })).status).toBe(200)
+        expect((await request(`/api/sets/${match.sets[1].id}`, 'PUT', { status: 'cancelled', expectedLastPointId: null })).status).toBe(200)
         match = await (await request(`/api/matches/${matchId}`)).json()
         expect(match.sets.filter((s: any) => s.status === 'in_progress')).toHaveLength(1)
         expect((await request(`/api/matches/${matchId}`, 'PUT', { status: 'finished_home' })).status).toBe(200)
         expect((await request('/api/points', 'POST', { setId: match.sets.at(-1).id, homeScored: true })).status).toBe(409)
+    })
+    test('stale close/cancel requests cannot overwrite a rally; fresh manual rulings remain allowed', async () => {
+        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
+        let detail: any = await (await request(`/api/matches/${match.id}`)).json()
+        const activeId = detail.sets[0].id
+        const point = await create('/api/points', { setId: activeId, homeScored: true })
+        const final = { scoreHome: 0, scoreAway: 0, status: 'finished_away' }
+        expect((await request(`/api/sets/${activeId}/finish`, 'POST', final)).status).toBe(400)
+        expect((await request(`/api/sets/${activeId}/finish`, 'POST', { ...final, expectedLastPointId: null })).status).toBe(409)
+        expect((await request(`/api/sets/${activeId}`, 'PUT', { status: 'cancelled', expectedLastPointId: null })).status).toBe(409)
+        detail = await (await request(`/api/matches/${match.id}`)).json()
+        expect(detail.sets[0].status).toBe('in_progress')
+        expect(detail.sets[0].scoreHome).toBe(1)
+        expect(detail.sets[0].points).toHaveLength(1)
+        expect((await request(`/api/sets/${activeId}/finish`, 'POST', { ...final, expectedLastPointId: point.id })).status).toBe(200)
+        detail = await (await request(`/api/matches/${match.id}`)).json()
+        expect(detail.sets[0].scoreHome).toBe(0)
+        expect(detail.sets[0].status).toBe('finished_away')
+        expect(detail.sets[0].points).toHaveLength(2)
+    })
+    test('login abuse from one client cannot block another; spoofed headers are ignored locally', async () => {
+        const login = (peer: string, password: string, forwarded?: string) => app.request('/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...(forwarded ? { 'X-Forwarded-For': forwarded } : {}) },
+            body: JSON.stringify({ username: process.env.MANAGER_USER ?? 'manager', password }),
+        }, { clientAddress: peer })
+        for (let i = 0; i < 30; i++) expect((await login('198.51.100.10', 'invalid')).status).toBe(401)
+        const blocked = await login('198.51.100.10', process.env.MANAGER_PASSWORD!)
+        expect(blocked.status).toBe(429)
+        expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(0)
+        expect((await login('198.51.100.10', 'invalid', '203.0.113.99')).status).toBe(429)
+        expect((await login('198.51.100.20', process.env.MANAGER_PASSWORD!)).status).toBe(200)
+        expect((await request('/api/auth/login', 'POST', { username: 'x'.repeat(5000), password: 'invalid' }, false)).status).toBe(413)
     })
     test('keeps fixture categories consistent when editing a team', async () => {
         const other = await create('/api/categories', { name: `${name}-other` })
@@ -125,6 +161,44 @@ integration('API against an isolated PostgreSQL database', () => {
         paths.push(`${process.env.UPLOAD_DIR ?? './static/uploads'}/${club.logo.split('/').at(-1)}`)
         expect((await request(club.logo)).headers.get('content-type')).toContain('image/png')
         expect((await request(`/api/clubs/${clubId}`, 'DELETE')).status).toBe(409)
+    })
+    test('rolls back new logos and removes replaced/deleted files without breaking shared references', async () => {
+        const directory = process.env.UPLOAD_DIR ?? './static/uploads'
+        const upload = (clubName: string) => {
+            const body = new FormData(); body.set('name', clubName)
+            body.set('logo', new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jY9kAAAAASUVORK5CYII='), c => c.charCodeAt(0))], 'logo.png', { type: 'image/png' }))
+            return body
+        }
+        const save = (path: string, method: string, clubName: string) => app.request(path, { method, body: upload(clubName), headers: { Cookie: cookie } })
+        const file = (url: string) => Bun.file(`${directory}/${url.split('/').at(-1)}`)
+        const before = (await readdir(directory)).sort()
+        expect((await save('/api/clubs', 'POST', name)).status).toBe(409)
+        expect((await readdir(directory)).sort()).toEqual(before)
+        expect((await save('/api/clubs/2000000000', 'PUT', name)).status).toBe(404)
+        expect((await readdir(directory)).sort()).toEqual(before)
+        const existing: any[] = await (await request('/api/clubs')).json()
+        const old = existing.find(c => c.id === clubId).logo
+        const replacement = await save(`/api/clubs/${clubId}`, 'PUT', name)
+        expect(replacement.status).toBe(200)
+        const current: any = await replacement.json()
+        paths.push(`${directory}/${current.logo.split('/').at(-1)}`)
+        expect(await file(old).exists()).toBe(false)
+        expect(await file(current.logo).exists()).toBe(true)
+        const body = new FormData(); body.set('name', `${name}-shared-logo`)
+        const added = await app.request('/api/clubs', { method: 'POST', body, headers: { Cookie: cookie } })
+        expect(added.status).toBe(201)
+        const other: any = await added.json()
+        try {
+            await db.execute(sql`update clubs set logo = ${current.logo} where id = ${other.id}`)
+            const response = await save(`/api/clubs/${clubId}`, 'PUT', name)
+            expect(response.status).toBe(200)
+            const next: any = await response.json()
+            paths.push(`${directory}/${next.logo.split('/').at(-1)}`)
+            expect(await file(current.logo).exists()).toBe(true)
+            expect((await request(`/api/clubs/${other.id}`, 'DELETE')).status).toBe(200)
+            expect(await file(current.logo).exists()).toBe(false)
+            expect(await file(next.logo).exists()).toBe(true)
+        } finally { await request(`/api/clubs/${other.id}`, 'DELETE') }
     })
     test('SSE establishes a live channel and receives update notifications', async () => {
         const controller = new AbortController()

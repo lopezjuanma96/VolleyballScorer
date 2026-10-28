@@ -21,3 +21,11 @@ Ejecutado en el workspace local, con PostgreSQL 17 en Docker y una base independ
 - Historial Git: bundle previo verificado, archivado mediante etiquetas con SHA exacto y limpieza de ramas antiguas.
 
 No se contrató ni desplegó ningún servicio cloud. No se midió la capacidad con cientos de espectadores ni la latencia de una región remota; esas pruebas dependen de la audiencia y la sede del torneo. El límite SSE de 500 conexiones es defensivo y no implica un benchmark de capacidad.
+
+## Regresiones de la revisión independiente — 28/10/2026
+
+La suite ampliada pasa **22 pruebas con 166 verificaciones**, incluyendo: rechazo de cierres/cancelaciones sobre puntos desactualizados, aceptación posterior de correcciones manuales explícitas, cuotas de acceso aisladas por cliente, validación de headers de proxy, ausencia de archivos adicionales tras fallos de carga, preservación de logos compartidos, ganador público adjudicado y actualizaciones durante eventos continuos. Las pruebas JavaScript ejecutan el código real de `app.js` y de los renders públicos con un reloj controlado. No se modificó el esquema de la base.
+
+La revisión y las sugerencias de producto que quedan pendientes están en [independent-review.md](independent-review.md).
+
+En navegador, sobre `scorer_regression_ui_test`, se comprobó el cierre desde un marcador desactualizado: rechazar la confirmación mantuvo intacto el punto nuevo; aceptar una confirmación posterior registró el resultado manual solicitado sin borrar el historial. Se verificó el ganador adjudicado en el detalle público a 375 px, separado del conteo de sets. El entorno temporal se retiró al terminar.

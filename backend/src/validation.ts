@@ -32,8 +32,8 @@ export async function validateRequest(c: Context, next: Next) {
         let schema = schemas[parts[1]]
         if (parts[1] === 'matches' && c.req.method === 'PUT') schema = matchUpdate
         if (parts[1] === 'sets') schema = parts[3] === 'finish'
-            ? z.object({ scoreHome: score, scoreAway: score, status: z.enum(['finished_home', 'finished_away']) })
-            : z.object({ status: setStatus })
+            ? z.object({ scoreHome: score, scoreAway: score, status: z.enum(['finished_home', 'finished_away']), expectedLastPointId: positiveId.nullable() })
+            : z.object({ status: setStatus, expectedLastPointId: positiveId.nullable() })
         if (schema) {
             const parsed = schema.parse(await c.req.json())
             // Hono caches parsed JSON; validate in middleware and route handlers use the same body.

@@ -37,14 +37,16 @@
             return `<div class="team-row"><span class="team-symbol">${team.clubLogo ? `<img src="${esc(team.clubLogo)}" alt="" loading="lazy" />` : esc(team.name.slice(0, 2).toUpperCase())}</span><span class="team-name">${esc(team.name)}</span><span class="team-score">${score}</span></div>`
         }
         function card(m) {
+            const winner = App.winner(m)
             const live = m.status === 'in_progress', upcoming = m.status === 'upcoming'
             const active = live && m.sets.find(s => s.status === 'in_progress')
             const badge = live ? '● EN VIVO' : upcoming ? 'PRÓXIMO' : m.status === 'cancelled' ? 'CANCELADO' : 'FINALIZADO'
             const played = m.sets.filter(s => s.status !== 'cancelled' && !(s.status === 'in_progress' && !live))
-            return `<a class="match-card ${live ? 'live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(m.teamHome.name)} contra ${esc(m.teamAway.name)}: ${badge}">
+            return `<a class="match-card ${live ? 'live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(m.teamHome.name)} contra ${esc(m.teamAway.name)}: ${winner ? esc(`Ganó ${winner.name}`) : badge}">
                 <div class="match-meta"><span>${esc(m.categoryName)} · ${App.court(m.court)}</span><span class="match-badge">${badge}</span></div>
                 ${teamRow(m.teamHome, upcoming ? '–' : active ? active.scoreHome : won(m, 'home'))}
                 ${teamRow(m.teamAway, upcoming ? '–' : active ? active.scoreAway : won(m, 'away'))}
+                ${winner ? `<p class="match-winner">✓ Ganó ${esc(winner.name)}</p>` : ''}
                 <div class="match-bottom"><span>${active ? `Set ${active.setNumber} · Sets ${won(m, 'home')}–${won(m, 'away')}` : `${App.date(m.scheduledAt)} · ${App.time(m.scheduledAt)}`}</span><span class="set-summary">${played.map(s => `<span>${s.scoreHome}–${s.scoreAway}</span>`).join('')}</span><span aria-hidden="true">↗</span></div>
             </a>`
         }

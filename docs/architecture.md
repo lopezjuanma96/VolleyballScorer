@@ -17,11 +17,13 @@ El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud exige 
 - Migraciones automáticas e idempotentes antes del servidor, con healthcheck real de PostgreSQL.
 - Configuración Docker reproducible, instalación con lockfile, imagen sin herramientas de desarrollo y proceso sin privilegios.
 - JSON coherente para errores de API, validación de nombres, referencias, estados y puntajes; errores de referencias y duplicados devuelven 409.
-- Sesiones firmadas con vencimiento de 12 horas; el secreto ya no se envía como cookie. Límite global de 30 intentos de login por minuto y validación de origen para escrituras desde navegador.
+- Sesiones firmadas con vencimiento de 12 horas; el secreto ya no se envía como cookie. Límite por cliente de 30 intentos de login por minuto, con política de proxies configurable y validación de origen para escrituras desde navegador.
 - Bloqueos transaccionales de partido/set: dos anotadores no pierden puntos. Finalizar dos veces no crea sets extra. Sólo se deshace el último punto del set activo.
+- Cerrar o cancelar un set exige el último punto conocido por el cliente; un marcador desactualizado devuelve 409 y requiere revisión antes de registrar una corrección manual.
+- La vista pública distingue el ganador adjudicado del conteo de sets.
 - Cancelar un set crea un reemplazo. Terminar/cancelar un partido cancela el set pendiente; reabrirlo crea otro si corresponde. Los sets ya finalizados se conservan.
 - El listado consulta sólo el último punto por set; el detalle trae el historial. Índices sobre puntos por set, sets por partido y fixture por categoría/fecha.
-- Logos con nombres UUID y comprobación de tipo por bytes; no se aceptan SVG/HTML.
+- Logos con nombres UUID y comprobación de tipo por bytes; no se aceptan SVG/HTML. Se limpian archivos de operaciones fallidas y logos reemplazados/eliminados, conservando los que tienen otras referencias.
 - Textos escapados antes de insertar HTML; nombres con comillas pasan a handlers por atributos de datos.
 - Estados vacíos, recuperación de conexión, navegación común, controles táctiles y estilos responsivos.
 - Dependencias de runtime actualizadas a versiones corregidas después de `bun audit`. Override de esbuild 0.25.12 para la dependencia de desarrollo de drizzle-kit; generación de migraciones verificada con esa versión. Auditoría final sin hallazgos.

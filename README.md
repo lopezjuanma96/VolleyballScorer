@@ -74,6 +74,7 @@ Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `D
 
 - [Backup, restauración, migración y despliegues](docs/operations.md)
 - [Arquitectura, ramas y límites](docs/architecture.md)
+- [Revisión independiente y mejoras pendientes](docs/independent-review.md)
 - [Hosting: costos y recomendación, investigado el 26/10/2026](docs/hosting.md)
 
 Los backups y secretos quedan fuera de Git. Un volumen persistente no reemplaza una copia fuera del servidor.

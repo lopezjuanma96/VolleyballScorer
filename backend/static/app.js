@@ -26,6 +26,7 @@ window.App = {
     time(value) { return new Date(value).toLocaleTimeString('es-AR', { timeZone: App.config.timeZone, hour: '2-digit', minute: '2-digit' }) },
     date(value) { return new Date(value).toLocaleDateString('es-AR', { timeZone: App.config.timeZone, day: 'numeric', month: 'short' }) },
     court(value) { return { court1: 'Cancha 1', court2: 'Cancha 2' }[value] ?? value },
+    winner(match) { return match.status === 'finished_home' ? match.teamHome : match.status === 'finished_away' ? match.teamAway : null },
     toast(message, error = false) {
         let toast = document.getElementById('toast')
         if (!toast) { toast = document.createElement('div'); toast.id = 'toast'; toast.setAttribute('role', 'status'); document.body.append(toast) }
@@ -46,14 +47,18 @@ window.App = {
             source?.close()
             if (document.hidden || !navigator.onLine) return
             source = new EventSource('/api/events')
-            source.addEventListener('change', () => { clearTimeout(timer); timer = setTimeout(update, 180) })
+            source.addEventListener('change', () => {
+                // Coalesce a burst without postponing refresh forever under sustained events.
+                if (timer !== undefined) return
+                timer = setTimeout(() => { timer = undefined; void update() }, 180)
+            })
             source.onopen = () => { document.querySelectorAll('[data-connection]').forEach(el => { el.textContent = 'Actualización en vivo'; el.classList.remove('offline') }) }
             source.onerror = () => { document.querySelectorAll('[data-connection]').forEach(el => { el.textContent = 'Reconectando…'; el.classList.add('offline') }) }
         }
         document.addEventListener('visibilitychange', connect)
         window.addEventListener('online', connect)
         window.addEventListener('offline', () => { source?.close(); document.querySelectorAll('[data-connection]').forEach(el => { el.textContent = 'Sin conexión · último marcador'; el.classList.add('offline') }) })
-        window.addEventListener('pagehide', () => { clearTimeout(timer); source?.close() })
+        window.addEventListener('pagehide', () => { clearTimeout(timer); timer = undefined; source?.close() })
         connect()
     },
     async init() {
