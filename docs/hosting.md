@@ -43,6 +43,22 @@ Cloud Run ofrece escala a cero, pero su filesystem se descarta con la instancia:
 
 Tampoco usaría Render Free como base del evento: la app suspende por inactividad y su DB gratuita vence a los 30 días. [Restricciones oficiales](https://render.com/docs/free).
 
+## Ampliación: Railway vs. Hostinger — 28/10/2026
+
+Sí se puede alojar la aplicación completa en Railway: el servicio Bun también sirve HTML/CSS/JS, PostgreSQL es el segundo servicio y los logos van en un volumen del servicio app. No se necesita otro proveedor para frontend ni un bucket. El nombre de dominio propio, si se desea, se contrata aparte; la plataforma ofrece un dominio para acceder a la app.
+
+Hobby sirve como plan inicial, pero USD 5 es el mínimo mensual con USD 5 de consumo incluido, no una tarifa plana ilimitada. Si el total de recursos es USD 4, la factura es USD 5; si es USD 8, es USD 8. El rango USD 5–10 es un presupuesto de ensayo, no una garantía sin medir audiencia, tráfico, memoria, disco y backups. [Facturación oficial](https://docs.railway.com/pricing/plans).
+
+Railway mantiene su plantilla PostgreSQL y las actualizaciones de seguridad de su imagen. Backups, recuperación a un punto en el tiempo y alta disponibilidad son opciones que el usuario activa; los upgrades mayores y el tamaño del disco también requieren intervención. No significa que el plan de USD 5 incluya automáticamente un cluster con failover. Las copias incrementales tienen costo de almacenamiento. [Responsabilidades](https://docs.railway.com/databases), [backups](https://docs.railway.com/volumes/backups).
+
+Hostinger VPS permite ejecutar el mismo perfil cloud: app, PostgreSQL y Caddy en una VM. Su Docker Manager facilita usar Compose; no hay que instalar los tres procesos manualmente. El sistema operativo, las actualizaciones de PostgreSQL y la operación de la aplicación quedan a cargo del usuario. Tener asistente de IA y backups semanales del VPS no equivale a contratar PostgreSQL administrado. [Producto y responsabilidades del VPS](https://www.hostinger.com/vps-hosting).
+
+La oferta internacional KVM 1 consultada publica **USD 6,49/mes efectivos**, con **USD 155,76 por 24 meses** y renovación a **USD 11,99/mes** por el mismo plazo: 1 vCPU, 4 GB RAM, 50 GB NVMe y 4 TB de transferencia. Incluye backups semanales. Es más capacidad fija que la necesaria inicialmente según nuestra arquitectura, pero no se validó con la carga real del torneo. Los precios dependen de país, promoción y plazo. [Hostinger internacional](https://www.hostinger.com/vps-hosting).
+
+La tienda argentina consultada publica KVM 1 a **ARS 12.099/mes efectivos**, contrato de **ARS 290.376 por 24 meses** (ofrece hasta 12 cuotas) y renovación a **ARS 24.199/mes**. No es una cotización del pago final: revisar impuestos/recargos y condiciones del checkout. [Hostinger Argentina](https://www.hostinger.com/ar/vps-argentina).
+
+Para publicar este torneo con poco mantenimiento, mantendría Railway como primera opción. Un VPS de Hostinger tiene más sentido si se usará todo el año o también para otros proyectos, y se quiere asumir su administración. Para uno o pocos eventos, el compromiso promocional de 24 meses pesa más que una diferencia pequeña en la cifra mensual anunciada.
+
 ## Decisión práctica
 
 1. Ensayar local con el flujo de torneo y algunos teléfonos.
