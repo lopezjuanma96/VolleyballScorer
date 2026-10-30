@@ -1,9 +1,11 @@
 # Próximos pasos
 
-Actualizado el 28/10/2026. Retomar el 29 o 30/10, según disponibilidad. No se contrataron servicios ni se conectaron cuentas externas.
+Actualizado el 29/10/2026. No se contrataron servicios ni se conectaron cuentas externas.
 
-- [ ] **Google con acceso por invitación.** Reemplazar la cuenta compartida por «Continuar con Google» y una lista de correos autorizados en PostgreSQL. Agregar gestión de invitaciones, roles de administrador/anotador, revocación de permisos que alcance las sesiones abiertas e identificación de la persona en el historial de decisiones. Validar identidad y permisos en el backend; registrar el cliente OAuth y configurar los retornos para local, ngrok y cloud. Mantener una sola app y base, sin otro servicio de autenticación alojado por nosotros ni un proveedor de emails obligatorio.
+- [x] **Roles.** Público, planilleros y organización con cuentas personales, revocación que alcanza sesiones abiertas e identificación de la persona en el historial.
+- [x] **Reglas de set configurables, tabla automática y rotación.**
+- [ ] **Contratar Hostinger y poner el proyecto en producción.** Seguir [docs/hostinger.md](docs/hostinger.md): VPS con Docker, dominio y HTTPS, usuario `deploy`, despliegue desde GitHub después de CI, backups fuera de la VPS y ensayo de restauración. Conectar el MCP de Hostinger (`claude mcp add --transport http hostinger https://mcp.hostinger.com`) para revisar la VPS. Repetir la prueba de carga en la VPS y probar desde la sede.
+- [ ] **Opcional: «Continuar con Google».** Las cuentas ya existen en PostgreSQL; faltaría asociar un correo a cada usuario y aceptar el inicio con Google sólo para correos invitados. Requiere registrar el cliente OAuth y los retornos para local, ngrok y cloud.
+- [ ] **Opcional: plantel por equipo** (nombres de jugadores) para mostrar nombres en la rotación en lugar de números.
 
-- [ ] **Contratar Hostinger KVM 1 y poner el proyecto en producción.** Revisar la oferta de 24 meses, total final y renovación antes de comprar; el usuario vio una promoción cercana a USD 120, aún no confirmada. Conectar el [MCP oficial de Hostinger](https://www.hostinger.com/support/11079316-hostinger-api-mcp-server/) al entorno de trabajo, comprobar sus herramientas y usarlo para las operaciones que soporte. Preparar Docker Compose con app, PostgreSQL y Caddy, dominio/HTTPS, despliegue desde GitHub, backups fuera de la VPS y ensayo de restauración. Repetir la prueba de carga en la VPS y comprobar acceso desde la sede. El servidor podrá alojar portfolio y experimentos durante el año; el día del torneo se dedicará al torneo.
-
-La **caché ya está implementada y probada**: respuestas compartidas en memoria para fixture, categorías y detalle, con invalidación después de cada escritura y antes de avisar por SSE. No hace falta agregar Redis ni otra capa por ahora. Ver [resultados de carga](docs/load-testing.md) y [operación de la caché](docs/operations.md#lecturas-bajo-carga).
+La **caché ya está implementada y probada**: respuestas compartidas en memoria para fixture, categorías, posiciones y detalle, con invalidación después de cada escritura y antes de avisar por SSE. Ver [resultados de carga](docs/load-testing.md).

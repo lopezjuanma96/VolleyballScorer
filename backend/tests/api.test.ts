@@ -51,7 +51,7 @@ integration('API against an isolated PostgreSQL database', () => {
         await db.execute(sql`delete from clubs where id = ${clubId}`)
         await db.execute(sql`delete from categories where id = ${categoryId}`)
         for (const path of paths) if (await Bun.file(path).exists()) await Bun.file(path).delete()
-        await client.end()
+        // The DB client is shared by every test file in this process; bun closes it on exit.
     })
     test('readiness, API 404, invalid input, authorization and CSRF', async () => {
         expect((await request('/healthz')).status).toBe(200)
@@ -113,7 +113,7 @@ integration('API against an isolated PostgreSQL database', () => {
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const activeId = detail.sets[0].id
         const point = await create('/api/points', { setId: activeId, homeScored: true })
-        const final = { scoreHome: 0, scoreAway: 0, status: 'finished_away' }
+        const final = { scoreHome: 23, scoreAway: 25, status: 'finished_away' }
         expect((await request(`/api/sets/${activeId}/finish`, 'POST', final)).status).toBe(400)
         expect((await request(`/api/sets/${activeId}/finish`, 'POST', { ...final, expectedLastPointId: null })).status).toBe(409)
         expect((await request(`/api/sets/${activeId}`, 'PUT', { status: 'cancelled', expectedLastPointId: null })).status).toBe(409)
@@ -123,8 +123,9 @@ integration('API against an isolated PostgreSQL database', () => {
         expect(detail.sets[0].points).toHaveLength(1)
         expect((await request(`/api/sets/${activeId}/finish`, 'POST', { ...final, expectedLastPointId: point.id })).status).toBe(200)
         detail = await (await request(`/api/matches/${match.id}`)).json()
-        expect(detail.sets[0].scoreHome).toBe(0)
+        expect(detail.sets[0].scoreHome).toBe(23)
         expect(detail.sets[0].status).toBe('finished_away')
+        expect(detail.sets[0].points.at(-1).kind).toBe('final')
         expect(detail.sets[0].points).toHaveLength(2)
     })
     test('match closure protects pending points and recovery resumes the same set', async () => {
@@ -172,7 +173,7 @@ integration('API against an isolated PostgreSQL database', () => {
         const point = await create('/api/points', { setId: id, homeScored: true })
         const correction = { scoreHome: 2, scoreAway: 7, status: 'finished_home', expectedStatus: 'in_progress', expectedRevision: 0, expectedLastPointId: point.id, reason: 'Acta revisada por la organización' }
         expect((await request(`/api/sets/${id}/correct`, 'POST', correction)).status).toBe(409)
-        expect((await request(`/api/sets/${id}/finish`, 'POST', { scoreHome: 1, scoreAway: 0, status: 'finished_home', expectedLastPointId: point.id })).status).toBe(200)
+        expect((await request(`/api/sets/${id}/finish`, 'POST', { scoreHome: 25, scoreAway: 20, status: 'finished_home', expectedLastPointId: point.id })).status).toBe(200)
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'finished_away' })
         detail = await (await request(`/api/matches/${match.id}`)).json()
         const closed = detail.sets[0]
@@ -192,7 +193,7 @@ integration('API against an isolated PostgreSQL database', () => {
         const history: any[] = await (await request(`/api/matches/${match.id}/history`)).json()
         const changes = history.filter(e => e.action === 'set_correction')
         expect(changes).toHaveLength(1)
-        expect(changes[0].before.scoreHome).toBe(1)
+        expect(changes[0].before.scoreHome).toBe(25)
         expect(changes[0].after.scoreAway).toBe(7)
         expect(changes[0].reason).toBe(body.reason)
         expect(changes[0].actor).toBe(process.env.MANAGER_USER ?? 'manager')

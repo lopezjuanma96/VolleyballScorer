@@ -1,11 +1,12 @@
 import { Hono } from 'hono'
 import { db } from '../db'
-import { matches, sets, points, teams, clubs, categories, scoringAudit } from '../db/schema'
+import { matches, sets, points, teams, clubs, categories, scoringAudit, setLineups, substitutions } from '../db/schema'
 import { HTTPException } from 'hono/http-exception'
 import { eq, and, inArray, desc, type SQL } from 'drizzle-orm'
-import { authMiddleware } from '../middleware/auth'
-import { config } from '../config'
+import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
 import { publicReads } from '../read-cache'
+import { rulesOf } from '../rules'
+import { rotationState } from '../rotation'
 
 const matchRoutes = new Hono()
 
@@ -14,6 +15,11 @@ type MatchWithRelations = typeof matches.$inferSelect & {
     teamHome: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
     teamAway: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
     sets: (typeof sets.$inferSelect & { points: (typeof points.$inferSelect)[] })[]
+}
+type SetDetail = typeof sets.$inferSelect & {
+    points: (typeof points.$inferSelect)[]
+    lineups: (typeof setLineups.$inferSelect)[]
+    substitutions: (typeof substitutions.$inferSelect)[]
 }
 function buildMatchShape(match: MatchWithRelations) {
     const setsWithScores = match.sets
@@ -25,6 +31,7 @@ function buildMatchShape(match: MatchWithRelations) {
                 setNumber: s.setNumber,
                 status: s.status,
                 revision: s.revision,
+                firstServeHome: s.firstServeHome,
                 scoreHome: lastPoint?.scoreHome ?? 0,
                 scoreAway: lastPoint?.scoreAway ?? 0,
             }
@@ -37,6 +44,7 @@ function buildMatchShape(match: MatchWithRelations) {
         court: match.court,
         scheduledAt: match.scheduledAt,
         status: match.status,
+        rules: rulesOf(match),
         teamHome: {
             id: match.teamHome.id,
             name: match.teamHome.name,
@@ -91,40 +99,55 @@ matchRoutes.get('/:id', async (c) => {
     return c.body(await publicReads.get(`match:${id}`, async () => {
         const match = await db.query.matches.findFirst({
             where: eq(matches.id, id),
-            with: { ...withClause, sets: { ...withClause.sets, with: { points: { orderBy: (p, { asc }) => [asc(p.id)] } } } },
+            with: { ...withClause, sets: { ...withClause.sets, with: {
+                points: { orderBy: (p, { asc }) => [asc(p.id)] },
+                lineups: true,
+                substitutions: { orderBy: (s, { asc }) => [asc(s.id)] },
+            } } },
         })
 
         if (!match) throw new HTTPException(404, { message: 'Partido no encontrado.' })
 
         const base = buildMatchShape(match)
-        const sortedSets = [...match.sets].sort((a, b) => a.setNumber - b.setNumber)
-        const setsWithPoints = base.sets.map((s, i) => ({
-            ...s,
-            points: sortedSets[i].points.map((p) => ({
-                id: p.id,
-                scoreHome: p.scoreHome,
-                scoreAway: p.scoreAway,
-                homeScored: p.homeScored,
-            })),
-        }))
+        const sortedSets = ([...match.sets] as SetDetail[]).sort((a, b) => a.setNumber - b.setNumber)
+        const setsWithPoints = base.sets.map((s, i) => {
+            const detail = sortedSets[i]
+            const lineups = Object.fromEntries(detail.lineups.map(l => [l.side, l.positions]))
+            const changes = detail.substitutions.map(({ id, side, afterRallies, playerOut, playerIn }) => ({ id, side, afterRallies, playerOut, playerIn }))
+            return {
+                ...s,
+                lineups: { home: lineups.home ?? null, away: lineups.away ?? null },
+                substitutions: changes,
+                rotation: rotationState({ firstServeHome: detail.firstServeHome, lineups, rallies: detail.points.filter(p => p.kind === 'rally').map(p => p.homeScored), substitutions: changes }),
+                points: detail.points.map((p) => ({
+                    id: p.id,
+                    scoreHome: p.scoreHome,
+                    scoreAway: p.scoreAway,
+                    homeScored: p.homeScored,
+                    kind: p.kind,
+                })),
+            }
+        })
 
         return { ...base, sets: setsWithPoints }
     }), 200, { 'Content-Type': 'application/json; charset=UTF-8' })
 })
 
-matchRoutes.get('/:id/history', authMiddleware, async c => {
+matchRoutes.get('/:id/history', scorerOnly, async c => {
     const id = Number(c.req.param('id'))
     return c.json(await db.select().from(scoringAudit).where(eq(scoringAudit.matchId, id)).orderBy(desc(scoringAudit.id)))
 })
 
-matchRoutes.post('/', authMiddleware, async (c) => {
-    const { teamHomeId, teamAwayId, categoryId, court, scheduledAt } = await c.req.json()
+matchRoutes.post('/', adminOnly, async (c) => {
+    const { teamHomeId, teamAwayId, categoryId, court, scheduledAt, rules } = await c.req.json()
 
     const result = await db.transaction(async (tx) => {
         await validateTeams(tx, teamHomeId, teamAwayId, categoryId)
+        const [category] = await tx.select().from(categories).where(eq(categories.id, categoryId))
         const [match] = await tx.insert(matches).values({
             teamHomeId, teamAwayId, categoryId, court,
             scheduledAt: new Date(scheduledAt),
+            ...(rules ?? rulesOf(category)),
         }).returning()
         await tx.insert(sets).values({ matchId: match.id, setNumber: 1, status: 'in_progress' })
         return match
@@ -133,9 +156,14 @@ matchRoutes.post('/', authMiddleware, async (c) => {
     return c.json(result, 201)
 })
 
-matchRoutes.put('/:id', authMiddleware, async (c) => {
+// Scorers may only start an upcoming match; every other change is an admin ruling.
+matchRoutes.put('/:id', scorerOnly, async (c) => {
     const id = Number(c.req.param('id'))
     const body = await c.req.json()
+    const admin = (await getSession(c))!.role === 'admin'
+    const start = body.status === 'in_progress' && Object.keys(body).every(key => ['status', 'expectedStatus'].includes(key))
+    if (!admin && !start) return c.json({ error: 'Tu usuario no tiene permiso para esta acción.' }, 403)
+    const who = await actor(c)
 
     const updates: Record<string, any> = {}
     if (body.status !== undefined) updates.status = body.status
@@ -143,6 +171,7 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
     if (body.scheduledAt !== undefined) updates.scheduledAt = new Date(body.scheduledAt)
     if (body.teamHomeId !== undefined) updates.teamHomeId = body.teamHomeId
     if (body.teamAwayId !== undefined) updates.teamAwayId = body.teamAwayId
+    if (body.rules !== undefined) Object.assign(updates, body.rules)
 
     const row = await db.transaction(async tx => {
         const [current] = await tx.select().from(matches).where(eq(matches.id, id)).for('update')
@@ -151,6 +180,7 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
         if (body.expectedStatus !== undefined && body.expectedStatus !== current.status) {
             throw new HTTPException(409, { message: 'El estado del partido cambió. Actualizá la pantalla.' })
         }
+        if (!admin && current.status !== 'upcoming') throw new HTTPException(409, { message: 'Solo la organización puede reabrir un partido terminado o cancelado.' })
         if (body.status && body.status !== 'in_progress' && body.status !== 'upcoming') {
             const [active] = await tx.select().from(sets).where(and(eq(sets.matchId, id), eq(sets.status, 'in_progress'))).for('update')
             const [last] = active ? await tx.select().from(points).where(eq(points.setId, active.id)).orderBy(desc(points.id)).limit(1) : []
@@ -160,7 +190,7 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
             }
             if (active) {
                 await tx.update(sets).set({ status: 'cancelled', revision: active.revision + 1 }).where(eq(sets.id, active.id))
-                await tx.insert(scoringAudit).values({ matchId: id, setId: active.id, action: 'match_close', actor: config.MANAGER_USER, reason: 'Cierre manual del partido', before: { matchStatus: current.status, status: active.status, scoreHome: last?.scoreHome ?? 0, scoreAway: last?.scoreAway ?? 0 }, after: { matchStatus: body.status, status: 'cancelled' } })
+                await tx.insert(scoringAudit).values({ matchId: id, setId: active.id, action: 'match_close', actor: who, reason: 'Cierre manual del partido', before: { matchStatus: current.status, status: active.status, scoreHome: last?.scoreHome ?? 0, scoreAway: last?.scoreAway ?? 0 }, after: { matchStatus: body.status, status: 'cancelled' } })
             }
         }
         if (body.status === 'in_progress') {
@@ -175,7 +205,7 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
             }
         }
         if (body.status && body.status !== current.status) {
-            await tx.insert(scoringAudit).values({ matchId: id, action: 'match_status', actor: config.MANAGER_USER, reason: body.startNewSet ? 'Cambio manual de estado; iniciar un set nuevo' : 'Cambio manual de estado', before: { matchStatus: current.status }, after: { matchStatus: body.status } })
+            await tx.insert(scoringAudit).values({ matchId: id, action: 'match_status', actor: who, reason: body.startNewSet ? 'Cambio manual de estado; iniciar un set nuevo' : 'Cambio manual de estado', before: { matchStatus: current.status }, after: { matchStatus: body.status } })
         }
         const [updated] = await tx.update(matches).set(updates).where(eq(matches.id, id)).returning()
         return updated
@@ -184,7 +214,7 @@ matchRoutes.put('/:id', authMiddleware, async (c) => {
     return c.json(row)
 })
 
-matchRoutes.delete('/:id', authMiddleware, async (c) => {
+matchRoutes.delete('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
 
     await db.transaction(async (tx) => {

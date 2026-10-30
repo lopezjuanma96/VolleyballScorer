@@ -3,64 +3,61 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#18211c" />
-    <meta name="description" content="Fixture y resultados en vivo del torneo de vóley. Seguí cada partido, set y punto." />
-    <title>Torneo de vóley · En vivo</title>
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Fixture, resultados y posiciones del torneo de vóley, en vivo." />
+    <title>Partidos · Torneo de vóley</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js"></script>
 </head>
 <body>
-    <header class="site-header">
-        <a class="wordmark" href="/"><span class="brand-icon" aria-hidden="true">◉</span><span data-tournament-name>Torneo de vóley</span></a>
-        <a class="header-link" href="/manager/">Organización ↗</a>
-    </header>
-    <main class="fixture-shell">
-        <section class="hero">
-            <div class="hero-art" aria-hidden="true"></div>
-            <p class="eyebrow"><span class="live-dot"></span> Desde la cancha</p>
-            <h1>Todo el torneo.<br><span>Punto a punto.</span></h1>
-            <p class="hero-subtitle" data-tournament-subtitle>Cada punto cuenta.</p>
-        </section>
-        <div class="fixture-toolbar">
-            <nav id="category-tabs" class="category-tabs" aria-label="Filtrar por categoría"></nav>
-            <span class="connection" data-connection role="status">Conectando…</span>
-        </div>
-        <div id="match-list" aria-busy="true"><div class="empty-state">Cargando partidos…</div></div>
-        <footer class="site-footer"><span>Hecho para vivir el vóley.</span><span>Los resultados se actualizan automáticamente.</span></footer>
+    <header class="bar"></header>
+    <main class="page">
+        <div class="spread"><h1 class="title">Partidos</h1></div>
+        <nav id="category-tabs" class="tabs" aria-label="Filtrar por categoría" style="margin-top:12px"></nav>
+        <div id="match-list" aria-busy="true"><p class="empty">Cargando partidos…</p></div>
     </main>
     <script>
-        let allMatches = [], allCategories = [], activeCategory = null
+        let allMatches = [], allCategories = [], activeCategory = Number(new URLSearchParams(location.search).get('c')) || null
         const esc = App.escape
-        const won = (m, side) => m.sets.filter(s => s.status === `finished_${side}`).length
-        function teamRow(team, score) {
-            return `<div class="team-row"><span class="team-symbol">${team.clubLogo ? `<img src="${esc(team.clubLogo)}" alt="" loading="lazy" />` : esc(team.name.slice(0, 2).toUpperCase())}</span><span class="team-name">${esc(team.name)}</span><span class="team-score">${score}</span></div>`
+        function teamLine(m, side, score, won) {
+            const team = side === 'home' ? m.teamHome : m.teamAway
+            const sets = m.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away').map(s => side === 'home' ? s.scoreHome : s.scoreAway).join(' ')
+            return `<div class="match-team ${won ? 'won' : ''}"><span class="name">${esc(team.name)}</span><span class="sets">${sets}</span><span class="score">${score}</span></div>`
         }
         function card(m) {
             const winner = App.winner(m)
             const live = m.status === 'in_progress', upcoming = m.status === 'upcoming'
             const active = live && m.sets.find(s => s.status === 'in_progress')
-            const badge = live ? '● EN VIVO' : upcoming ? 'PRÓXIMO' : m.status === 'cancelled' ? 'CANCELADO' : 'FINALIZADO'
-            const played = m.sets.filter(s => s.status !== 'cancelled' && !(s.status === 'in_progress' && !live))
-            return `<a class="match-card ${live ? 'live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(m.teamHome.name)} contra ${esc(m.teamAway.name)}: ${winner ? esc(`Ganó ${winner.name}`) : badge}">
-                <div class="match-meta"><span>${esc(m.categoryName)} · ${App.court(m.court)}</span><span class="match-badge">${badge}</span></div>
-                ${teamRow(m.teamHome, upcoming ? '–' : active ? active.scoreHome : won(m, 'home'))}
-                ${teamRow(m.teamAway, upcoming ? '–' : active ? active.scoreAway : won(m, 'away'))}
-                ${winner ? `<p class="match-winner">✓ Ganó ${esc(winner.name)}</p>` : ''}
-                <div class="match-bottom"><span>${active ? `Set ${active.setNumber} · Sets ${won(m, 'home')}–${won(m, 'away')}` : `${App.date(m.scheduledAt)} · ${App.time(m.scheduledAt)}`}</span><span class="set-summary">${played.map(s => `<span>${s.scoreHome}–${s.scoreAway}</span>`).join('')}</span><span aria-hidden="true">↗</span></div>
+            const score = side => upcoming || m.status === 'cancelled' ? '' : active ? (side === 'home' ? active.scoreHome : active.scoreAway) : App.setsWon(m, side)
+            const status = live ? `<span class="badge badge-live"><span class="live-dot"></span>${active ? `Set ${active.setNumber}` : 'En juego'}</span>` : upcoming ? '' : `<span class="badge">${App.statusLabel(m.status)}</span>`
+            const label = `${m.teamHome.name} contra ${m.teamAway.name}${winner ? `. Ganó ${winner.name}` : live ? '. En juego' : ''}`
+            return `<a class="match-row ${live ? 'is-live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(label)}">
+                <span class="match-time">${App.time(m.scheduledAt)}</span>
+                <span class="match-teams">${teamLine(m, 'home', score('home'), winner === m.teamHome)}${teamLine(m, 'away', score('away'), winner === m.teamAway)}</span>
+                <span class="match-meta"><span>${esc(m.categoryName)} · ${App.court(m.court)}</span><br>${status}</span>
             </a>`
         }
         function render() {
-            const filtered = activeCategory ? allMatches.filter(m => m.categoryId === activeCategory) : allMatches
-            const sections = [['En juego', m => m.status === 'in_progress'], ['Lo que viene', m => m.status === 'upcoming'], ['Resultados', m => m.status.startsWith('finished') || m.status === 'cancelled']]
-            document.getElementById('match-list').innerHTML = sections.map(([label, filter]) => {
-                const rows = filtered.filter(filter).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
-                return rows.length ? `<section class="fixture-section"><h2 class="section-label">${label}<span class="section-count">${rows.length}</span></h2><div class="match-grid">${rows.map(card).join('')}</div></section>` : ''
-            }).join('') || '<div class="empty-state"><span aria-hidden="true">◉</span><strong>La cancha está por encenderse.</strong>Los partidos aparecerán acá cuando la organización publique el fixture.</div>'
+            const filtered = (activeCategory ? allMatches.filter(m => m.categoryId === activeCategory) : allMatches).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+            const live = filtered.filter(m => m.status === 'in_progress')
+            const days = new Map()
+            for (const m of filtered.filter(m => m.status !== 'in_progress')) {
+                const key = App.dayKey(m.scheduledAt)
+                if (!days.has(key)) days.set(key, [])
+                days.get(key).push(m)
+            }
+            const groups = [...(live.length ? [['En juego', live]] : []), ...[...days.values()].map(rows => [App.day(rows[0].scheduledAt), rows])]
+            document.getElementById('match-list').innerHTML = groups.map(([label, rows]) => `<section><h2 class="day">${esc(label)}</h2>${rows.map(card).join('')}</section>`).join('')
+                || '<p class="empty">Todavía no hay partidos publicados.</p>'
             document.getElementById('match-list').setAttribute('aria-busy', 'false')
-            document.getElementById('category-tabs').innerHTML = [{ id: null, name: 'Todas' }, ...allCategories].map(c => `<button class="filter-pill ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory(${c.id})" aria-pressed="${c.id === activeCategory}">${esc(c.name)}</button>`).join('')
+            document.getElementById('category-tabs').innerHTML = allCategories.length > 1 ? [{ id: null, name: 'Todas' }, ...allCategories].map(c => `<button class="tab" onclick="selectCategory(${c.id})" aria-pressed="${c.id === activeCategory}">${esc(c.name)}</button>`).join('') : ''
         }
-        function selectCategory(id) { activeCategory = id; render() }
+        function selectCategory(id) {
+            activeCategory = id
+            history.replaceState(null, '', id ? `?c=${id}` : location.pathname)
+            render()
+        }
         async function load() {
             const [matches, categories] = await Promise.all([App.json('/api/matches'), App.json('/api/categories')])
             allMatches = matches; allCategories = categories
@@ -68,7 +65,7 @@
             render()
         }
         App.ready.then(load).catch(() => {
-            document.getElementById('match-list').innerHTML = '<div class="empty-state"><strong>No pudimos cargar el fixture.</strong>Revisá tu conexión. <button onclick="location.reload()">Volver a intentar ↗</button></div>'
+            document.getElementById('match-list').innerHTML = '<p class="empty">No pudimos cargar el fixture. <button class="btn-link" onclick="location.reload()">Reintentar</button></p>'
         }).finally(() => App.watch(load))
     </script>
 </body>
