@@ -14,6 +14,7 @@
         <div id="score"><p class="empty">Cargando…</p></div>
         <div id="setup"></div>
         <div id="admin"></div>
+        <details id="history" style="margin-top:24px" ontoggle="if (this.open) loadHistory()"><summary>Historial de decisiones</summary><div id="history-list" class="stack-sm" style="margin-top:8px"><p class="small muted">Cargando…</p></div></details>
     </main>
 
     <dialog id="sub-dialog" aria-labelledby="sub-title">
@@ -66,8 +67,8 @@
         async function load() {
             if (!/^\d+$/.test(matchId ?? '')) throw new Error('Partido no encontrado.')
             m = await App.json(`/api/matches/${matchId}`)
-            if (document.getElementById('history')?.open) history = await App.json(`/api/matches/${matchId}/history`)
             render()
+            if (document.getElementById('history').open) await loadHistory()
         }
 
         function court(positions, serving, side) {
@@ -168,7 +169,7 @@
         }
 
         function renderAdmin() {
-            if (!App.isAdmin()) { document.getElementById('admin').innerHTML = historyBlock(); return }
+            if (!App.isAdmin()) { document.getElementById('admin').innerHTML = ''; return }
             if (document.querySelector('#admin :focus')) return
             const active = activeSet()
             const latest = m.sets.at(-1)
@@ -179,14 +180,15 @@
                     <div><p class="small" style="margin-bottom:6px">Estado oficial del partido</p><div class="row">${statuses.map(([value, label]) => `<button class="btn btn-sm" ${m.status === value ? 'aria-pressed="true" style="border-color:var(--ink);font-weight:600"' : ''} onclick="act(updateMatchStatus, '${value}')">${label}</button>`).join('')}</div></div>
                     ${active && m.status === 'in_progress' ? `<div><button class="btn btn-sm btn-danger" onclick="act(cancelSet)">Cancelar set ${active.setNumber}</button></div>` : ''}
                     ${m.status !== 'in_progress' && latest?.status === 'cancelled' && latest.points.length ? `<div class="panel small"><p>¿Se cerró el partido por error? El último set conserva ${latest.scoreHome}–${latest.scoreAway}.</p><button class="btn btn-sm" style="margin-top:8px" onclick="openAdjustment(${latest.id}, 'recover')">Recuperar último set</button></div>` : ''}
-                </div>${historyBlock()}`
+                </div>`
         }
 
-        function historyBlock() {
+        // The history panel stays outside the re-rendered sections so opening it is stable.
+        function renderHistory() {
             const labels = { set_correction: 'Corrección de set', set_recovery: 'Recuperación de set', match_close: 'Cierre con set activo', match_status: 'Estado del partido', set_cancel: 'Set cancelado', set_lineup: 'Saque y formación' }
-            return `<details id="history" style="margin-top:24px" ontoggle="if (this.open) loadHistory()" ${document.getElementById('history')?.open ? 'open' : ''}><summary>Historial de decisiones</summary><div class="stack-sm" style="margin-top:8px">${history.map(e => `<div class="list-row small"><div class="grow"><strong>${esc(labels[e.action] ?? e.action)}</strong>${e.setId ? ` · set ${m.sets.find(s => s.id === e.setId)?.setNumber ?? '—'}` : ''}<br><span class="muted">${esc(e.reason)} · ${esc(auditState(e.before))}${auditState(e.before) && auditState(e.after) ? ' → ' : ''}${esc(auditState(e.after))}</span></div><span class="tiny muted">${esc(e.actor)} · ${App.date(e.createdAt)} ${App.time(e.createdAt)}</span></div>`).join('') || '<p class="small muted">Sin decisiones registradas.</p>'}</div></details>`
+            document.getElementById('history-list').innerHTML = history.map(e => `<div class="list-row small"><div class="grow"><strong>${esc(labels[e.action] ?? e.action)}</strong>${e.setId ? ` · set ${m.sets.find(s => s.id === e.setId)?.setNumber ?? '—'}` : ''}<br><span class="muted">${esc(e.reason)}${auditState(e.before) || auditState(e.after) ? ' · ' : ''}${esc(auditState(e.before))}${auditState(e.before) && auditState(e.after) ? ' → ' : ''}${esc(auditState(e.after))}</span></div><span class="tiny muted">${esc(e.actor)} · ${App.date(e.createdAt)} ${App.time(e.createdAt)}</span></div>`).join('') || '<p class="small muted">Sin decisiones registradas.</p>'
         }
-        async function loadHistory() { history = await App.json(`/api/matches/${matchId}/history`); renderAdmin() }
+        async function loadHistory() { history = await App.json(`/api/matches/${matchId}/history`); renderHistory() }
         function auditState(value) {
             const labels = { upcoming: 'Próximo', in_progress: 'En juego', finished_home: 'Ganó local', finished_away: 'Ganó visitante', cancelled: 'Cancelado' }
             return [value.matchStatus ? `Partido: ${labels[value.matchStatus]}` : '', value.status ? `Set: ${labels[value.status]}` : '', value.scoreHome !== undefined ? `${value.scoreHome}–${value.scoreAway}` : ''].filter(Boolean).join(' · ')

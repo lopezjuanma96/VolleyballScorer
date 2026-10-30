@@ -134,10 +134,15 @@ textarea { resize: vertical; }
 .login { max-width: 360px; margin: 12vh auto 0; padding: 0 20px; }
 
 @media (max-width: 640px) {
-    .bar-inner { gap: 16px; padding: 0 16px; }
+    /* Brand and session on top, nav on its own scrollable row. */
+    .bar-inner { gap: 0 16px; padding: 0 16px; height: auto; flex-wrap: wrap; }
+    .brand { max-width: 60%; padding: 14px 0 4px; }
+    .bar-end { padding-top: 10px; }
+    .bar-end a, .bar-end button { padding: 4px 0; }
+    .nav { order: 3; flex-basis: 100%; gap: 18px; }
+    .nav a { padding: 10px 0; }
     .bar .connection, .bar-end a[href="/"] { display: none; }
-    .brand { max-width: 38%; }
-    .nav { gap: 14px; }
+    .btn-sm { min-height: 40px; }
     .page { padding: 20px 16px 48px; }
     .match-row { grid-template-columns: 44px minmax(0, 1fr); }
     .match-meta { grid-column: 2; text-align: left; display: flex; gap: 10px; }
