@@ -3,7 +3,7 @@ import { db } from '../db'
 import { teams, matches } from '../db/schema'
 import { HTTPException } from 'hono/http-exception'
 import { eq, and, or } from 'drizzle-orm'
-import { authMiddleware } from '../middleware/auth'
+import { adminOnly } from '../middleware/auth'
 
 const teamRoutes = new Hono()
 
@@ -22,13 +22,13 @@ teamRoutes.get('/', async (c) => {
     return c.json(rows)
 })
 
-teamRoutes.post('/', authMiddleware, async (c) => {
+teamRoutes.post('/', adminOnly, async (c) => {
     const { clubId, categoryId, name } = await c.req.json()
     const [row] = await db.insert(teams).values({ clubId, categoryId, name }).returning()
     return c.json(row, 201)
 })
 
-teamRoutes.put('/:id', authMiddleware, async (c) => {
+teamRoutes.put('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
     const { clubId, categoryId, name } = await c.req.json()
     const row = await db.transaction(async tx => {
@@ -45,7 +45,7 @@ teamRoutes.put('/:id', authMiddleware, async (c) => {
     return c.json(row)
 })
 
-teamRoutes.delete('/:id', authMiddleware, async (c) => {
+teamRoutes.delete('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
     const [row] = await db.delete(teams).where(eq(teams.id, id)).returning()
     if (!row) return c.json({ error: 'Not found' }, 404)

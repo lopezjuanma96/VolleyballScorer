@@ -72,11 +72,15 @@ Esta confianza exige que internet sólo pueda alcanzar la app a través del prox
 
 Al cerrar o cancelar un set, la pantalla envía `expectedLastPointId`: el ID del último punto que mostró, o `null` si aún no había puntos. La API lo compara dentro de la transacción que bloquea partido y set. Si otro anotador cambió el marcador, responde 409 sin guardar ni crear otro set.
 
-La pantalla carga el marcador actual. Para ingresar un resultado manual distinto ofrece una confirmación con el resultado solicitado y el actual; una nueva modificación concurrente vuelve a detener la operación. No se aplican reglas automáticas de ganador. Los clientes de API anteriores deben enviar este campo en `POST /api/sets/:id/finish` y `PUT /api/sets/:id`; después de actualizar la app, recargá las pantallas de anotación que estuvieran abiertas.
+Las reglas del partido deciden: un punto que completa el set lo cierra y abre el siguiente (con el saque alternado), y el que completa el partido lo finaliza. El resultado final cargado de una vez (`POST /api/sets/:id/finish`) debe ser válido para las reglas (25–23 sí, 28–25 no); el ganador se calcula. «Deshacer» quita el último punto del partido aunque haya cerrado un set o el partido: los reabre y elimina el set vacío siguiente. No deshace correcciones administrativas ni puntos anteriores a un cambio registrado (primero se deshace el cambio). Después de actualizar la app, recargá las pantallas de anotación que estuvieran abiertas.
+
+## Usuarios y roles
+
+`manager` (variables `MANAGER_USER`/`MANAGER_PASSWORD`) es el administrador principal y de emergencia; cambiar su contraseña en `.env` cierra sus sesiones. Las demás cuentas se crean en **Usuarios** con contraseña Argon2id (`Bun.password`). Rol, estado y contraseña se leen en cada pedido: desactivar, cambiar el rol o la contraseña corta las sesiones abiertas de esa persona. Planillero: iniciar partidos, puntos, deshacer, saque, formación, cambios y resultado de set. Organización: además fixture, categorías y reglas, clubes, equipos, usuarios, estado oficial, cancelación y corrección de sets. El historial registra el usuario de cada decisión.
 
 ## Correcciones y recuperación
 
-En el marcador, «Corregir» permite cambiar puntaje y adjudicación de un set cerrado o cancelado. Requiere motivo y confirmación; agrega un registro de marcador sin borrar los puntos anteriores. El «Historial de decisiones» registra antes/después, fecha, cuenta de organización y motivo. Como hay una cuenta compartida, identifica la cuenta, no a cada persona que la usa. El ganador oficial del partido se mantiene: si también estaba equivocado, cambialo explícitamente desde «Estado del partido».
+En el marcador, «Corregir» (sólo organización) permite cambiar puntaje y adjudicación de un set cerrado o cancelado. Requiere motivo y confirmación; agrega un registro de marcador sin borrar los puntos anteriores. El «Historial de decisiones» registra antes/después, fecha, usuario y motivo. El ganador oficial del partido se mantiene: si también estaba equivocado, cambialo explícitamente desde «Estado del partido».
 
 Al finalizar/cancelar un partido con puntos en curso se muestra una advertencia. El set activo queda cancelado con sus puntos intactos. «Recuperar último set» lo devuelve a juego y pone el partido en vivo. Sólo puede recuperarse el último set cancelado, sin un set posterior ni otro set activo. Si se elige iniciar uno nuevo desde 0–0, se pide confirmación y se conserva el anterior. No se reabren automáticamente sets adjudicados: se corrigen administrativamente.
 
@@ -87,7 +91,7 @@ API autenticada:
 - `GET /api/matches/:id/history`: historial de decisiones; no es público.
 - Al cerrar un partido con puntos pendientes, `PUT /api/matches/:id` exige `expectedActiveSet: { id, lastPointId }`. La interfaz envía también `expectedStatus`. Una pantalla desactualizada recibe 409 y debe volver a revisar. Para iniciar un nuevo set en lugar de recuperar el último cancelado con puntos, hace falta `startNewSet: true`.
 
-La migración `0003_chubby_scorpion` añade la revisión del set y el historial; se aplica al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
+La migración `0003_chubby_scorpion` añade la revisión del set y el historial; `0004_roles_rules_rotation` añade usuarios, reglas (3/25/15/2 sin tope para lo existente), tipo de punto, saque inicial, formaciones y cambios, y marca como corrección los registros de correcciones anteriores. Se aplican al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
 
 ## Lecturas bajo carga
 

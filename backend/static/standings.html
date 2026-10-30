@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Tabla de posiciones del torneo de vóley." />
+    <title>Posiciones · Torneo de vóley</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="page">
+        <h1 class="title">Posiciones</h1>
+        <nav id="category-tabs" class="tabs" aria-label="Elegir categoría" style="margin-top:12px"></nav>
+        <div id="tables" aria-busy="true"><p class="empty">Cargando posiciones…</p></div>
+    </main>
+    <script>
+        let tables = [], activeCategory = Number(new URLSearchParams(location.search).get('c')) || null
+        const esc = App.escape
+        // Winner: sets of the format minus sets lost. Loser: sets won.
+        function legend(bestOf) {
+            const need = Math.ceil(bestOf / 2)
+            const results = Array.from({ length: need }, (_, lost) => `${need}–${lost}: ${bestOf - lost}/${lost}`)
+            return `Puntos por partido (mejor de ${bestOf}, ganador/perdedor): ${results.join(' · ')}.`
+        }
+        function table(t) {
+            const rows = t.rows.map((r, i) => `<tr>
+                <td class="muted">${i + 1}</td>
+                <td class="team left">${r.clubLogo ? `<img class="logo" src="${esc(r.clubLogo)}" alt="" loading="lazy"> ` : ''}${esc(r.name)}</td>
+                <td>${r.played}</td><td>${r.won}</td><td>${r.lost}</td>
+                <td>${r.setsWon}–${r.setsLost}</td>
+                <td class="hide-sm muted">${r.pointsFor}–${r.pointsAgainst}</td>
+                <td class="pts">${r.points}</td></tr>`).join('')
+            return `<section><h2 class="section">${esc(t.categoryName)}</h2>${t.rows.length ? `<div class="table-wrap"><table class="table">
+                <thead><tr><th>#</th><th class="left">Equipo</th><th title="Partidos jugados">PJ</th><th title="Ganados">PG</th><th title="Perdidos">PP</th><th>Sets</th><th class="hide-sm">Tantos</th><th>Pts</th></tr></thead>
+                <tbody>${rows}</tbody></table></div><p class="tiny muted" style="margin-top:8px">${legend(t.bestOf)}</p>` : '<p class="muted small">Sin equipos.</p>'}</section>`
+        }
+        function render() {
+            if (activeCategory && !tables.some(t => t.categoryId === activeCategory)) activeCategory = null
+            const selected = activeCategory ? tables.filter(t => t.categoryId === activeCategory) : tables
+            document.getElementById('category-tabs').innerHTML = tables.length > 1 ? [{ categoryId: null, categoryName: 'Todas' }, ...tables].map(t => `<button class="tab" onclick="selectCategory(${t.categoryId})" aria-pressed="${t.categoryId === activeCategory}">${esc(t.categoryName)}</button>`).join('') : ''
+            document.getElementById('tables').innerHTML = selected.map(table).join('') || '<p class="empty">Todavía no hay categorías.</p>'
+            document.getElementById('tables').setAttribute('aria-busy', 'false')
+        }
+        function selectCategory(id) {
+            activeCategory = id
+            history.replaceState(null, '', id ? `?c=${id}` : location.pathname)
+            render()
+        }
+        async function load() { tables = await App.json('/api/standings'); render() }
+        App.ready.then(load).catch(() => {
+            document.getElementById('tables').innerHTML = '<p class="empty">No pudimos cargar las posiciones. <button class="btn-link" onclick="location.reload()">Reintentar</button></p>'
+        }).finally(() => App.watch(load))
+    </script>
+</body>
+</html>

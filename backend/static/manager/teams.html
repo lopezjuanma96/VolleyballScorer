@@ -3,186 +3,124 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manager — Equipos</title>
+    <title>Equipos · Panel</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body>
+    <header class="bar"></header>
+    <main class="page">
+        <h1 class="title">Equipos</h1>
 
-    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
-        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
-        <h1 class="text-lg font-bold tracking-wide">Equipos</h1>
-    </header>
+        <form id="team-form" class="panel stack" style="margin-top:16px" novalidate>
+            <h2 class="section" id="form-title" style="margin:0">Nuevo equipo</h2>
+            <div class="form-grid">
+                <div class="field"><label for="team-name">Nombre</label><input type="text" id="team-name" maxlength="80" required /></div>
+                <div class="field"><label for="team-club">Club</label><select id="team-club" required><option value="">Elegí un club…</option></select></div>
+                <div class="field"><label for="team-category">Categoría</label><select id="team-category" required><option value="">Elegí una categoría…</option></select></div>
+            </div>
+            <p id="form-error" class="error hidden" role="alert"></p>
+            <div class="row">
+                <button type="submit" class="btn btn-primary" id="save-button">Crear equipo</button>
+                <button type="button" class="btn hidden" id="cancel-button" onclick="resetForm()">Cancelar</button>
+            </div>
+        </form>
 
-    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4">
-
-        <!-- Add / Edit form -->
-        <div class="bg-white rounded-xl shadow p-4 space-y-3">
-            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider" id="form-title">Agregar equipo</h2>
-            <input type="hidden" id="edit-id" value="" />
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del equipo</label>
-                <input type="text" id="team-name"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Club</label>
-                <select id="team-club"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-                    <option value="">Seleccionar club...</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                <select id="team-category"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-                    <option value="">Seleccionar categoría...</option>
-                </select>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="submitForm()"
-                    class="bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
-                    Guardar
-                </button>
-                <button onclick="resetForm()" id="cancel-btn"
-                    class="hidden text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                    Cancelar
-                </button>
-            </div>
-            <p id="form-error" class="text-red-500 text-sm hidden"></p>
-        </div>
-
-        <!-- List -->
-        <div id="team-list">
-            <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
-        </div>
+        <nav id="category-tabs" class="tabs" aria-label="Filtrar por categoría" style="margin-top:20px"></nav>
+        <div id="team-list" aria-busy="true"><p class="empty">Cargando equipos…</p></div>
     </main>
-
     <script>
-        let allClubs = []
-        let allCategories = []
+        let teams = [], clubs = [], categories = [], editingId = null, activeCategory = null
+        const $ = id => document.getElementById(id)
+        const esc = App.escape
 
-        async function checkAuth() {
-            const res = await App.fetch('/api/auth/me')
-            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
+        function showError(message) { $('form-error').textContent = message; $('form-error').classList.toggle('hidden', !message) }
+
+        function render() {
+            const clubName = id => clubs.find(c => c.id === id)?.name ?? '—'
+            const categoryName = id => categories.find(c => c.id === id)?.name ?? '—'
+            const shown = activeCategory ? teams.filter(t => t.categoryId === activeCategory) : teams
+            $('category-tabs').innerHTML = categories.length > 1 ? [{ id: null, name: 'Todas' }, ...categories].map(c => `<button type="button" class="tab" onclick="selectCategory(${c.id})" aria-pressed="${c.id === activeCategory}">${esc(c.name)}</button>`).join('') : ''
+            $('team-list').innerHTML = shown.map(t => `<div class="list-row">
+                <div class="grow"><strong>${esc(t.name)}</strong><div class="small muted">${esc(clubName(t.clubId))} · ${esc(categoryName(t.categoryId))}</div></div>
+                <div class="row">
+                    <button type="button" class="btn btn-sm" onclick="editTeam(${t.id})">Editar</button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteTeam(${t.id})">Eliminar</button>
+                </div>
+            </div>`).join('') || '<p class="empty">No hay equipos.</p>'
+            $('team-list').setAttribute('aria-busy', 'false')
         }
 
-        async function loadSelectors() {
-            const [clubsRes, catsRes] = await Promise.all([
-                App.fetch('/api/clubs'),
-                App.fetch('/api/categories'),
-            ])
-            allClubs = await clubsRes.json()
-            allCategories = await catsRes.json()
+        function selectCategory(id) { activeCategory = id; render() }
 
-            document.getElementById('team-club').innerHTML =
-                '<option value="">Seleccionar club...</option>' +
-                allClubs.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
-
-            document.getElementById('team-category').innerHTML =
-                '<option value="">Seleccionar categoría...</option>' +
-                allCategories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
-        }
-
-        function clubName(id) { return allClubs.find(c => c.id === id)?.name ?? id }
-        function categoryName(id) { return allCategories.find(c => c.id === id)?.name ?? id }
-
-        async function loadTeams() {
-            try {
-                const res = await App.fetch('/api/teams')
-                if (!res.ok) throw new Error()
-                const teams = await res.json()
-
-                if (teams.length === 0) {
-                    document.getElementById('team-list').innerHTML =
-                        '<p class="text-gray-400 text-sm text-center py-4">No hay equipos.</p>'
-                    return
-                }
-
-                document.getElementById('team-list').innerHTML = `
-                    <div class="space-y-2">
-                        ${teams.map(t => `
-                            <div class="bg-white rounded-xl shadow p-4 flex items-center gap-4">
-                                <div class="flex-1">
-                                    <div class="font-medium text-gray-800">${App.escape(t.name)}</div>
-                                    <div class="text-xs text-gray-400 mt-0.5">${App.escape(clubName(t.clubId))} · ${App.escape(categoryName(t.categoryId))}</div>
-                                </div>
-                                <div class="flex gap-3">
-                                    <button onclick="editTeam(${t.id}, this.dataset.name, ${t.clubId}, ${t.categoryId})" data-name="${App.escape(t.name)}"
-                                        class="text-sm text-brand font-medium hover:underline">Editar</button>
-                                    <button onclick="deleteTeam(${t.id})"
-                                        class="text-sm text-red-500 hover:underline">Eliminar</button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `
-            } catch {
-                document.getElementById('team-list').innerHTML =
-                    '<p class="text-red-500 text-sm text-center py-4">Error al cargar los equipos.</p>'
-            }
-        }
-
-        function editTeam(id, name, clubId, categoryId) {
-            document.getElementById('edit-id').value = id
-            document.getElementById('team-name').value = name
-            document.getElementById('team-club').value = clubId
-            document.getElementById('team-category').value = categoryId
-            document.getElementById('form-title').textContent = 'Editar equipo'
-            document.getElementById('cancel-btn').classList.remove('hidden')
+        function editTeam(id) {
+            const t = teams.find(t => t.id === id)
+            if (!t) return
+            editingId = id
+            $('team-name').value = t.name
+            $('team-club').value = t.clubId
+            $('team-category').value = t.categoryId
+            $('form-title').textContent = 'Editar equipo'
+            $('save-button').textContent = 'Guardar cambios'
+            $('cancel-button').classList.remove('hidden')
+            showError('')
+            $('team-name').focus()
             window.scrollTo({ top: 0, behavior: 'smooth' })
         }
 
         function resetForm() {
-            document.getElementById('edit-id').value = ''
-            document.getElementById('team-name').value = ''
-            document.getElementById('team-club').value = ''
-            document.getElementById('team-category').value = ''
-            document.getElementById('form-title').textContent = 'Agregar equipo'
-            document.getElementById('cancel-btn').classList.add('hidden')
-            document.getElementById('form-error').classList.add('hidden')
+            editingId = null
+            $('team-name').value = ''
+            $('team-club').value = ''
+            $('team-category').value = activeCategory ?? ''
+            $('form-title').textContent = 'Nuevo equipo'
+            $('save-button').textContent = 'Crear equipo'
+            $('cancel-button').classList.add('hidden')
+            showError('')
         }
 
-        async function submitForm() {
-            const id = document.getElementById('edit-id').value
-            const name = document.getElementById('team-name').value.trim()
-            const clubId = Number(document.getElementById('team-club').value)
-            const categoryId = Number(document.getElementById('team-category').value)
-            const errorEl = document.getElementById('form-error')
+        async function load() {
+            ;[teams, clubs, categories] = await Promise.all([App.json('/api/teams'), App.json('/api/clubs'), App.json('/api/categories')])
+            if (activeCategory && !categories.some(c => c.id === activeCategory)) activeCategory = null
+            const selected = { club: $('team-club').value, category: $('team-category').value }
+            $('team-club').innerHTML = '<option value="">Elegí un club…</option>' + clubs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+            $('team-category').innerHTML = '<option value="">Elegí una categoría…</option>' + categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+            $('team-club').value = selected.club
+            $('team-category').value = selected.category
+            render()
+        }
 
-            if (!name || !clubId || !categoryId) {
-                errorEl.textContent = 'Completar todos los campos.'
-                errorEl.classList.remove('hidden')
-                return
-            }
-
-            const url = id ? `/api/teams/${id}` : '/api/teams'
-            const method = id ? 'PUT' : 'POST'
-
+        $('team-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            const name = $('team-name').value.trim(), clubId = Number($('team-club').value), categoryId = Number($('team-category').value)
+            if (!name || !clubId || !categoryId) return showError('Completá nombre, club y categoría.')
+            showError('')
+            const button = $('save-button')
+            button.disabled = true
             try {
-                const res = await App.fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, clubId, categoryId }),
-                })
-                if (!res.ok) throw new Error()
+                const res = await App.send(editingId ? `/api/teams/${editingId}` : '/api/teams', editingId ? 'PUT' : 'POST', { name, clubId, categoryId })
+                if (!res.ok) return showError((await res.json().catch(() => ({}))).error ?? 'No se pudo guardar el equipo.')
+                App.toast(editingId ? 'Equipo actualizado.' : 'Equipo creado.')
                 resetForm()
-                loadTeams()
-            } catch {
-                errorEl.textContent = 'Error al guardar el equipo.'
-                errorEl.classList.remove('hidden')
-            }
-        }
+                await load()
+            } finally { button.disabled = false }
+        })
 
         async function deleteTeam(id) {
             if (!confirm('¿Eliminar este equipo?')) return
-            const res = await App.fetch(`/api/teams/${id}`, { method: 'DELETE' })
-            if (res.ok) loadTeams()
-            else alert('Error al eliminar. Puede que tenga partidos asociados.')
+            const res = await App.send(`/api/teams/${id}`, 'DELETE')
+            if (res.ok) {
+                App.toast('Equipo eliminado.')
+                if (editingId === id) resetForm()
+                await load()
+            }
         }
 
-        App.ready.then(checkAuth).then(loadSelectors).then(loadTeams)
+        App.ready.then(() => {
+            if (!App.isAdmin()) { document.querySelector('main').innerHTML = '<p class="empty">Solo la organización puede administrar equipos. <a href="/manager/">Volver a Partidos</a></p>'; return }
+            return load()
+        }).catch(() => { $('team-list').innerHTML = '<p class="empty">No pudimos cargar los equipos. <button type="button" class="btn-link" onclick="location.reload()">Reintentar</button></p>' })
     </script>
 </body>
 </html>

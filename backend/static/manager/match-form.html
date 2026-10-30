@@ -3,168 +3,154 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manager — Crear Partido</title>
+    <title>Partido · Panel</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-
-    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
-        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
-        <h1 id="form-title" class="text-lg font-bold tracking-wide">Nuevo partido</h1>
-    </header>
-
-    <main class="px-4 py-4 max-w-2xl mx-auto">
-        <div class="bg-white rounded-xl shadow p-4 space-y-4">
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                <select id="category"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <option value="">Seleccionar categoría...</option>
-                </select>
+<body>
+    <header class="bar"></header>
+    <main class="page page-narrow">
+        <h1 class="title" id="form-title">Nuevo partido</h1>
+        <form id="match-form" class="stack" style="margin-top:16px" novalidate>
+            <p id="edit-note" class="small muted hidden">Editás horario, cancha y reglas. La categoría y los equipos no se pueden cambiar.</p>
+            <div class="form-grid">
+                <div class="field"><label for="category">Categoría</label><select id="category" required><option value="">Elegí una categoría…</option></select></div>
+                <div class="field"><label for="court">Cancha</label><select id="court"><option value="court1">Cancha 1</option><option value="court2">Cancha 2</option></select></div>
+            </div>
+            <div class="form-grid">
+                <div class="field"><label for="team-home">Equipo local</label><select id="team-home" required><option value="">Elegí una categoría primero</option></select></div>
+                <div class="field"><label for="team-away">Equipo visitante</label><select id="team-away" required><option value="">Elegí una categoría primero</option></select></div>
+            </div>
+            <div class="field">
+                <label for="scheduled-at">Fecha y hora</label>
+                <input type="datetime-local" id="scheduled-at" required />
+                <span id="timezone-info" class="hint" role="note"></span>
+                <span id="tournament-preview" class="small" aria-live="polite"></span>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Equipo local</label>
-                <select id="team-home"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <option value="">Seleccionar categoría primero...</option>
-                </select>
+            <section class="stack-sm">
+                <h2 class="section" style="margin:12px 0 4px">Reglas</h2>
+                <p id="category-rules" class="small muted">Elegí una categoría para ver sus reglas.</p>
+                <label class="check"><input type="checkbox" id="custom-rules" /> Usar reglas propias para este partido</label>
+                <div id="rules-fields" class="panel hidden">
+                    <div class="form-grid">
+                        <div class="field"><label for="rule-bestOf">Formato</label><select id="rule-bestOf"><option value="1">Un set</option><option value="3">Mejor de 3</option><option value="5">Mejor de 5</option><option value="7">Mejor de 7</option></select></div>
+                        <div class="field"><label for="rule-setPoints">Puntos por set</label><input type="number" id="rule-setPoints" min="3" max="99" /></div>
+                        <div class="field"><label for="rule-tiebreakPoints">Puntos del desempate</label><input type="number" id="rule-tiebreakPoints" min="3" max="99" /></div>
+                        <div class="field"><label for="rule-minLead">Diferencia mínima</label><input type="number" id="rule-minLead" min="1" max="5" /></div>
+                        <div class="field"><label for="rule-pointCap">Tope de puntos</label><input type="number" id="rule-pointCap" min="4" max="199" placeholder="Sin tope" /><span class="hint">Vacío = sin tope.</span></div>
+                    </div>
+                    <p id="rules-edit-note" class="tiny muted hidden" style="margin-top:10px">Cambiar las reglas con el partido en juego no reevalúa los sets ya cerrados.</p>
+                </div>
+            </section>
+
+            <p id="form-error" class="error hidden" role="alert"></p>
+            <div class="row">
+                <button type="submit" class="btn btn-primary" id="save-button">Crear partido</button>
+                <a class="btn" href="/manager/">Cancelar</a>
             </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Equipo visitante</label>
-                <select id="team-away"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <option value="">Seleccionar categoría primero...</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Cancha</label>
-                <select id="court"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <option value="court1">Cancha 1</option>
-                    <option value="court2">Cancha 2</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha y hora</label>
-                <input type="datetime-local" id="scheduled-at"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
-
-            <p id="timezone-info" class="text-sm text-gray-600" role="note"></p>
-            <p id="tournament-preview" class="text-sm font-medium text-gray-700" aria-live="polite"></p>
-            <p id="edit-note" class="text-sm text-gray-500 hidden">Editás horario y cancha. Los equipos y la categoría se conservan.</p>
-            <p id="form-error" class="text-red-500 text-sm hidden"></p>
-
-            <button id="save-button" onclick="submitForm()"
-                class="w-full bg-surface text-brand text-sm font-semibold px-4 py-2 rounded-lg hover:bg-surface-light transition-colors">
-                Crear partido
-            </button>
-        </div>
+        </form>
     </main>
-
     <script>
-        let allTeams = []
-        const editingId = new URLSearchParams(location.search).get('id')
+        let allTeams = [], allCategories = [], editingMatch = null
+        const editingId = Number(new URLSearchParams(location.search).get('id')) || null
+        const $ = id => document.getElementById(id)
+        const ruleKeys = ['bestOf', 'setPoints', 'tiebreakPoints', 'minLead', 'pointCap']
+        const sameRules = (a, b) => ruleKeys.every(k => (a[k] ?? null) === (b[k] ?? null))
+        const currentCategory = () => allCategories.find(c => c.id === Number($('category').value))
+
+        function fillRules(r) {
+            for (const k of ruleKeys) $(`rule-${k}`).value = r[k] ?? ''
+        }
+        function readRules() {
+            const n = k => Number($(`rule-${k}`).value)
+            return { bestOf: n('bestOf'), setPoints: n('setPoints'), tiebreakPoints: n('tiebreakPoints'), minLead: n('minLead'), pointCap: $('rule-pointCap').value === '' ? null : n('pointCap') }
+        }
+        function showError(message) { $('form-error').textContent = message; $('form-error').classList.toggle('hidden', !message) }
+
         function updateTimezonePreview() {
             const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-            document.getElementById('timezone-info').textContent = `Ingresá la hora de tu dispositivo (${deviceZone}). Zona del torneo: ${App.config.timeZone}.${!App.sameTimeZone(deviceZone, App.config.timeZone) ? ' Son zonas distintas: revisá la equivalencia antes de guardar.' : ''}`
-            const value = document.getElementById('scheduled-at').value
+            $('timezone-info').textContent = `Ingresá la hora de tu dispositivo (${deviceZone}). Zona del torneo: ${App.config.timeZone}.${!App.sameTimeZone(deviceZone, App.config.timeZone) ? ' Son zonas distintas: revisá la equivalencia antes de guardar.' : ''}`
+            const value = $('scheduled-at').value
             const date = new Date(value)
-            document.getElementById('tournament-preview').textContent = value && !Number.isNaN(date.valueOf()) ? `En el torneo: ${new Intl.DateTimeFormat('es-AR', { timeZone: App.config.timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(date)}` : ''
-        }
-        document.getElementById('scheduled-at').addEventListener('input', updateTimezonePreview)
-
-        async function checkAuth() {
-            const res = await App.fetch('/api/auth/me')
-            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
+            $('tournament-preview').textContent = value && !Number.isNaN(date.valueOf()) ? `En el torneo: ${new Intl.DateTimeFormat('es-AR', { timeZone: App.config.timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(date)}` : ''
         }
 
-        async function loadData() {
-            const [catsRes, teamsRes] = await Promise.all([
-                App.fetch('/api/categories'),
-                App.fetch('/api/teams'),
-            ])
-            const categories = await catsRes.json()
-            allTeams = await teamsRes.json()
+        function updateCategory() {
+            const category = currentCategory()
+            $('category-rules').textContent = category ? `Reglas de la categoría: ${App.rulesText(category)}.` : 'Elegí una categoría para ver sus reglas.'
+            const options = category ? allTeams.filter(t => t.categoryId === category.id) : []
+            const html = options.length ? '<option value="">Elegí un equipo…</option>' + options.map(t => `<option value="${t.id}">${App.escape(t.name)}</option>`).join('') : `<option value="">${category ? 'Sin equipos en esta categoría' : 'Elegí una categoría primero'}</option>`
+            $('team-home').innerHTML = html
+            $('team-away').innerHTML = html
+            if (category && !$('custom-rules').checked) fillRules(category)
+        }
 
-            document.getElementById('category').innerHTML =
-                '<option value="">Seleccionar categoría...</option>' +
-                categories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
+        $('custom-rules').addEventListener('change', () => {
+            $('rules-fields').classList.toggle('hidden', !$('custom-rules').checked)
+            const category = currentCategory()
+            if ($('custom-rules').checked && category && !$('rule-setPoints').value) fillRules(category)
+        })
+        $('category').addEventListener('change', updateCategory)
+        $('scheduled-at').addEventListener('input', updateTimezonePreview)
+
+        function localInputValue(iso) {
+            const d = new Date(iso), p = n => String(n).padStart(2, '0')
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+        }
+
+        async function load() {
+            if (!App.isAdmin()) {
+                document.querySelector('main').innerHTML = '<p class="empty">Solo la organización puede crear o editar partidos. <a href="/manager/">Volver a Partidos</a></p>'
+                return
+            }
+            ;[allCategories, allTeams] = await Promise.all([App.json('/api/categories'), App.json('/api/teams')])
+            $('category').innerHTML = '<option value="">Elegí una categoría…</option>' + allCategories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
             if (editingId) {
-                const match = await App.json(`/api/matches/${editingId}`)
-                document.title = 'Manager — Editar partido'
-                document.getElementById('form-title').textContent = 'Editar partido'
-                document.getElementById('save-button').textContent = 'Guardar cambios'
-                document.getElementById('edit-note').classList.remove('hidden')
-                document.getElementById('category').value = match.categoryId
-                document.getElementById('category').dispatchEvent(new Event('change'))
-                document.getElementById('team-home').value = match.teamHome.id
-                document.getElementById('team-away').value = match.teamAway.id
-                for (const id of ['category', 'team-home', 'team-away']) document.getElementById(id).disabled = true
-                document.getElementById('court').value = match.court
-                const local = new Date(match.scheduledAt)
-                document.getElementById('scheduled-at').value = `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,'0')}-${String(local.getDate()).padStart(2,'0')}T${String(local.getHours()).padStart(2,'0')}:${String(local.getMinutes()).padStart(2,'0')}`
+                editingMatch = await App.json(`/api/matches/${editingId}`)
+                document.title = 'Editar partido · Panel'
+                $('form-title').textContent = 'Editar partido'
+                $('save-button').textContent = 'Guardar cambios'
+                $('edit-note').classList.remove('hidden')
+                $('rules-edit-note').classList.remove('hidden')
+                $('category').value = editingMatch.categoryId
+                updateCategory()
+                $('team-home').value = editingMatch.teamHome.id
+                $('team-away').value = editingMatch.teamAway.id
+                for (const id of ['category', 'team-home', 'team-away']) $(id).disabled = true
+                $('court').value = editingMatch.court
+                $('scheduled-at').value = localInputValue(editingMatch.scheduledAt)
+                fillRules(editingMatch.rules)
+                const custom = !sameRules(editingMatch.rules, currentCategory())
+                $('custom-rules').checked = custom
+                $('rules-fields').classList.toggle('hidden', !custom)
             }
             updateTimezonePreview()
         }
 
-        document.getElementById('category').addEventListener('change', function () {
-            const catId = Number(this.value)
-            const filtered = catId ? allTeams.filter(t => t.categoryId === catId) : []
-            const options = filtered.length > 0
-                ? filtered.map(t => `<option value="${t.id}">${App.escape(t.name)}</option>`).join('')
-                : '<option value="">Sin equipos en esta categoría</option>'
-
-            document.getElementById('team-home').innerHTML = options
-            document.getElementById('team-away').innerHTML = options
-        })
-
-        async function submitForm() {
-            const categoryId = Number(document.getElementById('category').value)
-            const teamHomeId = Number(document.getElementById('team-home').value)
-            const teamAwayId = Number(document.getElementById('team-away').value)
-            const court = document.getElementById('court').value
-            const scheduledAt = document.getElementById('scheduled-at').value
-            const errorEl = document.getElementById('form-error')
-
-            if (!categoryId || !teamHomeId || !teamAwayId || !court || !scheduledAt) {
-                errorEl.textContent = 'Completar todos los campos.'
-                errorEl.classList.remove('hidden')
-                return
-            }
-
-            if (teamHomeId === teamAwayId) {
-                errorEl.textContent = 'El equipo local y visitante deben ser distintos.'
-                errorEl.classList.remove('hidden')
-                return
-            }
-
-            const button = document.getElementById('save-button')
+        $('match-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            const categoryId = Number($('category').value), teamHomeId = Number($('team-home').value), teamAwayId = Number($('team-away').value)
+            const court = $('court').value, scheduledAt = $('scheduled-at').value
+            if (!categoryId || !teamHomeId || !teamAwayId || !court || !scheduledAt) return showError('Completá todos los campos.')
+            if (teamHomeId === teamAwayId) return showError('El equipo local y el visitante deben ser distintos.')
+            const body = { court, scheduledAt: new Date(scheduledAt).toISOString() }
+            if (!editingId) Object.assign(body, { teamHomeId, teamAwayId, categoryId })
+            if ($('custom-rules').checked) body.rules = readRules()
+            // Unchecking on edit goes back to the category's rules.
+            else if (editingId && !sameRules(editingMatch.rules, currentCategory())) body.rules = ruleKeys.reduce((r, k) => ({ ...r, [k]: currentCategory()[k] ?? null }), {})
+            showError('')
+            const button = $('save-button')
             button.disabled = true
             try {
-            const res = await App.fetch(editingId ? `/api/matches/${editingId}` : '/api/matches', {
-                method: editingId ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...(editingId ? {} : { teamHomeId, teamAwayId, categoryId }), court, scheduledAt: new Date(scheduledAt).toISOString() }),
-            })
-
-            if (res.ok) {
-                window.location.href = '/manager/'
-            } else {
-                errorEl.textContent = (await res.json()).error ?? 'No se pudo guardar el partido.'
-                errorEl.classList.remove('hidden')
-            }
+                const res = await App.send(editingId ? `/api/matches/${editingId}` : '/api/matches', editingId ? 'PUT' : 'POST', body)
+                if (res.ok) return location.assign('/manager/')
+                showError((await res.json().catch(() => ({}))).error ?? 'No se pudo guardar el partido.')
             } finally { button.disabled = false }
-        }
+        })
 
-        App.ready.then(checkAuth).then(loadData)
+        App.ready.then(load).catch(() => showError('No pudimos cargar los datos. Recargá la página.'))
     </script>
 </body>
 </html>

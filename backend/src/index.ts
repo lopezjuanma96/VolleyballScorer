@@ -3,12 +3,12 @@ import { serveStatic } from 'hono/bun'
 import { secureHeaders } from 'hono/secure-headers'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
-import { ZodError } from 'zod'
+import { z, ZodError } from 'zod'
 import { mkdirSync } from 'node:fs'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
 import { config } from './config'
-import { isAuthenticated } from './middleware/auth'
+import { getSession } from './middleware/auth'
 import { validateRequest } from './validation'
 import { liveRoutes, publishChange } from './live'
 import authRoutes from './routes/auth'
@@ -18,8 +18,13 @@ import teamRoutes from './routes/teams'
 import matchRoutes from './routes/matches'
 import setRoutes from './routes/sets'
 import pointRoutes from './routes/points'
+import standingRoutes from './routes/standings'
+import userRoutes from './routes/users'
 import { publicReads } from './read-cache'
 
+// Validation messages reach the UI; custom messages in validation.ts take precedence.
+z.config(z.locales.es())
+const fieldNames: Record<string, string> = { bestOf: 'Sets', setPoints: 'Puntos por set', tiebreakPoints: 'Puntos del desempate', minLead: 'Diferencia mínima', pointCap: 'Tope de puntos', username: 'Usuario', password: 'Contraseña', displayName: 'Nombre', name: 'Nombre', home: 'Formación local', away: 'Formación visitante', reason: 'Motivo' }
 mkdirSync(config.UPLOAD_DIR, { recursive: true })
 const app = new Hono()
 app.use('*', secureHeaders())
@@ -51,10 +56,16 @@ app.route('/api/teams', teamRoutes)
 app.route('/api/matches', matchRoutes)
 app.route('/api/sets', setRoutes)
 app.route('/api/points', pointRoutes)
+app.route('/api/standings', standingRoutes)
+app.route('/api/users', userRoutes)
 app.all('/api/*', c => c.json({ error: 'Ruta no encontrada.' }, 404))
+// Scorers only see the match list and scoreboard; the API enforces the same roles.
+const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/users.html', '/manager/match-form.html'])
 app.use('/manager/*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
-    if (!await isAuthenticated(c)) return c.redirect('/login.html')
+    const session = await getSession(c)
+    if (!session) return c.redirect('/login.html')
+    if (session.role !== 'admin' && adminPages.has(c.req.path)) return c.redirect('/manager/')
     await next()
 })
 app.get('/uploads/:file', async c => {
@@ -70,7 +81,11 @@ app.all('/uploads/*', c => c.notFound())
 app.use('/*', serveStatic({ root: './static' }))
 app.onError((error, c) => {
     if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)
-    if (error instanceof ZodError) return c.json({ error: 'Revisá los datos ingresados.', fields: error.issues.map(i => i.path.join('.')) }, 400)
+    if (error instanceof ZodError) {
+        const issue = error.issues[0]
+        const field = fieldNames[String(issue?.path[0])]
+        return c.json({ error: issue ? `${field ? `${field}: ` : ''}${issue.message}` : 'Revisá los datos ingresados.', fields: error.issues.map(i => i.path.join('.')) }, 400)
+    }
     if (error instanceof SyntaxError) return c.json({ error: 'JSON inválido.' }, 400)
     const cause = (error as any).cause ?? error
     if (cause.code === '23505') return c.json({ error: 'Ya existe un registro con esos datos.' }, 409)

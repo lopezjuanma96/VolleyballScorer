@@ -29,6 +29,13 @@
       "when": 1793161720294,
       "tag": "0003_chubby_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793317804915,
+      "tag": "0004_roles_rules_rotation",
+      "breakpoints": true
     }
   ]
 }

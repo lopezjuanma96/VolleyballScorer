@@ -1,34 +1,34 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { categories } from '../db/schema'
-import { eq } from 'drizzle-orm'
-import { authMiddleware } from '../middleware/auth'
+import { asc, eq } from 'drizzle-orm'
+import { adminOnly } from '../middleware/auth'
 import { publicReads } from '../read-cache'
+import { categoryInput, categoryUpdate } from '../validation'
 
 const categoryRoutes = new Hono()
 
 categoryRoutes.get('/', async (c) => {
-    return c.body(await publicReads.get('categories', () => db.select().from(categories)), 200, { 'Content-Type': 'application/json; charset=UTF-8' })
+    return c.body(await publicReads.get('categories', () => db.select().from(categories).orderBy(asc(categories.name))), 200, { 'Content-Type': 'application/json; charset=UTF-8' })
 })
 
-categoryRoutes.post('/', authMiddleware, async (c) => {
-    const { name } = await c.req.json()
-    const [row] = await db.insert(categories).values({ name }).returning()
+categoryRoutes.post('/', adminOnly, async (c) => {
+    const [row] = await db.insert(categories).values(categoryInput.parse(await c.req.json())).returning()
     return c.json(row, 201)
 })
 
-categoryRoutes.put('/:id', authMiddleware, async (c) => {
+// Rule changes apply to matches created afterwards; existing matches keep their copy.
+categoryRoutes.put('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
-    const { name } = await c.req.json()
-    const [row] = await db.update(categories).set({ name }).where(eq(categories.id, id)).returning()
-    if (!row) return c.json({ error: 'Not found' }, 404)
+    const [row] = await db.update(categories).set(categoryUpdate.parse(await c.req.json())).where(eq(categories.id, id)).returning()
+    if (!row) return c.json({ error: 'Categoría no encontrada.' }, 404)
     return c.json(row)
 })
 
-categoryRoutes.delete('/:id', authMiddleware, async (c) => {
+categoryRoutes.delete('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
     const [row] = await db.delete(categories).where(eq(categories.id, id)).returning()
-    if (!row) return c.json({ error: 'Not found' }, 404)
+    if (!row) return c.json({ error: 'Categoría no encontrada.' }, 404)
     return c.json({ ok: true })
 })
 

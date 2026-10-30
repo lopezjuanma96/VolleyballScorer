@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Usuarios · Panel</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="page">
+        <h1 class="title">Usuarios</h1>
+        <p id="bootstrap-admin" class="panel small" style="margin-top:20px"></p>
+        <section class="panel" style="margin-top:16px">
+            <h2 class="section" style="margin-top:0">Crear usuario</h2>
+            <form id="create-user-form" class="stack">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="new-username">Usuario</label>
+                        <input type="text" id="new-username" minlength="3" maxlength="50" pattern="[a-z0-9._-]+" autocapitalize="none" autocomplete="off" required />
+                        <p class="hint">De 3 a 50 caracteres: letras minúsculas, números, punto, guion o guion bajo.</p>
+                    </div>
+                    <div class="field">
+                        <label for="new-display-name">Nombre visible</label>
+                        <input type="text" id="new-display-name" maxlength="100" required />
+                    </div>
+                    <div class="field">
+                        <label for="new-role">Rol</label>
+                        <select id="new-role">
+                            <option value="scorer" selected>Planillero</option>
+                            <option value="admin">Organización</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="new-password">Contraseña inicial</label>
+                        <div class="row">
+                            <input type="text" id="new-password" minlength="10" autocomplete="new-password" required />
+                            <button type="button" class="btn" id="generate-password">Generar</button>
+                        </div>
+                        <p class="hint">Mínimo 10 caracteres. La contraseña queda visible para que puedas copiarla.</p>
+                    </div>
+                </div>
+                <p class="small muted"><strong>Planillero:</strong> iniciar partidos, anotar puntos, formación y cambios.<br /><strong>Organización:</strong> además, fixture, categorías y reglas, clubes, equipos, usuarios y correcciones.</p>
+                <p id="create-error" class="error hidden" role="alert"></p>
+                <div><button type="submit" class="btn btn-primary" id="create-user">Crear usuario</button></div>
+            </form>
+        </section>
+        <h2 class="section">Usuarios cargados</h2>
+        <p class="small muted">Cambiar el rol, la contraseña o el acceso de una persona cierra todas sus sesiones abiertas.</p>
+        <p id="list-error" class="error hidden" role="alert"></p>
+        <div id="user-list" aria-busy="true"><p class="empty">Cargando usuarios…</p></div>
+    </main>
+    <dialog id="edit-dialog" aria-labelledby="edit-title">
+        <form id="edit-user-form" class="stack">
+            <h2 class="section" id="edit-title" style="margin-top:0">Editar usuario</h2>
+            <div class="field">
+                <label for="edit-display-name">Nombre visible</label>
+                <input type="text" id="edit-display-name" maxlength="100" required />
+            </div>
+            <div class="field">
+                <label for="edit-role">Rol</label>
+                <select id="edit-role">
+                    <option value="scorer">Planillero</option>
+                    <option value="admin">Organización</option>
+                </select>
+                <p class="hint" id="edit-role-hint"></p>
+            </div>
+            <p id="edit-error" class="error hidden" role="alert"></p>
+            <div class="row">
+                <button type="submit" class="btn btn-primary" id="save-user">Guardar cambios</button>
+                <button type="button" class="btn" id="cancel-edit">Cancelar</button>
+            </div>
+        </form>
+    </dialog>
+    <script>
+        let users = [], editingId = null
+        const esc = App.escape
+        const byId = id => document.getElementById(id)
+        const roleLabel = role => role === 'admin' ? 'Organización' : 'Planillero'
+        function showError(id, message) {
+            const element = byId(id)
+            element.textContent = message
+            element.classList.remove('hidden')
+        }
+        async function responseError(response, fallback) {
+            const body = await response.json().catch(() => ({}))
+            return body.error ?? fallback
+        }
+        function renderUsers() {
+            byId('user-list').innerHTML = users.map(user => {
+                const self = user.username === App.session.username
+                return `<div class="list-row">
+                    <div class="grow">
+                        <div>${esc(user.displayName)} ${user.active ? '' : '<span class="badge">Inactivo</span>'}</div>
+                        <div class="small muted">@${esc(user.username)} · ${roleLabel(user.role)}</div>
+                    </div>
+                    <div class="row">
+                        <button type="button" class="btn btn-sm" onclick="editUser(${user.id})">Editar</button>
+                        <button type="button" class="btn btn-sm" onclick="resetPassword(${user.id})">Restablecer contraseña</button>
+                        ${self ? '' : `<button type="button" class="btn btn-sm" onclick="toggleUser(${user.id})">${user.active ? 'Desactivar' : 'Reactivar'}</button>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">Eliminar</button>`}
+                    </div>
+                </div>`
+            }).join('') || '<p class="empty">No hay usuarios adicionales.</p>'
+            byId('user-list').setAttribute('aria-busy', 'false')
+        }
+        async function loadUsers() {
+            try {
+                const data = await App.json('/api/users')
+                users = data.users
+                byId('bootstrap-admin').innerHTML = `Administrador principal: <strong>${esc(data.bootstrapAdmin)}</strong> — se configura en el servidor`
+                byId('list-error').classList.add('hidden')
+                renderUsers()
+            } catch {
+                byId('user-list').innerHTML = '<p class="empty">No pudimos cargar los usuarios. <button class="btn-link" onclick="loadUsers()">Reintentar</button></p>'
+                byId('user-list').setAttribute('aria-busy', 'false')
+            }
+        }
+        function editUser(id) {
+            const user = users.find(item => item.id === id)
+            if (!user) return
+            editingId = id
+            byId('edit-display-name').value = user.displayName
+            byId('edit-role').value = user.role
+            const self = user.username === App.session.username
+            byId('edit-role').disabled = self
+            byId('edit-role-hint').textContent = self ? 'No podés cambiar tu propio rol.' : 'Cambiar el rol cierra las sesiones abiertas de esta persona.'
+            byId('edit-error').classList.add('hidden')
+            byId('edit-dialog').showModal()
+        }
+        async function resetPassword(id) {
+            const user = users.find(item => item.id === id)
+            if (!user) return
+            const password = prompt(`Nueva contraseña para @${user.username} (mínimo 10 caracteres):`)
+            if (password === null) return
+            byId('list-error').classList.add('hidden')
+            if (password.length < 10) return showError('list-error', 'La contraseña debe tener al menos 10 caracteres.')
+            if (!confirm(`¿Restablecer la contraseña de @${user.username}? Se cerrarán todas sus sesiones.`)) return
+            try {
+                const response = await App.send(`/api/users/${id}`, 'PUT', { password })
+                if (!response.ok) {
+                    showError('list-error', await responseError(response, 'No se pudo restablecer la contraseña.'))
+                    return
+                }
+                App.toast('Contraseña restablecida.')
+                await loadUsers()
+            } catch {
+                showError('list-error', 'No hay conexión. No se pudo restablecer la contraseña.')
+            }
+        }
+        async function toggleUser(id) {
+            const user = users.find(item => item.id === id)
+            if (!user || user.username === App.session.username) return
+            const action = user.active ? 'desactivar' : 'reactivar'
+            const warning = user.active ? ' Se cerrarán todas sus sesiones.' : ''
+            if (!confirm(`¿Querés ${action} a @${user.username}?${warning}`)) return
+            byId('list-error').classList.add('hidden')
+            try {
+                const response = await App.send(`/api/users/${id}`, 'PUT', { active: !user.active })
+                if (!response.ok) {
+                    showError('list-error', await responseError(response, 'No se pudo cambiar el acceso.'))
+                    return
+                }
+                App.toast(user.active ? 'Usuario desactivado.' : 'Usuario reactivado.')
+                await loadUsers()
+            } catch {
+                showError('list-error', 'No hay conexión. No se pudo cambiar el acceso.')
+            }
+        }
+        async function deleteUser(id) {
+            const user = users.find(item => item.id === id)
+            if (!user || user.username === App.session.username || !confirm(`¿Eliminar a @${user.username}? Esta acción no se puede deshacer.`)) return
+            byId('list-error').classList.add('hidden')
+            try {
+                const response = await App.send(`/api/users/${id}`, 'DELETE')
+                if (!response.ok) {
+                    showError('list-error', await responseError(response, 'No se pudo eliminar el usuario.'))
+                    return
+                }
+                App.toast('Usuario eliminado.')
+                await loadUsers()
+            } catch {
+                showError('list-error', 'No hay conexión. No se pudo eliminar el usuario.')
+            }
+        }
+        byId('generate-password').addEventListener('click', () => {
+            const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+            const random = crypto.getRandomValues(new Uint8Array(14))
+            const input = byId('new-password')
+            input.value = Array.from(random, value => alphabet[value % alphabet.length]).join('')
+            input.focus()
+            input.select()
+        })
+        byId('create-user-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            const button = byId('create-user')
+            if (button.disabled) return
+            const username = byId('new-username').value.trim().toLowerCase()
+            const displayName = byId('new-display-name').value.trim()
+            const password = byId('new-password').value
+            byId('create-error').classList.add('hidden')
+            if (!/^[a-z0-9._-]{3,50}$/.test(username)) return showError('create-error', 'Ingresá un usuario válido de 3 a 50 caracteres.')
+            if (!displayName) return showError('create-error', 'El nombre visible es obligatorio.')
+            if (password.length < 10) return showError('create-error', 'La contraseña debe tener al menos 10 caracteres.')
+            button.disabled = true
+            try {
+                const response = await App.send('/api/users', 'POST', { username, displayName, role: byId('new-role').value, password })
+                if (!response.ok) {
+                    showError('create-error', await responseError(response, 'No se pudo crear el usuario.'))
+                    return
+                }
+                byId('create-user-form').reset()
+                App.toast('Usuario creado.')
+                await loadUsers()
+            } catch {
+                showError('create-error', 'No hay conexión. No se pudo crear el usuario.')
+            } finally {
+                button.disabled = false
+            }
+        })
+        byId('edit-user-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            const button = byId('save-user')
+            const user = users.find(item => item.id === editingId)
+            if (!user || button.disabled) return
+            const displayName = byId('edit-display-name').value.trim()
+            byId('edit-error').classList.add('hidden')
+            if (!displayName) return showError('edit-error', 'El nombre visible es obligatorio.')
+            const body = { displayName }
+            if (user.username !== App.session.username && byId('edit-role').value !== user.role) body.role = byId('edit-role').value
+            button.disabled = true
+            try {
+                const response = await App.send(`/api/users/${editingId}`, 'PUT', body)
+                if (!response.ok) {
+                    showError('edit-error', await responseError(response, 'No se pudo guardar el usuario.'))
+                    return
+                }
+                byId('edit-dialog').close()
+                App.toast('Usuario actualizado.')
+                await loadUsers()
+            } catch {
+                showError('edit-error', 'No hay conexión. No se pudo guardar el usuario.')
+            } finally {
+                button.disabled = false
+            }
+        })
+        byId('cancel-edit').addEventListener('click', () => byId('edit-dialog').close())
+        App.ready.then(loadUsers)
+    </script>
+</body>
+</html>

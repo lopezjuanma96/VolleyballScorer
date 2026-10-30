@@ -3,300 +3,296 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manager — Marcador</title>
+    <title>Planilla · Panel</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-
-    <header class="bg-surface text-brand px-4 py-4 shadow flex items-center gap-3">
-        <a href="/manager/" class="text-brand hover:text-brand-dark text-lg leading-none">←</a>
-        <h1 class="text-lg font-bold tracking-wide">Marcador</h1>
-    </header>
-
-    <main class="px-4 py-4 max-w-2xl mx-auto space-y-4" id="content">
-        <p class="text-gray-400 text-sm text-center py-8">Cargando...</p>
+<body>
+    <header class="bar"></header>
+    <main class="page page-narrow">
+        <div id="score"><p class="empty">Cargando…</p></div>
+        <div id="setup"></div>
+        <div id="admin"></div>
     </main>
 
-    <dialog id="adjustment-dialog" aria-labelledby="adjustment-title" class="rounded-xl p-5 max-w-lg w-full">
-        <form onsubmit="submitAdjustment(event)" class="space-y-4">
-            <h2 id="adjustment-title" class="text-lg font-bold"></h2>
-            <p id="adjustment-description" class="text-sm text-gray-600"></p>
-            <div id="correction-fields" class="space-y-3">
-                <div class="grid grid-cols-2 gap-3">
-                    <div><label for="correction-home">Puntos local</label><input id="correction-home" type="number" min="0" max="999" required class="w-full border rounded-lg p-2" /></div>
-                    <div><label for="correction-away">Puntos visitante</label><input id="correction-away" type="number" min="0" max="999" required class="w-full border rounded-lg p-2" /></div>
+    <dialog id="sub-dialog" aria-labelledby="sub-title">
+        <form onsubmit="submitSubstitution(event)" class="stack">
+            <h2 id="sub-title" class="title" style="font-size:18px">Cambio</h2>
+            <div class="form-grid">
+                <div class="field"><label for="sub-out">Sale</label><select id="sub-out" required></select></div>
+                <div class="field"><label for="sub-in">Entra (número)</label><input id="sub-in" type="number" inputmode="numeric" min="0" max="99" required /></div>
+            </div>
+            <p class="tiny muted">El jugador que entra ocupa la misma posición. El líbero no se registra.</p>
+            <div class="row"><button type="submit" class="btn btn-primary">Registrar cambio</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Volver</button></div>
+        </form>
+    </dialog>
+
+    <dialog id="adjustment-dialog" aria-labelledby="adjustment-title">
+        <form onsubmit="submitAdjustment(event)" class="stack">
+            <h2 id="adjustment-title" class="title" style="font-size:18px"></h2>
+            <p id="adjustment-description" class="small muted"></p>
+            <div id="correction-fields" class="stack-sm">
+                <div class="form-grid">
+                    <div class="field"><label for="correction-home">Puntos local</label><input id="correction-home" type="number" min="0" max="999" required /></div>
+                    <div class="field"><label for="correction-away">Puntos visitante</label><input id="correction-away" type="number" min="0" max="999" required /></div>
                 </div>
-                <label for="correction-status" class="block">Resultado del set</label>
-                <select id="correction-status" class="w-full border rounded-lg p-2"></select>
+                <div class="field"><label for="correction-status">Resultado del set</label><select id="correction-status"></select></div>
             </div>
-            <label for="adjustment-reason" class="block">Motivo (queda en el historial)</label>
-            <textarea id="adjustment-reason" minlength="3" maxlength="500" required rows="3" class="w-full border rounded-lg p-2"></textarea>
-            <p id="adjustment-error" role="alert" class="text-sm text-red-600"></p>
-            <div class="flex gap-3 flex-wrap">
-                <button id="adjustment-submit" type="submit" class="bg-surface text-brand rounded-lg px-4 py-2 font-semibold">Confirmar y guardar</button>
-                <button type="button" onclick="document.getElementById('adjustment-dialog').close()" class="border rounded-lg px-4 py-2">Volver</button>
-            </div>
+            <div class="field"><label for="adjustment-reason">Motivo (queda en el historial)</label><textarea id="adjustment-reason" minlength="3" maxlength="500" required rows="3"></textarea></div>
+            <p id="adjustment-error" role="alert" class="error"></p>
+            <div class="row"><button id="adjustment-submit" type="submit" class="btn btn-primary">Confirmar y guardar</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Volver</button></div>
         </form>
     </dialog>
 
     <script>
-        let currentMatch = null
-        let matchHistory = []
-        let adjustment = null
-        const matchId = new URLSearchParams(window.location.search).get('id')
+        const matchId = new URLSearchParams(location.search).get('id')
+        const esc = App.escape
+        const POSITIONS = ['I', 'II', 'III', 'IV', 'V', 'VI']
+        // Court order as seen from the team's own side: front IV III II, back V VI I.
+        const COURT_ORDER = [3, 2, 1, 4, 5, 0]
+        let m = null, history = [], adjustment = null, subSide = null, busy = false, setupDirty = false, setupFor = null
 
-        async function checkAuth() {
-            const res = await App.fetch('/api/auth/me')
-            if (!res.ok) { window.location.href = '/login.html'; throw new Error('Iniciá sesión.') }
+        const activeSet = () => m.sets.find(s => s.status === 'in_progress') ?? null
+        const teamName = side => esc(side === 'home' ? m.teamHome.name : m.teamAway.name)
+        // The last undoable entry of the match: the latest point of the most recent set that has points.
+        function lastEntry() {
+            const set = [...m.sets].sort((a, b) => b.setNumber - a.setNumber).find(s => s.points.length)
+            const point = set?.points.at(-1)
+            if (!set || !point || point.kind === 'correction' || set.status === 'cancelled') return null
+            return { set, point }
         }
 
-        async function loadMatch() {
-            const res = await App.fetch(`/api/matches/${matchId}`)
-            if (!res.ok) {
-                document.getElementById('content').innerHTML = '<p class="text-gray-400 text-sm">Partido no encontrado.</p>'
-                return
-            }
-            currentMatch = await res.json()
-            matchHistory = await App.json(`/api/matches/${matchId}/history`)
+        async function load() {
+            if (!/^\d+$/.test(matchId ?? '')) throw new Error('Partido no encontrado.')
+            m = await App.json(`/api/matches/${matchId}`)
+            if (document.getElementById('history')?.open) history = await App.json(`/api/matches/${matchId}/history`)
             render()
         }
 
-        function courtLabel(court) {
-            const labels = { court1: 'Cancha 1', court2: 'Cancha 2' }
-            return labels[court] ?? court
-        }
-
-        function formatTime(iso) {
-            return App.time(iso)
-        }
-
-        function setsWon(side) {
-            return currentMatch.sets.filter(s => s.status === `finished_${side}`).length
-        }
-
-        function activeSet() {
-            return currentMatch.sets.find(s => s.status === 'in_progress') ?? null
+        function court(positions, serving, side) {
+            return `<div class="court" aria-label="Rotación de ${teamName(side)}">${COURT_ORDER.map(i => `<div class="${serving && i === 0 ? 'server' : ''}">${positions[i]}<small>${POSITIONS[i]}</small></div>`).join('')}</div>`
         }
 
         function render() {
-            const m = currentMatch
-            const home = App.escape(m.teamHome.name)
-            const away = App.escape(m.teamAway.name)
-            const setsHome = setsWon('home')
-            const setsAway = setsWon('away')
+            document.title = `${m.teamHome.name} vs ${m.teamAway.name} · Planilla`
+            renderScore()
             const active = activeSet()
+            // Do not overwrite a lineup the scorer is typing when another device scores.
+            if (!setupDirty || setupFor !== active?.id) renderSetup()
+            renderAdmin()
+        }
 
-            const currentScore = active
-                ? `${active.scoreHome} – ${active.scoreAway}`
-                : '–'
-
-            const isLive = m.status === 'in_progress'
-
-            // Set tabs
-            const setTabs = m.sets.map(s => {
-                let label = `Set ${s.setNumber}`
-                let cls = 'px-3 py-1.5 rounded-full text-sm font-medium'
-                if (s.status === 'in_progress') { label += ' ●'; cls += ' bg-green-100 text-green-700' }
-                else if (s.status === 'cancelled') { label += ' ✕'; cls += ' bg-red-100 text-red-500' }
-                else { cls += ' bg-gray-100 text-gray-600' }
-                return `<span class="${cls}">${label}</span>`
-            }).join('')
-
-            // Scoring controls (only if match is in progress and has active set)
-            const scoringControls = (isLive && active) ? `
-                <div class="bg-white rounded-xl shadow p-4 space-y-4">
-                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                        Set ${active.setNumber} — Marcador en vivo
-                    </h3>
-                    <div class="text-4xl font-bold text-center text-gray-900">${currentScore}</div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="addPoint(true)"
-                            class="bg-surface text-brand font-semibold py-4 rounded-xl text-lg hover:bg-surface-light active:scale-95 transition-all">
-                            + ${home}
-                        </button>
-                        <button onclick="addPoint(false)"
-                            class="bg-orange-500 text-white font-semibold py-4 rounded-xl text-lg hover:bg-orange-600 active:scale-95 transition-all">
-                            + ${away}
-                        </button>
+        function renderScore() {
+            const active = activeSet()
+            const live = m.status === 'in_progress'
+            const won = side => App.setsWon(m, side)
+            const serving = active?.rotation?.serving
+            const winner = App.winner(m)
+            const last = lastEntry()
+            const header = `<p class="small"><a href="/manager/" class="muted">← Partidos</a></p>
+                <div class="spread small muted" style="margin-top:12px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`}</div>`
+            const scoreline = `<div class="scoreline">
+                    <div class="side"><div class="team-name">${teamName('home')}${serving === 'home' ? '<span class="serve" title="Saca"></span>' : ''}</div><div class="club">Sets ${won('home')}</div></div>
+                    <div><div class="big">${active ? `${active.scoreHome}–${active.scoreAway}` : `${won('home')}–${won('away')}`}</div><div class="under">${active ? `Set ${active.setNumber}` : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)}</div></div>
+                    <div class="side"><div class="team-name">${serving === 'away' ? '<span class="serve" title="Saca"></span>' : ''}${teamName('away')}</div><div class="club">Sets ${won('away')}</div></div>
+                </div>`
+            let body = ''
+            if (m.status === 'upcoming') {
+                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p><button class="btn btn-primary btn-point" onclick="act(startMatch)">Iniciar partido</button></div>`
+            } else if (live && active) {
+                body = `<div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
+                        <button class="btn btn-primary btn-point" onclick="act(addPoint, true)">+ ${teamName('home')}</button>
+                        <button class="btn btn-primary btn-point" onclick="act(addPoint, false)">+ ${teamName('away')}</button>
                     </div>
-                    <button onclick="undoLastPoint()"
-                        class="w-full border border-gray-300 text-gray-600 font-medium py-2 rounded-xl text-sm hover:bg-gray-50 transition-colors">
-                        ↩ Deshacer último punto
-                    </button>
-                </div>
-
-                <!-- Finish set -->
-                <div class="bg-white rounded-xl shadow p-4 space-y-3">
-                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Finalizar set con marcador final</h3>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label for="final-home" class="block text-xs text-gray-500 mb-1">${home}</label>
-                            <input type="number" id="final-home" min="0" value="${active.scoreHome}"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                        </div>
-                        <div>
-                            <label for="final-away" class="block text-xs text-gray-500 mb-1">${away}</label>
-                            <input type="number" id="final-away" min="0" value="${active.scoreAway}"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                        </div>
+                    <div class="spread" style="margin-top:12px">
+                        <button class="btn" onclick="act(undo)" ${last ? '' : 'disabled'}>↶ Deshacer último punto</button>
+                        <span class="tiny muted">${App.rulesText(m.rules)}</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="finishSet('finished_home')"
-                            class="bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700 transition-colors">
-                            Ganó ${home}
-                        </button>
-                        <button onclick="finishSet('finished_away')"
-                            class="bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700 transition-colors">
-                            Ganó ${away}
-                        </button>
-                    </div>
-                    <button onclick="cancelSet()"
-                        class="w-full border border-red-300 text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors">
-                        Cancelar set
-                    </button>
-                </div>
-            ` : ''
-
-            // Match status controls
-            const statusOptions = ['upcoming', 'in_progress', 'finished_home', 'finished_away', 'cancelled']
-            const statusLabels = {
-                upcoming: 'Próximo',
-                in_progress: 'En vivo',
-                finished_home: `Finalizado (ganó ${home})`,
-                finished_away: `Finalizado (ganó ${away})`,
-                cancelled: 'Cancelado',
+                    ${rotationBlock(active)}
+                    <details class="panel" style="margin-top:20px"><summary>Cargar resultado final del set ${active.setNumber}</summary>
+                        <p class="tiny muted" style="margin:8px 0">Para cuando no se anota punto a punto. El ganador se calcula con las reglas del partido.</p>
+                        <div class="form-grid"><div class="field"><label for="final-home">${teamName('home')}</label><input id="final-home" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreHome}" /></div>
+                        <div class="field"><label for="final-away">${teamName('away')}</label><input id="final-away" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreAway}" /></div></div>
+                        <button class="btn" style="margin-top:12px" onclick="act(finishSet)">Guardar resultado del set</button>
+                    </details>`
+            } else {
+                body = `<div class="stack" style="margin-top:20px">
+                    <p class="small muted">${m.status === 'cancelled' ? 'Partido cancelado.' : winner ? `Partido terminado. Ganó ${esc(winner.name)}.` : 'Partido detenido.'}</p>
+                    ${last && m.status !== 'cancelled' ? `<button class="btn" onclick="act(undo)">↶ Deshacer último punto (reabre el partido)</button>` : ''}</div>`
             }
-
-            document.getElementById('content').innerHTML = `
-                <!-- Match header -->
-                <div class="bg-white rounded-xl shadow p-4">
-                    <div class="text-xs text-gray-400 mb-2">${courtLabel(m.court)} · ${formatTime(m.scheduledAt)} · ${App.escape(m.categoryName)}</div>
-                    <p class="text-sm font-semibold mb-2">${statusLabels[m.status]}</p>
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="font-bold text-gray-800 flex-1 text-lg">${home}</span>
-                        <div class="text-center min-w-[5rem]">
-                            <div class="text-3xl font-bold text-gray-900">${setsHome} – ${setsAway}</div>
-                        </div>
-                        <span class="font-bold text-gray-800 flex-1 text-lg text-right">${away}</span>
-                    </div>
-                    ${m.sets.length > 0 ? `<div class="flex gap-2 mt-3 flex-wrap">${setTabs}</div>` : ''}
-                </div>
-
-                <a class="block text-sm text-blue-600 hover:underline" href="/manager/match-form.html?id=${m.id}">Editar horario y cancha →</a>
-                ${scoringControls}
-                ${!isLive && m.sets.at(-1)?.status === 'cancelled' ? `<div class="bg-white rounded-xl shadow p-4 space-y-3"><h3 class="font-semibold">¿Se cerró el partido por error?</h3><p class="text-sm text-gray-600">El último set conserva su marcador: ${m.sets.at(-1).scoreHome}–${m.sets.at(-1).scoreAway}. Podés recuperar ese set y volver a poner el partido en vivo.</p><button onclick="openAdjustment(${m.sets.at(-1).id}, 'recover')" class="border rounded-lg px-3 py-2 text-sm font-semibold">Recuperar último set</button></div>` : ''}
-                <div class="bg-white rounded-xl shadow p-4 space-y-3">
-                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Sets registrados</h3>
-                    ${m.sets.filter(s => s.status !== 'in_progress').map(s => `<div class="flex justify-between items-center gap-3 border-b py-2"><span>Set ${s.setNumber} · ${s.scoreHome}–${s.scoreAway} · ${setResult(s.status)}</span><button onclick="openAdjustment(${s.id}, 'correct')" class="text-sm border rounded-lg px-3 py-2">Corregir</button></div>`).join('') || '<p class="text-sm text-gray-500">Todavía no hay sets cerrados.</p>'}
-                    <p class="text-xs text-gray-500">Las correcciones conservan los puntos anteriores y no cambian el ganador oficial del partido.</p>
-                </div>
-                <details class="bg-white rounded-xl shadow p-4"><summary class="font-semibold cursor-pointer">Historial de decisiones (${matchHistory.length})</summary><div class="space-y-3 mt-3">${matchHistory.map(entry => `<article class="border-b pb-3 text-sm"><p class="font-semibold">${App.escape({set_correction:'Corrección de set',set_recovery:'Recuperación de set',match_close:'Cierre con set activo',match_status:'Estado del partido'}[entry.action] ?? entry.action)}${entry.setId ? ` · Set ${m.sets.find(s => s.id === entry.setId)?.setNumber ?? '—'}` : ''}</p><p>${App.escape(entry.reason)}</p><p class="text-gray-500">${App.escape(auditState(entry.before))} → ${App.escape(auditState(entry.after))}</p><p class="text-xs text-gray-400">${App.escape(entry.actor)} · ${App.date(entry.createdAt)} ${App.time(entry.createdAt)}</p></article>`).join('') || '<p class="text-sm text-gray-500">No hay decisiones registradas.</p>'}</div></details>
-
-                <!-- Match status -->
-                <div class="bg-white rounded-xl shadow p-4 space-y-3">
-                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Estado del partido</h3>
-                    <div class="flex flex-wrap gap-2">
-                        ${statusOptions.map(s => `
-                            <button onclick="updateMatchStatus('${s}')"
-                                class="text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${m.status === s ? 'bg-surface text-brand' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
-                                ${statusLabels[s]}
-                            </button>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <!-- Public view link -->
-                <a href="/game.html?id=${m.id}" target="_blank"
-                    class="block text-center text-sm text-blue-600 hover:underline py-2">
-                    Ver vista pública →
-                </a>
-            `
+            const sets = m.sets.filter(s => s.status !== 'in_progress')
+            const setList = sets.length ? `<h2 class="section">Sets</h2>${sets.map(s => `<div class="list-row"><span class="grow">Set ${s.setNumber} · <span class="num">${s.scoreHome}–${s.scoreAway}</span> <span class="muted small">· ${s.status === 'cancelled' ? 'cancelado' : `ganó ${teamName(s.status.slice(9))}`}</span></span>${App.isAdmin() ? `<button class="btn btn-sm" onclick="openAdjustment(${s.id}, 'correct')">Corregir</button>` : ''}</div>`).join('')}` : ''
+            document.getElementById('score').innerHTML = header + scoreline + body + setList
         }
 
-        async function performaddPoint(homeScored) {
-            const active = activeSet()
-            if (!active) return
-            await App.fetch('/api/points', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ setId: active.id, homeScored }),
-            })
-            await loadMatch()
+        function rotationBlock(set) {
+            const r = set.rotation
+            if (!r.positions.home && !r.positions.away) return ''
+            const changes = set.substitutions
+            const lastChange = changes.at(-1)
+            const rallies = set.points.filter(p => p.kind === 'rally').length
+            const side = key => r.positions[key] ? `<div><div class="spread" style="margin-bottom:6px"><span class="small">${teamName(key)}${r.serving === key ? ' · saca' : ''}</span><button class="btn btn-sm" onclick="openSubstitution('${key}')">Cambio</button></div>${court(r.positions[key], r.serving === key, key)}</div>` : ''
+            return `<h2 class="section">Rotación</h2><div class="courts">${side('home')}${side('away')}</div>
+                ${changes.length ? `<p class="tiny muted" style="margin-top:8px">Cambios: ${changes.map(c => `${teamName(c.side)} ${c.playerOut}→${c.playerIn}`).join(' · ')}
+                ${lastChange.afterRallies === rallies ? ` <button class="btn-link tiny" onclick="act(undoSubstitution, ${lastChange.id})">deshacer último</button>` : ''}</p>` : ''}`
         }
 
-        async function performundoLastPoint() {
+        // Toss and starting lineup for the set in play.
+        function renderSetup() {
             const active = activeSet()
-            if (!active || active.points.length === 0) {
-                alert('No hay puntos para deshacer.')
-                return
+            setupDirty = false
+            setupFor = active?.id ?? null
+            if (!active || m.status !== 'in_progress') { document.getElementById('setup').innerHTML = ''; return }
+            const started = active.points.length > 0
+            const lineupInputs = side => {
+                const current = active.lineups[side]
+                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}</p><div class="court">${COURT_ORDER.map(i => `<div><input class="input num" style="text-align:center;padding:6px 2px" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${POSITIONS[i]}" value="${current ? current[i] : ''}" /><small>${POSITIONS[i]}</small></div>`).join('')}</div></div>`
             }
-            const lastPoint = active.points[active.points.length - 1]
-            const res = await App.fetch(`/api/points/${lastPoint.id}`, { method: 'DELETE' })
-            if (!res.ok) {
-                const body = await res.json()
-                alert(body.error ?? 'Error al deshacer el punto.')
-                return
-            }
-            await loadMatch()
+            const serve = active.firstServeHome
+            const form = `<div class="stack" style="margin-top:12px" oninput="setupDirty = true">
+                    <fieldset class="row"><legend class="small muted" style="margin-bottom:6px">Saca primero</legend>
+                        <label class="check"><input type="radio" name="first-serve" value="home" ${serve === true ? 'checked' : ''}> ${teamName('home')}</label>
+                        <label class="check"><input type="radio" name="first-serve" value="away" ${serve === false ? 'checked' : ''}> ${teamName('away')}</label>
+                    </fieldset>
+                    <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (IV III II), abajo la línea de fondo (V VI I). La posición I saca. Podés cargar un solo equipo.</p>
+                    <div class="courts">${lineupInputs('home')}${lineupInputs('away')}</div>
+                    ${started ? '<p class="tiny muted">El set ya empezó: al guardar, la rotación se recalcula con todos los puntos anotados.</p>' : ''}
+                    <div class="row"><button class="btn btn-primary" onclick="act(saveLineup)">Guardar formación</button></div>
+                </div>`
+            const complete = serve !== null && active.lineups.home && active.lineups.away
+            document.getElementById('setup').innerHTML = `<details class="panel" style="margin-top:20px" ${complete || started ? '' : 'open'}><summary>Saque y formación inicial · set ${active.setNumber}${complete ? ' ✓' : ''}</summary>${form}</details>`
         }
 
-        async function performfinishSet(status) {
+        function renderAdmin() {
+            if (!App.isAdmin()) { document.getElementById('admin').innerHTML = historyBlock(); return }
+            if (document.querySelector('#admin :focus')) return
             const active = activeSet()
-            if (!active) return
-            const scoreHome = Number(document.getElementById('final-home').value)
-            const scoreAway = Number(document.getElementById('final-away').value)
-            const submit = expectedLastPointId => App.fetch(`/api/sets/${active.id}/finish`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scoreHome, scoreAway, status, expectedLastPointId }),
-            })
-            let response = await submit(active.points.at(-1)?.id ?? null)
-            if (response.status === 409) {
-                await loadMatch()
-                const latest = activeSet()
-                if (currentMatch.status !== 'in_progress' || latest?.id !== active.id) return
-                const winner = status === 'finished_home' ? currentMatch.teamHome.name : currentMatch.teamAway.name
-                if (!confirm(`Otro anotador cambió el marcador. Ahora está ${latest.scoreHome}–${latest.scoreAway}.\n\n¿Confirmás registrar manualmente ${scoreHome}–${scoreAway} y dar el set a ${winner}?`)) return
-                // One explicit confirmation, never an automatic retry of a stale result.
-                response = await submit(latest.points.at(-1)?.id ?? null)
-            }
-            await loadMatch()
-            if (response.ok) App.toast('Resultado del set guardado.')
+            const latest = m.sets.at(-1)
+            const statuses = [['upcoming', 'Próximo'], ['in_progress', 'En juego'], ['finished_home', `Ganó ${teamName('home')}`], ['finished_away', `Ganó ${teamName('away')}`], ['cancelled', 'Cancelado']]
+            document.getElementById('admin').innerHTML = `<h2 class="section">Organización</h2>
+                <div class="stack">
+                    <p class="small muted">Decisiones administrativas: quedan en el historial. Usalas para walkover, abandono o errores de planilla. <a class="btn-link" href="/manager/match-form.html?id=${m.id}">Editar horario, cancha o reglas</a>.</p>
+                    <div><p class="small" style="margin-bottom:6px">Estado oficial del partido</p><div class="row">${statuses.map(([value, label]) => `<button class="btn btn-sm" ${m.status === value ? 'aria-pressed="true" style="border-color:var(--ink);font-weight:600"' : ''} onclick="act(updateMatchStatus, '${value}')">${label}</button>`).join('')}</div></div>
+                    ${active && m.status === 'in_progress' ? `<div><button class="btn btn-sm btn-danger" onclick="act(cancelSet)">Cancelar set ${active.setNumber}</button></div>` : ''}
+                    ${m.status !== 'in_progress' && latest?.status === 'cancelled' && latest.points.length ? `<div class="panel small"><p>¿Se cerró el partido por error? El último set conserva ${latest.scoreHome}–${latest.scoreAway}.</p><button class="btn btn-sm" style="margin-top:8px" onclick="openAdjustment(${latest.id}, 'recover')">Recuperar último set</button></div>` : ''}
+                </div>${historyBlock()}`
         }
 
-        async function performcancelSet() {
-            const active = activeSet()
-            if (!active) return
-            if (!confirm('¿Cancelar el set actual?')) return
-            await App.fetch(`/api/sets/${active.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'cancelled', expectedLastPointId: active.points.at(-1)?.id ?? null }),
-            })
-            await loadMatch()
+        function historyBlock() {
+            const labels = { set_correction: 'Corrección de set', set_recovery: 'Recuperación de set', match_close: 'Cierre con set activo', match_status: 'Estado del partido', set_cancel: 'Set cancelado', set_lineup: 'Saque y formación' }
+            return `<details id="history" style="margin-top:24px" ontoggle="if (this.open) loadHistory()" ${document.getElementById('history')?.open ? 'open' : ''}><summary>Historial de decisiones</summary><div class="stack-sm" style="margin-top:8px">${history.map(e => `<div class="list-row small"><div class="grow"><strong>${esc(labels[e.action] ?? e.action)}</strong>${e.setId ? ` · set ${m.sets.find(s => s.id === e.setId)?.setNumber ?? '—'}` : ''}<br><span class="muted">${esc(e.reason)} · ${esc(auditState(e.before))}${auditState(e.before) && auditState(e.after) ? ' → ' : ''}${esc(auditState(e.after))}</span></div><span class="tiny muted">${esc(e.actor)} · ${App.date(e.createdAt)} ${App.time(e.createdAt)}</span></div>`).join('') || '<p class="small muted">Sin decisiones registradas.</p>'}</div></details>`
         }
-
-        function setResult(status) {
-            return { in_progress: 'En juego', finished_home: `Ganó ${App.escape(currentMatch.teamHome.name)}`, finished_away: `Ganó ${App.escape(currentMatch.teamAway.name)}`, cancelled: 'Cancelado' }[status] ?? status
-        }
+        async function loadHistory() { history = await App.json(`/api/matches/${matchId}/history`); renderAdmin() }
         function auditState(value) {
-            const labels = { upcoming: 'Próximo', in_progress: 'En vivo', finished_home: 'Ganó local', finished_away: 'Ganó visitante', cancelled: 'Cancelado' }
+            const labels = { upcoming: 'Próximo', in_progress: 'En juego', finished_home: 'Ganó local', finished_away: 'Ganó visitante', cancelled: 'Cancelado' }
             return [value.matchStatus ? `Partido: ${labels[value.matchStatus]}` : '', value.status ? `Set: ${labels[value.status]}` : '', value.scoreHome !== undefined ? `${value.scoreHome}–${value.scoreAway}` : ''].filter(Boolean).join(' · ')
         }
+
+        // --- Actions (one at a time; every result comes from the server) ---
+        async function act(fn, ...args) {
+            if (busy) return
+            busy = true
+            const paused = [...document.querySelectorAll('main button:not(:disabled)')]
+            paused.forEach(b => { b.disabled = true })
+            try { await fn(...args) }
+            catch { App.toast('No pudimos guardar el cambio. Revisá el marcador antes de reintentar.', true) }
+            finally {
+                busy = false
+                await load().catch(() => {})
+                // Sections kept on screen (e.g. a lineup being typed) get their buttons back.
+                paused.forEach(b => { b.disabled = false })
+            }
+        }
+        async function startMatch() {
+            const res = await App.send(`/api/matches/${m.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
+            if (res.ok) App.toast('Partido iniciado. Cargá el saque y las formaciones si las tenés.')
+        }
+        function announce(result) {
+            if (result.matchWinner) App.toast(`Partido terminado. Ganó ${result.matchWinner === 'home' ? m.teamHome.name : m.teamAway.name}.`)
+            else if (result.setWinner) App.toast(`Set para ${result.setWinner === 'home' ? m.teamHome.name : m.teamAway.name}. Empieza el set siguiente.`)
+        }
+        async function addPoint(homeScored) {
+            const active = activeSet()
+            if (!active) return
+            const res = await App.send('/api/points', 'POST', { setId: active.id, homeScored })
+            if (res.ok) announce(await res.json())
+        }
+        async function undo() {
+            const last = lastEntry()
+            if (!last) return
+            const closed = last.set.status !== 'in_progress'
+            if (closed && !confirm(`El último punto cerró el set ${last.set.setNumber}${m.status !== 'in_progress' ? ' y el partido' : ''}. ¿Deshacerlo y reabrir${m.status !== 'in_progress' ? 'los' : 'lo'}?`)) return
+            const res = await App.send(`/api/points/${last.point.id}`, 'DELETE')
+            if (res.ok && closed) App.toast('Punto deshecho. El set volvió a estar en juego.')
+        }
+        async function finishSet() {
+            const active = activeSet()
+            const scoreHome = Number(document.getElementById('final-home').value), scoreAway = Number(document.getElementById('final-away').value)
+            if (!confirm(`¿Cerrar el set ${active.setNumber} con ${scoreHome}–${scoreAway}?`)) return
+            const res = await App.send(`/api/sets/${active.id}/finish`, 'POST', { scoreHome, scoreAway, expectedLastPointId: active.points.at(-1)?.id ?? null })
+            if (res.ok) announce(await res.json())
+        }
+        async function saveLineup() {
+            const active = activeSet()
+            const serve = document.querySelector('input[name="first-serve"]:checked')?.value
+            const body = { firstServeHome: serve ? serve === 'home' : null }
+            for (const side of ['home', 'away']) {
+                const values = [0, 1, 2, 3, 4, 5].map(i => document.getElementById(`lineup-${side}-${i}`).value.trim())
+                if (values.every(v => v === '')) { body[side] = null; continue }
+                if (values.some(v => v === '')) return App.toast(`Completá las 6 posiciones de ${side === 'home' ? m.teamHome.name : m.teamAway.name} o dejalas vacías.`, true)
+                body[side] = values.map(Number)
+                if (new Set(body[side]).size !== 6) return App.toast(`Hay números repetidos en ${side === 'home' ? m.teamHome.name : m.teamAway.name}.`, true)
+            }
+            const res = await App.send(`/api/sets/${active.id}/lineup`, 'PUT', body)
+            if (res.ok) { setupDirty = false; App.toast('Formación guardada.') }
+        }
+        function openSubstitution(side) {
+            const active = activeSet()
+            if (!active || busy) return
+            subSide = side
+            document.getElementById('sub-title').textContent = `Cambio · ${side === 'home' ? m.teamHome.name : m.teamAway.name}`
+            document.getElementById('sub-out').innerHTML = active.rotation.positions[side].map((n, i) => `<option value="${n}">${n} (posición ${POSITIONS[i]})</option>`).join('')
+            document.getElementById('sub-in').value = ''
+            document.getElementById('sub-dialog').showModal()
+        }
+        function submitSubstitution(event) {
+            event.preventDefault()
+            const active = activeSet()
+            const body = { side: subSide, playerOut: Number(document.getElementById('sub-out').value), playerIn: Number(document.getElementById('sub-in').value) }
+            document.getElementById('sub-dialog').close()
+            act(async () => { const res = await App.send(`/api/sets/${active.id}/substitutions`, 'POST', body); if (res.ok) App.toast(`Cambio: entra ${body.playerIn} por ${body.playerOut}.`) })
+        }
+        async function undoSubstitution(id) { await App.send(`/api/sets/${activeSet().id}/substitutions/${id}`, 'DELETE') }
+
+        // --- Admin rulings ---
+        async function cancelSet() {
+            const active = activeSet()
+            if (!confirm(`¿Cancelar el set ${active.setNumber} (${active.scoreHome}–${active.scoreAway})? No cuenta como ganado y empieza otro desde 0–0.`)) return
+            await App.send(`/api/sets/${active.id}`, 'PUT', { status: 'cancelled', expectedLastPointId: active.points.at(-1)?.id ?? null })
+        }
+        async function updateMatchStatus(status) {
+            if (status === m.status) return
+            const active = activeSet()
+            const closing = !['in_progress', 'upcoming'].includes(status)
+            if (closing && !confirm(`¿Registrar "${{ finished_home: `Ganó ${m.teamHome.name}`, finished_away: `Ganó ${m.teamAway.name}`, cancelled: 'Cancelado' }[status]}" como resultado oficial?${active?.points.length ? `\n\nEl set ${active.setNumber} (${active.scoreHome}–${active.scoreAway}) quedará cancelado; sus puntos se conservan para poder recuperarlo.` : ''}`)) return
+            const latest = m.sets.at(-1)
+            const startNewSet = status === 'in_progress' && !active && latest?.status === 'cancelled' && latest.points.length > 0
+            if (startNewSet && !confirm('El último set cancelado conserva puntos. Podés recuperarlo con "Recuperar último set". ¿Preferís iniciar un set NUEVO desde 0–0?')) return
+            await App.send(`/api/matches/${m.id}`, 'PUT', { status, expectedStatus: m.status, ...(closing ? { expectedActiveSet: active ? { id: active.id, lastPointId: active.points.at(-1)?.id ?? null } : null } : {}), ...(startNewSet ? { startNewSet: true } : {}) })
+        }
         function openAdjustment(id, mode) {
-            const set = currentMatch.sets.find(s => s.id === id)
+            const set = m.sets.find(s => s.id === id)
             if (!set || busy) return
-            adjustment = { set: structuredClone(set), mode, matchStatus: currentMatch.status }
+            adjustment = { set: structuredClone(set), mode, matchStatus: m.status }
             document.getElementById('adjustment-title').textContent = `${mode === 'recover' ? 'Recuperar' : 'Corregir'} set ${set.setNumber}`
             document.getElementById('adjustment-description').textContent = mode === 'recover'
-                ? `Se retomará el marcador ${set.scoreHome}–${set.scoreAway} y el partido volverá a estar en vivo. El resultado oficial anterior se reemplaza por “En vivo”.`
-                : 'Ingresá el resultado administrativo. Se conservará el historial anterior y el ganador del partido seguirá siendo una decisión independiente.'
+                ? `Se retoma el marcador ${set.scoreHome}–${set.scoreAway} y el partido vuelve a estar en juego.`
+                : 'Resultado administrativo del set. Se conserva el historial anterior; el resultado oficial del partido no cambia solo: ajustalo aparte si corresponde.'
             document.getElementById('correction-fields').hidden = mode === 'recover'
             document.getElementById('correction-home').value = set.scoreHome
             document.getElementById('correction-away').value = set.scoreAway
-            document.getElementById('correction-status').innerHTML = ['finished_home','finished_away','cancelled'].map(status => `<option value="${status}">${setResult(status)}</option>`).join('')
+            document.getElementById('correction-status').innerHTML = [['finished_home', `Ganó ${m.teamHome.name}`], ['finished_away', `Ganó ${m.teamAway.name}`], ['cancelled', 'Cancelado']].map(([value, label]) => `<option value="${value}">${esc(label)}</option>`).join('')
             document.getElementById('correction-status').value = set.status
             document.getElementById('adjustment-reason').value = ''
             document.getElementById('adjustment-error').textContent = ''
@@ -311,52 +307,22 @@
             busy = true
             document.getElementById('adjustment-submit').disabled = true
             try {
-                const response = await App.fetch(`/api/sets/${set.id}/${mode}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expectedStatus: set.status, expectedRevision: set.revision, expectedLastPointId: set.points.at(-1)?.id ?? null, reason,
-                        ...(mode === 'recover' ? { expectedMatchStatus: matchStatus } : { scoreHome: Number(document.getElementById('correction-home').value), scoreAway: Number(document.getElementById('correction-away').value), status: document.getElementById('correction-status').value }) }),
-                })
+                const response = await App.send(`/api/sets/${set.id}/${mode}`, 'POST', { expectedStatus: set.status, expectedRevision: set.revision, expectedLastPointId: set.points.at(-1)?.id ?? null, reason,
+                    ...(mode === 'recover' ? { expectedMatchStatus: matchStatus } : { scoreHome: Number(document.getElementById('correction-home').value), scoreAway: Number(document.getElementById('correction-away').value), status: document.getElementById('correction-status').value }) })
                 if (!response.ok) {
                     document.getElementById('adjustment-error').textContent = (await response.json()).error
-                    if (response.status === 409) { document.getElementById('adjustment-dialog').close(); await loadMatch() }
+                    if (response.status === 409) { document.getElementById('adjustment-dialog').close(); await load() }
                     return
                 }
                 document.getElementById('adjustment-dialog').close()
-                await loadMatch()
-                App.toast(mode === 'recover' ? 'Set recuperado. El partido está en vivo.' : 'Corrección registrada con su motivo.')
+                App.toast(mode === 'recover' ? 'Set recuperado. El partido está en juego.' : 'Corrección registrada con su motivo.')
+                await load()
             } finally { busy = false; document.getElementById('adjustment-submit').disabled = false }
         }
-        async function performupdateMatchStatus(status) {
-            if (status === currentMatch.status) return
-            const active = activeSet()
-            const closing = !['in_progress', 'upcoming'].includes(status)
-            if (closing && active?.points.length && !confirm(`El set ${active.setNumber} está en juego con ${active.scoreHome}–${active.scoreAway}. Si cerrás el partido, ese set quedará cancelado y no contará como ganado. Sus puntos se conservarán para poder recuperarlo.\n\n¿Confirmás cambiar el estado del partido?`)) return
-            const latest = currentMatch.sets.at(-1)
-            const startNewSet = status === 'in_progress' && !active && latest?.status === 'cancelled' && latest.points.length > 0
-            if (startNewSet && !confirm('El último set cancelado conserva puntos. Podés recuperarlo con “Recuperar último set”. ¿Preferís iniciar un set NUEVO desde 0–0?')) return
-            await App.fetch(`/api/matches/${matchId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status, expectedStatus: currentMatch.status, ...(closing ? { expectedActiveSet: active ? { id: active.id, lastPointId: active.points.at(-1)?.id ?? null } : null } : {}), ...(startNewSet ? { startNewSet: true } : {}) }),
-            })
-            await loadMatch()
-        }
 
-        let busy = false
-        async function scoringAction(fn, ...args) {
-            if (busy) return
-            busy = true
-            document.querySelectorAll('#content button').forEach(b => { b.disabled = true })
-            try { await fn(...args) }
-            catch { App.toast('No pudimos guardar el cambio. Revisá el marcador antes de reintentar.', true) }
-            finally { busy = false; document.querySelectorAll('#content button').forEach(b => { b.disabled = false }) }
-        }
-        const addPoint = (...args) => scoringAction(performaddPoint, ...args)
-        const undoLastPoint = (...args) => scoringAction(performundoLastPoint, ...args)
-        const finishSet = (...args) => scoringAction(performfinishSet, ...args)
-        const cancelSet = (...args) => scoringAction(performcancelSet, ...args)
-        const updateMatchStatus = (...args) => scoringAction(performupdateMatchStatus, ...args)
-        App.ready.then(checkAuth).then(loadMatch)
+        App.ready.then(load).catch(() => {
+            document.getElementById('score').innerHTML = '<p class="empty">No pudimos cargar el partido. <a href="/manager/">Volver</a></p>'
+        }).finally(() => { if (/^\d+$/.test(matchId ?? '')) App.watch(() => busy ? Promise.resolve() : load()) })
     </script>
 </body>
 </html>
