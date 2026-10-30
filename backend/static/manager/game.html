@@ -145,9 +145,12 @@
             setupFor = active?.id ?? null
             if (!active || m.status !== 'in_progress') { document.getElementById('setup').innerHTML = ''; return }
             const started = active.points.length > 0
+            // Teams often repeat their lineup: offer the previous set's, saved only on "Guardar".
+            const previous = [...m.sets].filter(s => s.setNumber < active.setNumber).sort((a, b) => b.setNumber - a.setNumber)
             const lineupInputs = side => {
-                const current = active.lineups[side]
-                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}</p><div class="court">${COURT_ORDER.map(i => `<div><input class="input num" style="text-align:center;padding:6px 2px" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${POSITIONS[i]}" value="${current ? current[i] : ''}" /><small>${POSITIONS[i]}</small></div>`).join('')}</div></div>`
+                const saved = active.lineups[side]
+                const current = saved ?? previous.find(s => s.lineups[side])?.lineups[side]
+                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}${!saved && current ? ' <span class="tiny muted">· precargada del set anterior</span>' : ''}</p><div class="court">${COURT_ORDER.map(i => `<div><input class="input num" style="text-align:center;padding:6px 2px" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${POSITIONS[i]}" value="${current ? current[i] : ''}" /><small>${POSITIONS[i]}</small></div>`).join('')}</div></div>`
             }
             const serve = active.firstServeHome
             const form = `<div class="stack" style="margin-top:12px" oninput="setupDirty = true">
