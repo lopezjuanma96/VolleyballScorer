@@ -225,7 +225,7 @@
             const last = lastEntry()
             if (!last) return
             const closed = last.set.status !== 'in_progress'
-            if (closed && !confirm(`El último punto cerró el set ${last.set.setNumber}${m.status !== 'in_progress' ? ' y el partido' : ''}. ¿Deshacerlo y reabrir${m.status !== 'in_progress' ? 'los' : 'lo'}?`)) return
+            if (closed && !confirm(`El último punto cerró el set ${last.set.setNumber}${m.status !== 'in_progress' ? ' y el partido' : ''}. ¿Deshacerlo y reabrir${m.status !== 'in_progress' ? 'los' : 'lo'}?${m.status === 'in_progress' ? ' Se descarta la formación cargada para el set siguiente.' : ''}`)) return
             const res = await App.send(`/api/points/${last.point.id}`, 'DELETE')
             if (res.ok && closed) App.toast('Punto deshecho. El set volvió a estar en juego.')
         }

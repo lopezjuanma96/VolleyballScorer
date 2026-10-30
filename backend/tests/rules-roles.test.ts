@@ -92,6 +92,8 @@ integration('roles, set rules, rotation and standings', () => {
         const custom = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court1', scheduledAt: new Date().toISOString(), rules: { bestOf: 5, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null } })
         expect(custom.bestOf).toBe(5)
         await json(admin, `/api/categories/${categoryId}`, 'PUT', { name })
+        // A partial update is validated together with the stored rules (targets 5 and 3).
+        expect((await call(admin, `/api/categories/${categoryId}`, 'PUT', { pointCap: 4 })).status).toBe(400)
         const categories: any[] = await json(null, '/api/categories')
         expect(categories.find(c => c.id === categoryId).setPoints).toBe(5)
         await json(admin, `/api/matches/${custom.id}`, 'DELETE')
@@ -128,6 +130,11 @@ integration('roles, set rules, rotation and standings', () => {
         expect(match.status).toBe('in_progress')
         expect(match.sets[2]).toMatchObject({ status: 'in_progress', scoreHome: 3, scoreAway: 2 })
         await rally(id, true)
+        // Once the organization rules a different official result, scorers cannot reopen it.
+        const ruled = await detail(id)
+        await json(admin, `/api/matches/${id}`, 'PUT', { status: 'finished_away', expectedStatus: 'finished_home' })
+        expect((await call(scorer, `/api/points/${ruled.sets[2].points.at(-1).id}`, 'DELETE')).status).toBe(409)
+        await json(admin, `/api/matches/${id}`, 'PUT', { status: 'finished_home', expectedStatus: 'finished_away' })
         const standings: any[] = await json(null, `/api/standings?categoryId=${categoryId}`)
         const rows = standings[0].rows
         expect(rows[0]).toMatchObject({ id: home, points: 2, won: 1, setsWon: 2, setsLost: 1 })
@@ -157,6 +164,9 @@ integration('roles, set rules, rotation and standings', () => {
         const set = (await detail(id)).sets[0]
         expect((await call(scorer, `/api/sets/${set.id}/lineup`, 'PUT', { firstServeHome: true, home: [1, 2, 3, 4, 5, 5], away: null })).status).toBe(400)
         await json(scorer, `/api/sets/${set.id}/lineup`, 'PUT', { firstServeHome: true, home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] })
+        const early = await json(scorer, `/api/sets/${set.id}/substitutions`, 'POST', { side: 'home', playerOut: 1, playerIn: 7 })
+        expect((await call(scorer, `/api/sets/${set.id}/lineup`, 'PUT', { firstServeHome: true, home: [1, 7, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] })).status).toBe(409)
+        await json(scorer, `/api/sets/${set.id}/substitutions/${early.id}`, 'DELETE')
         await rally(id, true)
         await rally(id, false)
         let current = (await detail(id)).sets[0]
@@ -177,9 +187,19 @@ integration('roles, set rules, rotation and standings', () => {
         expect(current.rotation.positions.home).toEqual([1, 2, 3, 4, 5, 6])
         expect(current.substitutions).toHaveLength(0)
         // Closing the set opens the next one with the serve alternated.
-        await rally(id, true, 5)
+        // From 1–1, four rallies reach 5–1 and close the set.
+        await rally(id, true, 4)
         const next = (await detail(id)).sets[1]
         expect(next.firstServeHome).toBe(false)
+        // Undo across sets refuses to discard substitutions recorded in the next set.
+        const closing = (await detail(id)).sets[0].points.at(-1)
+        await json(scorer, `/api/sets/${next.id}/lineup`, 'PUT', { firstServeHome: false, home: [1, 2, 3, 4, 5, 6], away: null })
+        const change2 = await json(scorer, `/api/sets/${next.id}/substitutions`, 'POST', { side: 'home', playerOut: 2, playerIn: 8 })
+        expect((await call(scorer, `/api/points/${closing.id}`, 'DELETE')).status).toBe(409)
+        await json(scorer, `/api/sets/${next.id}/substitutions/${change2.id}`, 'DELETE')
+        await json(scorer, `/api/points/${closing.id}`, 'DELETE')
+        const history: any[] = await json(scorer, `/api/matches/${id}/history`)
+        expect(history.some(e => e.action === 'set_lineup' && e.setId === null)).toBe(true)
     })
 
     test('revoking a user or changing their role reaches open sessions', async () => {

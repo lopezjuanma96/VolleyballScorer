@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { sets, points, matches, scoringAudit, setLineups, substitutions } from '../db/schema'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { HTTPException } from 'hono/http-exception'
 import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
 import { closeSet, lastPoint, lockActiveSet, lockSet, setRotation, setsWon } from '../scoring'
 import { finalScoreWinner, rulesOf } from '../rules'
 import { lineupInput, substitutionInput } from '../validation'
+import { substitutionsFit } from '../rotation'
 
 const setRoutes = new Hono()
 function checkLastPoint(last: typeof points.$inferSelect | undefined, expectedLastPointId: number | null) {
@@ -97,6 +98,12 @@ setRoutes.put('/:id/lineup', scorerOnly, async c => {
     const admin = (await getSession(c))!.role === 'admin'
     return c.json(await db.transaction(async tx => {
         const { match, set } = admin ? await lockSet(tx, id) : await lockActiveSet(tx, id)
+        const changes = await tx.select().from(substitutions).where(eq(substitutions.setId, id)).orderBy(asc(substitutions.id))
+        for (const side of ['home', 'away'] as const) {
+            if (!substitutionsFit(body[side], changes.filter(c => c.side === side))) {
+                throw new HTTPException(409, { message: `La formación de ${side === 'home' ? 'local' : 'visitante'} no coincide con los cambios ya registrados. Deshacé esos cambios primero.` })
+            }
+        }
         await tx.update(sets).set({ firstServeHome: body.firstServeHome }).where(eq(sets.id, id))
         for (const side of ['home', 'away'] as const) {
             const positions = body[side]

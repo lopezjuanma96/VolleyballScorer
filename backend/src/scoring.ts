@@ -1,7 +1,7 @@
 import { HTTPException } from 'hono/http-exception'
 import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm'
 import { db } from './db'
-import { matches, points, sets, setLineups, substitutions } from './db/schema'
+import { matches, points, scoringAudit, sets, setLineups, substitutions } from './db/schema'
 import { matchWinner, rulesOf, setWinner, type SetsWon, type Side } from './rules'
 import { rotationState } from './rotation'
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -81,13 +81,24 @@ export async function undoPoint(tx: Transaction, pointId: number) {
     const later = await tx.select().from(sets).where(and(eq(sets.matchId, match.id), gt(sets.setNumber, set.setNumber))).for('update')
     const laterPoints = later.length ? await tx.select({ id: points.id }).from(points).where(inArray(points.setId, later.map(s => s.id))).limit(1) : []
     if (laterPoints.length || later.some(s => s.status !== 'in_progress')) throw new HTTPException(409, { message: 'El set siguiente ya empezó. Solo se deshace el último punto del partido.' })
+    const [laterChange] = later.length ? await tx.select({ id: substitutions.id }).from(substitutions).where(inArray(substitutions.setId, later.map(s => s.id))).limit(1) : []
+    if (laterChange) throw new HTTPException(409, { message: 'El set siguiente ya tiene cambios registrados. Deshacelos antes de volver al set anterior.' })
     const rallies = await tx.select({ id: points.id }).from(points).where(and(eq(points.setId, set.id), eq(points.kind, 'rally')))
     const [change] = await tx.select({ id: substitutions.id }).from(substitutions).where(and(eq(substitutions.setId, set.id), gt(substitutions.afterRallies, rallies.length - (last.kind === 'rally' ? 1 : 0)))).limit(1)
     if (change) throw new HTTPException(409, { message: 'Hay un cambio registrado después de este punto. Deshacé primero el cambio.' })
     const open = match.status === 'in_progress' && set.status === 'in_progress'
     const closedBySet = set.status.startsWith('finished') && (match.status === 'in_progress' || (match.status.startsWith('finished') && later.length === 0))
     if (!open && !closedBySet) throw new HTTPException(409, { message: 'El partido y el set deben estar en juego. Actualizá la pantalla.' })
-    if (later.length) await tx.delete(sets).where(inArray(sets.id, later.map(s => s.id)))
+    // A finished match reopens only if its official result is still the one the sets
+    // produced; otherwise the organization ruled it and only an admin can change it.
+    if (match.status.startsWith('finished') && match.status !== `finished_${matchWinner(rulesOf(match), await setsWon(tx, match.id))}`) {
+        throw new HTTPException(409, { message: 'La organización registró el resultado oficial. Solo un administrador puede reabrir el partido.' })
+    }
+    if (later.length) {
+        // Keep the decision history of the discarded empty set (e.g. its lineup).
+        await tx.update(scoringAudit).set({ setId: null }).where(inArray(scoringAudit.setId, later.map(s => s.id)))
+        await tx.delete(sets).where(inArray(sets.id, later.map(s => s.id)))
+    }
     if (!open) {
         await tx.update(sets).set({ status: 'in_progress', revision: set.revision + 1 }).where(eq(sets.id, set.id))
         if (match.status !== 'in_progress') await tx.update(matches).set({ status: 'in_progress' }).where(eq(matches.id, match.id))

@@ -49,3 +49,16 @@ export function rotationState({ firstServeHome, lineups, rallies, substitutions 
     applySubstitutions(rallies.length)
     return { serving, positions, rotations }
 }
+
+// Substitutions must stay consistent with a (possibly edited) starting lineup:
+// each one takes out a player on court and brings in one who is not.
+export function substitutionsFit(lineup: number[] | null, changes: Pick<Substitution, 'playerOut' | 'playerIn'>[]) {
+    if (!lineup) return changes.length === 0
+    const court = [...lineup]
+    for (const change of changes) {
+        const index = court.indexOf(change.playerOut)
+        if (index < 0 || court.includes(change.playerIn)) return false
+        court[index] = change.playerIn
+    }
+    return true
+}

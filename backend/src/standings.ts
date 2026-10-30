@@ -16,8 +16,8 @@ export type StandingRow = StandingTeam & {
 
 const ratio = (a: number, b: number) => b === 0 ? (a === 0 ? 0 : Infinity) : a / b
 
-// Only finished matches count. The official result is the match status, so a
-// walkover ruled by the organization still awards the winner's table points.
+// Only finished matches count. The official result is the match status; when the
+// recorded sets do not support it, the result is administrative (see tablePoints).
 export function standings(teams: StandingTeam[], matches: StandingMatch[]): StandingRow[] {
     const rows = new Map<number, StandingRow>(teams.map(team => [team.id, { ...team, played: 0, won: 0, lost: 0, setsWon: 0, setsLost: 0, pointsFor: 0, pointsAgainst: 0, points: 0 }]))
     for (const match of matches) {
@@ -28,7 +28,7 @@ export function standings(teams: StandingTeam[], matches: StandingMatch[]): Stan
         const setsHome = finished.filter(s => s.status === 'finished_home').length
         const setsAway = finished.length - setsHome
         const homeWon = match.status === 'finished_home'
-        const award = tablePoints(match, homeWon ? setsAway : setsHome)
+        const award = homeWon ? tablePoints(match, setsHome, setsAway) : tablePoints(match, setsAway, setsHome)
         for (const [row, mine, theirs, winner] of [[home, setsHome, setsAway, homeWon], [away, setsAway, setsHome, !homeWon]] as const) {
             row.played++
             if (winner) row.won++; else row.lost++

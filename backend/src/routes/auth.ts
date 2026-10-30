@@ -28,6 +28,8 @@ auth.post('/login', async c => {
     const { username, password } = z.object({ username: z.string().max(100), password: z.string().max(1024) }).parse(await c.req.json())
     let session: Session | null = null, version = 0
     if (same(username, config.MANAGER_USER)) {
+        // Same hashing work as database accounts, so timing does not reveal this username.
+        await Bun.password.verify(password, await decoy)
         if (same(password, config.MANAGER_PASSWORD)) session = envAdmin()
     } else {
         const [user] = await db.select().from(users).where(eq(users.username, username.trim().toLowerCase()))

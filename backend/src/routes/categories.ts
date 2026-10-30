@@ -4,7 +4,8 @@ import { categories } from '../db/schema'
 import { asc, eq } from 'drizzle-orm'
 import { adminOnly } from '../middleware/auth'
 import { publicReads } from '../read-cache'
-import { categoryInput, categoryUpdate } from '../validation'
+import { categoryInput, categoryUpdate, rulesInput } from '../validation'
+import { rulesOf } from '../rules'
 
 const categoryRoutes = new Hono()
 
@@ -20,7 +21,15 @@ categoryRoutes.post('/', adminOnly, async (c) => {
 // Rule changes apply to matches created afterwards; existing matches keep their copy.
 categoryRoutes.put('/:id', adminOnly, async (c) => {
     const id = Number(c.req.param('id'))
-    const [row] = await db.update(categories).set(categoryUpdate.parse(await c.req.json())).where(eq(categories.id, id)).returning()
+    const patch = categoryUpdate.parse(await c.req.json())
+    const row = await db.transaction(async tx => {
+        const [current] = await tx.select().from(categories).where(eq(categories.id, id)).for('update')
+        if (!current) return null
+        // Validate the complete rule set, not only the fields sent.
+        rulesInput.parse(rulesOf({ ...current, ...patch }))
+        const [updated] = await tx.update(categories).set(patch).where(eq(categories.id, id)).returning()
+        return updated
+    })
     if (!row) return c.json({ error: 'Categoría no encontrada.' }, 404)
     return c.json(row)
 })

@@ -6,7 +6,7 @@ Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación,
 - Planilleros: inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
 - Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture, usuarios y decisiones administrativas con historial.
 - Reglas por categoría (mejor de 1/3/5/7, puntos por set, desempate, diferencia mínima y tope opcional), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
-- Tabla automática: el ganador suma *sets del formato − sets perdidos* y el perdedor *sets ganados* (mejor de 3: 3/0 o 2/1; mejor de 5: 5/0, 4/1 o 3/2).
+- Tabla automática: el ganador suma *sets del formato − sets perdidos* y el perdedor *sets ganados* (mejor de 3: 3/0 o 2/1; mejor de 5: 5/0, 4/1 o 3/2). Un resultado adjudicado por la organización que los sets no respaldan (walkover, abandono) vale como administrativo: todos los puntos para el ganador, 0 para el perdedor.
 
 Bun · Hono · TypeScript · Drizzle · PostgreSQL · Tailwind · Docker Compose.
 

@@ -12,6 +12,13 @@ flock -n 9 || { echo "Ya hay un despliegue en curso." >&2; exit 1; }
 
 git fetch --quiet origin main
 git merge-base --is-ancestor "$sha" origin/main || { echo "$sha no pertenece a origin/main." >&2; exit 1; }
+# Forward only: a slower CI run of an older commit must not replace a newer deploy.
+# To roll back on purpose, check out the commit by hand and run scripts/stack.sh.
+current=$(git rev-parse HEAD)
+if [[ $sha != "$current" ]] && git merge-base --is-ancestor "$sha" "$current"; then
+    echo "Ya está desplegado ${current:0:7}, más nuevo que ${sha:0:7}. Sin cambios."
+    exit 0
+fi
 # Backup before migrations; the app pauses a few seconds while it runs.
 if docker compose ps --status running --services | grep -qx app; then scripts/backup.sh; fi
 git checkout --quiet --detach "$sha"
