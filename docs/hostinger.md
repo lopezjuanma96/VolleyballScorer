@@ -8,7 +8,7 @@ Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede ha
 
 1. Plan **KVM 1** (1 vCPU, 4 GB RAM) alcanza para el torneo según la [prueba de carga](load-testing.md); KVM 2 si vas a alojar otros proyectos. Revisá total y precio de renovación ([comparación](hosting.md)).
 2. Ubicación: la más cercana a Córdoba que ofrezca el plan (São Paulo, si está disponible).
-3. Sistema: plantilla **Ubuntu 24.04 with Docker**.
+3. Sistema: plantilla **Ubuntu 24.04 with Docker** (en hPanel suele estar en la pestaña de aplicaciones, no en la de sistemas operativos; soporte hasta 2029). Alternativa válida: **Ubuntu 26.04** plano (soporte hasta 2031) e instalar Docker a mano, ver abajo. Todo corre en contenedores, así que la versión de Ubuntu casi no cambia nada.
 4. En el asistente cargá tu **clave SSH pública** (si no tenés: `ssh-keygen -t ed25519 -C "tu-mail"` en tu computadora y copiá `~/.ssh/id_ed25519.pub`). Poné igual una contraseña root larga; no la vas a usar para entrar.
 5. Anotá la IP pública.
 
@@ -28,6 +28,9 @@ Entrá como root una sola vez y creá el usuario que va a operar la app:
 
 ```bash
 ssh root@IP
+# Sólo si elegiste Ubuntu plano (sin la plantilla de Docker):
+#   curl -fsSL https://get.docker.com | sh
+docker compose version        # tiene que responder
 adduser --disabled-password --gecos "" deploy
 usermod -aG docker deploy
 install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
@@ -40,8 +43,11 @@ ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 Probá en otra terminal que `ssh deploy@IP` funciona **antes** de cerrar el acceso por contraseña y de root:
 
 ```bash
-sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/; s/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config
-systemctl reload ssh
+# Va en un archivo propio: las imágenes de Ubuntu traen sshd_config.d/50-cloud-init.conf
+# y SSH usa el primer valor que encuentra, así que editar sshd_config no alcanza.
+printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n' > /etc/ssh/sshd_config.d/00-hardening.conf
+sshd -t && systemctl reload ssh
+sshd -T | grep -Ei '^(passwordauthentication|permitrootlogin)'   # tiene que decir "no" en ambas
 ```
 
 En hPanel → VPS → Firewall, replicá las mismas reglas (22, 80, 443). Docker publica puertos por fuera de UFW: el Compose sólo expone 80/443 (Caddy) y la app queda en `127.0.0.1:3000`; no cambies `APP_BIND`.
