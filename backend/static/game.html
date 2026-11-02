@@ -3,38 +3,59 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#18211c" />
-    <title>Partido · En vivo</title>
+    <meta name="theme-color" content="#ffffff" />
+    <title>Partido · Torneo de vóley</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js"></script>
 </head>
 <body>
-    <header class="site-header"><a class="wordmark" href="/"><span class="brand-icon" aria-hidden="true">←</span><span data-tournament-name>Torneo de vóley</span></a><span class="connection" data-connection role="status">Conectando…</span></header>
-    <main class="px-4 py-8 max-w-2xl mx-auto space-y-5" id="content"><div class="empty-state">Cargando partido…</div></main>
+    <header class="bar"></header>
+    <main class="page page-narrow" id="content"><p class="empty">Cargando partido…</p></main>
     <script>
         const matchId = new URLSearchParams(location.search).get('id')
         let currentMatch, activeSetId = null
         const esc = App.escape
+        // Front row IV III II, back row V VI I; positions[0] is I, the server.
+        function court(positions, serving) {
+            const cell = index => `<div class="${serving && index === 0 ? 'server' : ''}">${positions[index]}<small>${['I', 'II', 'III', 'IV', 'V', 'VI'][index]}</small></div>`
+            return `<div class="court">${[3, 2, 1, 4, 5, 0].map(cell).join('')}</div>`
+        }
+        function rotation(m, set) {
+            const r = set?.rotation
+            if (!r || (!r.positions.home && !r.positions.away)) return ''
+            const side = key => r.positions[key] ? `<div><p class="small" style="margin-bottom:6px">${esc(key === 'home' ? m.teamHome.name : m.teamAway.name)}${r.serving === key ? ' · saca' : ''}</p>${court(r.positions[key], r.serving === key)}</div>` : ''
+            return `<h2 class="section">Rotación · set ${set.setNumber}</h2><div class="courts">${side('home')}${side('away')}</div>`
+        }
         function render() {
             const m = currentMatch
             const live = m.status === 'in_progress'
             const winner = App.winner(m)
             const active = live && m.sets.find(s => s.status === 'in_progress')
-            const selected = m.sets.find(s => s.id === activeSetId) ?? m.sets.at(-1)
-            const won = side => m.sets.filter(s => s.status === `finished_${side}`).length
-            const status = { upcoming: 'Próximo partido', in_progress: '● En juego', finished_home: 'Finalizado', finished_away: 'Finalizado', cancelled: 'Cancelado' }[m.status]
-            document.title = `${m.teamHome.name} vs ${m.teamAway.name} · Vóley`
+            const counted = m.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away')
+            const selected = m.sets.find(s => s.id === activeSetId) ?? active ?? counted.at(-1) ?? m.sets.at(-1)
+            const serve = side => active?.rotation?.serving === side ? '<span class="serve" title="Saca"></span>' : ''
+            const big = active ? `${active.scoreHome}–${active.scoreAway}` : m.status === 'upcoming' ? App.time(m.scheduledAt) : `${App.setsWon(m, 'home')}–${App.setsWon(m, 'away')}`
+            const under = active ? `Set ${active.setNumber} · sets ${App.setsWon(m, 'home')}–${App.setsWon(m, 'away')}` : m.status === 'upcoming' ? App.day(m.scheduledAt) : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)
+            const status = live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`
+            document.title = `${m.teamHome.name} vs ${m.teamAway.name}`
             document.getElementById('content').innerHTML = `
-                <section class="score-panel">
-                    <div class="match-meta"><span>${esc(m.categoryName)} · ${App.court(m.court)}</span><span class="match-badge">${status}</span></div>
-                    ${winner ? `<p class="official-winner">Resultado oficial · Ganó ${esc(winner.name)}</p>` : ''}
-                    <div class="score-pair"><div class="score-team">${esc(m.teamHome.name)}<small>LOCAL · ${esc(m.teamHome.clubName)}</small></div><div class="score-number">${active ? `${active.scoreHome} : ${active.scoreAway}` : `${won('home')} : ${won('away')}`}</div><div class="score-team">${esc(m.teamAway.name)}<small>VISITANTE · ${esc(m.teamAway.clubName)}</small></div></div>
-                    <div class="match-bottom"><span>${active ? `Set ${active.setNumber} · Sets ${won('home')}–${won('away')}` : 'Sets ganados'}</span><span>${App.date(m.scheduledAt)} · ${App.time(m.scheduledAt)}</span></div>
-                </section>
-                <section class="bg-white rounded-xl shadow p-4 overflow-x-auto"><h2 class="section-label">El partido, set a set</h2><table class="score-table"><thead><tr><th>Equipo</th>${m.sets.map(s => `<th>Set ${s.setNumber}${s.status === 'cancelled' ? ' ✕' : ''}</th>`).join('')}<th>Sets</th></tr></thead><tbody>${['home', 'away'].map(side => `<tr><td>${esc(side === 'home' ? m.teamHome.name : m.teamAway.name)}</td>${m.sets.map(s => `<td>${s.status === 'cancelled' ? '–' : side === 'home' ? s.scoreHome : s.scoreAway}</td>`).join('')}<td><strong>${won(side)}</strong></td></tr>`).join('')}</tbody></table></section>
-                <section class="bg-white rounded-xl shadow p-4"><h2 class="section-label">Punto a punto</h2><nav class="category-tabs" aria-label="Elegir set">${m.sets.map(s => `<button class="filter-pill ${selected?.id === s.id ? 'active' : ''}" onclick="selectSet(${s.id})" aria-pressed="${selected?.id === s.id}">Set ${s.setNumber}${s.status === 'cancelled' ? ' ✕' : ''}</button>`).join('')}</nav>${selected?.points.length ? `<div class="max-h-80 overflow-y-auto"><table class="score-table"><caption class="sr-only">Historial del set ${selected.setNumber}</caption><thead><tr><th>Registro</th><th>${esc(m.teamHome.name)}</th><th>${esc(m.teamAway.name)}</th></tr></thead><tbody>${selected.points.map((p, i) => `<tr><td>${i + 1}</td><td>${p.homeScored ? `<strong>${p.scoreHome}</strong>` : p.scoreHome}</td><td>${!p.homeScored ? `<strong>${p.scoreAway}</strong>` : p.scoreAway}</td></tr>`).join('')}</tbody></table></div>` : '<p class="text-sm text-gray-500 py-6 text-center">Todavía no hay puntos en este set.</p>'}</section>
-                <a href="/" class="block text-sm text-gray-500 text-center py-4">← Todos los partidos</a>`
+                <p class="small"><a href="/" class="muted">← Partidos</a></p>
+                <div class="spread small muted" style="margin-top:16px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${status}</div>
+                <div class="scoreline">
+                    <div class="side"><div class="team-name">${esc(m.teamHome.name)}${serve('home')}</div><div class="club">${esc(m.teamHome.clubName)}</div></div>
+                    <div><div class="big">${big}</div><div class="under">${under}</div></div>
+                    <div class="side"><div class="team-name">${serve('away')}${esc(m.teamAway.name)}</div><div class="club">${esc(m.teamAway.clubName)}</div></div>
+                </div>
+                ${counted.length || active ? `<div class="table-wrap"><table class="table"><thead><tr><th class="left">Equipo</th>${m.sets.filter(s => s.status !== 'cancelled').map(s => `<th>${s.setNumber}</th>`).join('')}<th>Sets</th></tr></thead><tbody>
+                    ${['home', 'away'].map(side => `<tr><td class="left">${esc(side === 'home' ? m.teamHome.name : m.teamAway.name)}</td>${m.sets.filter(s => s.status !== 'cancelled').map(s => `<td ${s.status === `finished_${side}` ? 'style="font-weight:650"' : ''}>${side === 'home' ? s.scoreHome : s.scoreAway}</td>`).join('')}<td class="pts">${App.setsWon(m, side)}</td></tr>`).join('')}
+                </tbody></table></div>` : ''}
+                ${rotation(m, active || null)}
+                ${m.sets.some(s => s.points.length) ? `<h2 class="section">Punto a punto</h2>
+                    <nav class="tabs" aria-label="Elegir set">${m.sets.filter(s => s.points.length).map(s => `<button class="tab" onclick="selectSet(${s.id})" aria-pressed="${selected?.id === s.id}">Set ${s.setNumber}${s.status === 'cancelled' ? ' (cancelado)' : ''}</button>`).join('')}</nav>
+                    <div class="rally-strip" style="margin-top:12px" aria-label="Marcador después de cada punto">${(selected?.points ?? []).map(p => `<span class="${p.homeScored ? 'home' : ''}" title="${p.homeScored ? esc(m.teamHome.name) : esc(m.teamAway.name)}">${p.scoreHome}-${p.scoreAway}</span>`).join('')}</div>
+                    <p class="tiny muted" style="margin-top:8px">Oscuro: punto de ${esc(m.teamHome.name)}. Claro: punto de ${esc(m.teamAway.name)}.</p>` : ''}
+                <p class="tiny muted" style="margin-top:32px">${App.rulesText(m.rules ?? { bestOf: 3, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null })}</p>`
         }
         function selectSet(id) { activeSetId = id; render() }
         async function load() {
@@ -43,7 +64,7 @@
             render()
         }
         App.ready.then(load).catch(() => {
-            document.getElementById('content').innerHTML = '<div class="empty-state"><strong>No pudimos cargar este partido.</strong><a href="/">Volver al fixture ↗</a></div>'
+            document.getElementById('content').innerHTML = '<p class="empty">No pudimos cargar este partido. <a href="/">Volver a partidos</a></p>'
         }).finally(() => { if (/^\d+$/.test(matchId ?? '')) App.watch(load) })
     </script>
 </body>

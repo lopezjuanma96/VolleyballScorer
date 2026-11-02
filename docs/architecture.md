@@ -12,6 +12,14 @@ La base vigente es la reescritura Bun/Hono de `main`. No se fusionó el servidor
 
 El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud exige URL HTTPS y cookies seguras. `DATABASE_URL` tiene prioridad sobre `PSQL_*`, útil para bases administradas. El endpoint `/api/config` sólo publica identidad visual y zona horaria.
 
+## Roles, reglas y rotación
+
+- Sesión JWT firmada de 12 h con `sub` y versión; el rol y el estado del usuario se leen de PostgreSQL en cada pedido, así una revocación alcanza sesiones abiertas. `manager` del `.env` es el administrador principal.
+- Reglas en la categoría y copia en cada partido (`best_of`, `set_points`, `tiebreak_points`, `min_lead`, `point_cap`). `src/rules.ts` es puro y probado: ganador del set, set decisivo, resultado final válido y puntos de tabla.
+- Puntos con tipo `rally`, `final` o `correction`. Sólo `rally` alimenta la rotación; `correction` no se deshace desde el marcador.
+- Rotación: se guardan formación inicial (`set_lineups`, posiciones I–VI), quién saca (`sets.first_serve_home`) y cambios (`substitutions`, con la cantidad de rallies jugados). La rotación actual se reconstruye en `src/rotation.ts` repasando los rallies: el equipo que gana un punto con saque rival rota. No hay estado de rotación que pueda quedar desfasado al deshacer.
+- La tabla (`src/standings.ts`) se calcula al leer, a partir de partidos finalizados, y pasa por la misma caché pública.
+
 ## Correcciones respecto de la base anterior
 
 - Migraciones automáticas e idempotentes antes del servidor, con healthcheck real de PostgreSQL.
@@ -50,4 +58,4 @@ No hay modo offline para anotar: si falta internet en cloud, la operación debe 
 
 El usuario DB del Compose simplificado también aplica migraciones: se eliminó la separación de roles que causaba permisos inconsistentes. Para una base existente se conservan las variables `PSQL_ADMIN_*`; en instalaciones más exigentes se pueden separar las migraciones con `AUTO_MIGRATE=false` y un paso previo. La base sigue dentro de la red privada de Docker.
 
-Se mantienen las dos canchas del modelo original. No se agregaron ranking, playoffs, reglas automáticas de ganador ni la identidad específica del próximo torneo. PostgreSQL guarda fechas como UTC en el esquema histórico; la interfaz muestra `TOURNAMENT_TIMEZONE`. El selector de creación convierte la hora local del dispositivo a un instante ISO UTC; quien programa el fixture debe usar un dispositivo con la zona horaria correcta.
+Se mantienen las dos canchas del modelo original. No hay playoffs ni seguimiento de líbero o tiempos muertos. PostgreSQL guarda fechas como UTC en el esquema histórico; la interfaz muestra `TOURNAMENT_TIMEZONE`. El selector de creación convierte la hora local del dispositivo a un instante ISO UTC; quien programa el fixture debe usar un dispositivo con la zona horaria correcta.

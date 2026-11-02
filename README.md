@@ -2,9 +2,11 @@
 
 Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación, una rama activa (`main`) y tres despliegues elegidos por configuración.
 
-- Público: partidos por categoría, resultados y punto a punto; actualización automática con SSE.
-- Organización: categorías, clubes con logos, equipos, fixture, anotación, deshacer y cierre manual de sets/partidos.
-- Sin reglas rígidas de puntuación: el organizador decide ganadores y cierres.
+- Público, sin cuenta: fixture, resultados, punto a punto, rotación en vivo y tabla de posiciones; actualización automática con SSE.
+- Planilleros: inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
+- Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture, usuarios y decisiones administrativas con historial.
+- Reglas por categoría (mejor de 1/3/5/7, puntos por set, desempate, diferencia mínima y tope opcional), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
+- Tabla automática: el ganador suma *sets del formato − sets perdidos* y el perdedor *sets ganados* (mejor de 3: 3/0 o 2/1; mejor de 5: 5/0, 4/1 o 3/2). Un resultado adjudicado por la organización que los sets no respaldan (walkover, abandono) vale como administrativo: todos los puntos para el ganador, 0 para el perdedor.
 
 Bun · Hono · TypeScript · Drizzle · PostgreSQL · Tailwind · Docker Compose.
 
@@ -17,7 +19,7 @@ bun scripts/setup.ts
 scripts/stack.sh up -d --build
 ```
 
-Abrí <http://localhost:3000>. La organización entra por `/manager/`; usuario `manager`, contraseña aleatoria en `MANAGER_PASSWORD` del `.env` local. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
+Abrí <http://localhost:3000>. La organización entra por `/manager/`; usuario `manager` (administrador principal), contraseña aleatoria en `MANAGER_PASSWORD` del `.env` local. Desde **Usuarios** se crean las cuentas personales de organización y planilleros. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
 
 Las migraciones se aplican antes de aceptar tráfico. PostgreSQL y los logos usan volúmenes persistentes. El puerto de la base no se publica.
 
@@ -41,13 +43,13 @@ Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCEN
 
 ## Preparar el fixture
 
-1. Entrá a `/manager/`.
-2. Creá categorías y clubes; logos PNG/JPG/WebP de hasta 2 MB.
-3. Creá equipos y partidos, o importá equipos por CSV.
-4. Marcá el partido «En vivo» antes de anotar.
-5. Sumá puntos o ingresá el resultado final de cada set. Cerrá el partido manualmente.
+1. Entrá a `/manager/` y creá en **Usuarios** una cuenta por persona (Organización o Planillero).
+2. Creá categorías con sus reglas, y clubes; logos PNG/JPG/WebP de hasta 2 MB.
+3. Creá equipos y partidos, o importá equipos por CSV. Cada partido copia las reglas de su categoría; podés cambiarlas para un partido puntual.
+4. El planillero abre el partido, toca «Iniciar partido», carga (opcional) quién saca y las formaciones, y anota punto a punto o el resultado final de cada set.
+5. Sets y partido se cierran solos según las reglas; la tabla se actualiza al instante.
 
-Desde «Editar» podés cambiar horario y cancha. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. El marcador permite corregir sets cerrados con motivo e historial y recuperar el último set cancelado al cerrar accidentalmente un partido; el ganador del partido siempre se decide por separado.
+La rotación se recalcula en cada punto: un equipo rota cuando recupera el saque. Los cambios reemplazan al jugador en su posición (el líbero no se registra). Desde «Editar» la organización cambia horario, cancha o reglas. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. La organización puede corregir sets cerrados con motivo, adjudicar un partido (walkover, abandono), cancelar sets y recuperar el último set cancelado; todo queda en el historial con el usuario que lo hizo.
 
 Importación CSV opcional con Python 3, sin paquetes externos:
 
@@ -74,7 +76,8 @@ Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `D
 
 ## Operación y decisiones
 
-- [TODO: Google por invitación y puesta en marcha en Hostinger](TODO.md)
+- [Puesta en marcha en Hostinger y despliegue desde GitHub](docs/hostinger.md)
+- [TODO](TODO.md)
 - [Backup, restauración, migración y despliegues](docs/operations.md)
 - [Arquitectura, ramas y límites](docs/architecture.md)
 - [Revisión independiente y mejoras pendientes](docs/independent-review.md)

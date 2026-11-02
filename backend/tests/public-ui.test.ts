@@ -98,10 +98,10 @@ describe('official match result', () => {
         view.context.fixture = fixture('finished_away')
         runInContext('currentMatch = fixture; render()', view.context)
         const detail = view.elements.get('content').innerHTML
-        expect(detail).toContain('Resultado oficial · Ganó Visitante &lt;A&gt;')
-        expect(detail).toContain('1 : 0')
+        expect(detail).toContain('Ganó Visitante &lt;A&gt;')
+        expect(detail).toContain('1–0')
         view.context.fixture = fixture('cancelled')
         runInContext('currentMatch = fixture; render()', view.context)
-        expect(view.elements.get('content').innerHTML).not.toContain('Resultado oficial · Ganó')
+        expect(view.elements.get('content').innerHTML).not.toContain('Ganó')
     })
 })

@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { db } from '../db'
 import { clubs } from '../db/schema'
 import { eq } from 'drizzle-orm'
-import { authMiddleware } from '../middleware/auth'
+import { adminOnly } from '../middleware/auth'
 import { config } from '../config'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -21,7 +22,7 @@ async function removeUnusedLogo(logo: string | null | undefined) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Could not clean unused club logo')
     }
 }
-async function parseClub(c: Parameters<typeof authMiddleware>[0]) {
+async function parseClub(c: Context) {
     const body = await c.req.parseBody()
     const name = z.string().trim().min(1).max(100).parse(body.name)
     const file = body.logo
@@ -39,7 +40,7 @@ async function parseClub(c: Parameters<typeof authMiddleware>[0]) {
     return { name, logo: `/uploads/${filename}` }
 }
 clubRoutes.get('/', async c => c.json(await db.select().from(clubs).orderBy(clubs.name)))
-clubRoutes.post('/', authMiddleware, async c => {
+clubRoutes.post('/', adminOnly, async c => {
     const values = await parseClub(c)
     try {
         const [row] = await db.insert(clubs).values(values).returning()
@@ -49,7 +50,7 @@ clubRoutes.post('/', authMiddleware, async c => {
         throw error
     }
 })
-clubRoutes.put('/:id', authMiddleware, async c => {
+clubRoutes.put('/:id', adminOnly, async c => {
     const values = await parseClub(c)
     try {
         const { row, oldLogo } = await db.transaction(async tx => {
@@ -66,7 +67,7 @@ clubRoutes.put('/:id', authMiddleware, async c => {
         throw error
     }
 })
-clubRoutes.delete('/:id', authMiddleware, async c => {
+clubRoutes.delete('/:id', adminOnly, async c => {
     const [row] = await db.delete(clubs).where(eq(clubs.id, Number(c.req.param('id')))).returning()
     if (!row) return c.json({ error: 'Club no encontrado.' }, 404)
     await removeUnusedLogo(row.logo)
