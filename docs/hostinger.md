@@ -2,6 +2,8 @@
 
 Guía para hacer una sola vez. Resultado: VPS con Docker, app + PostgreSQL + Caddy (HTTPS automático), despliegue automático desde GitHub después de que pasa CI, y backups fuera del servidor. Escrita el 29/10/2026; verificá precios y pantallas de hPanel al momento de comprar.
 
+**Estado actual (02/11/2026):** hecho. La app está en <https://voley.zagador123.cloud> (registro A apuntando a la VPS de Hostinger) y el despliegue automático está activo (`DEPLOY_ENABLED=true`): cada merge a `main` que pasa **Check** se publica solo. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`. Pendiente: [ingreso con Google](#google).
+
 Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude con el conector de Hostinger: revisar el estado de la VPS, firewall, snapshots y métricas, y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
 
 ## 1. Comprar y elegir sistema
@@ -141,7 +143,7 @@ scripts/stack.sh up -d --build
 curl -fsS https://voley.tudominio.com/healthz
 ```
 
-Entrá a `https://voley.tudominio.com/manager/` con `manager` y la contraseña de `MANAGER_PASSWORD` (`grep MANAGER_PASSWORD .env`, sólo en tu terminal). Desde **Usuarios** creá una cuenta de Organización para cada admin y una de Planillero por cancha o persona; el usuario `manager` queda como acceso de emergencia.
+Entrá a `https://voley.tudominio.com/manager_login` (ninguna página la enlaza; escribila a mano) con `manager` y la contraseña de `MANAGER_PASSWORD` (`grep MANAGER_PASSWORD .env`, sólo en tu terminal). Configurá el [ingreso con Google](#google) y después, desde **Usuarios**, cargá el email de Google de cada persona con su rol (Organización o Planillero). Sólo `manager` puede gestionar usuarios.
 
 Si migrás datos desde tu instalación local: hacé `scripts/backup.sh` en local, copiá la carpeta con `scp -r backups/<fecha> deploy@IP:~/volleyball-scorer/backups/` y seguí [restauración](operations.md#backup-y-restauración).
 
@@ -200,3 +202,30 @@ Un volumen o snapshot en la misma VPS no reemplaza una copia externa.
 - Repetí la [prueba de carga](load-testing.md) contra la VPS (desde tu computadora, no desde la VPS).
 - Probá anotar desde la sede con los celulares y la red reales.
 - Snapshot manual, `DEPLOY_ENABLED` en `false` y backups verificados.
+
+<a id="google"></a>
+## 9. Ingreso con Google
+
+Organización y planilleros entran con su cuenta de Google; no hay contraseñas que repartir. Es gratis y no requiere verificación de Google porque sólo se piden nombre y email.
+
+1. Entrá a <https://console.cloud.google.com/> con tu cuenta y creá un proyecto (por ejemplo «Voley»).
+2. **Google Auth Platform → Branding** (antes «Pantalla de consentimiento OAuth»): nombre de la app, email de soporte, página principal `https://voley.zagador123.cloud` y política de privacidad `https://voley.zagador123.cloud/privacy_policy` (todas las páginas públicas la enlazan al pie). Tipo de usuario **Externo**. Opcional: `CONTACT_EMAIL=…` en el `.env` para que la política muestre a quién escribir.
+3. **Audience**: tocá **Publish app** para pasarla a «In production». En modo «Testing» sólo entran los usuarios de prueba y las sesiones de Google vencen a los 7 días.
+4. **Clients → Create client**: tipo **Web application**.
+   - Authorized JavaScript origins: `https://voley.zagador123.cloud`
+   - Authorized redirect URIs: `https://voley.zagador123.cloud/api/auth/google/callback`
+   - Para probar en local, agregá también `http://localhost:3000` y `http://localhost:3000/api/auth/google/callback`.
+5. Copiá el Client ID y el Client secret. En la VPS, como `deploy`:
+   ```bash
+   cd ~/volleyball-scorer
+   # Agrega (o completa) estas dos líneas en .env. El secret no va nunca al repositorio.
+   nano .env        # GOOGLE_CLIENT_ID=…apps.googleusercontent.com y GOOGLE_CLIENT_SECRET=…
+   # Recrea sólo la app para que lea el .env nuevo (no hace falta rebuild).
+   scripts/stack.sh up -d --force-recreate app
+   ```
+6. Entrá por `/manager_login`, abrí **Usuarios** y cargá los emails. Probá con uno de ellos en `/login.html` → «Ingresar con Google», y con otro email que no esté para ver «No sos parte de la organización».
+
+Orden al desplegar este cambio: cargá primero las variables en el `.env` de la VPS (el código viejo las ignora) y después hacé el merge. La migración `0005_google_members` desactiva las cuentas con contraseña existentes; aparecen en **Usuarios** como «Sin email» para cargarles el email o eliminarlas.
+
+Si Google no está configurado, el botón muestra «El ingreso con Google todavía no está configurado» y sólo entra `manager`.
+

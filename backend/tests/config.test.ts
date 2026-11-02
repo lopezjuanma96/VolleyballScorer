@@ -27,6 +27,15 @@ describe('deployment configuration', () => {
         expect(() => parseConfig({ ...base, TOURNAMENT_TIMEZONE: 'invalid' })).toThrow()
         expect(() => parseConfig({ ...base, TOURNAMENT_ACCENT: 'red; color: transparent' })).toThrow()
     })
+    test('Google sign-in needs both client values; blank means off', () => {
+        expect(parseConfig({ ...base, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' }).googleEnabled).toBe(false)
+        expect(parseConfig({ ...base, GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }).googleEnabled).toBe(true)
+        expect(() => parseConfig({ ...base, GOOGLE_CLIENT_ID: 'id' })).toThrow('GOOGLE')
+        expect(() => parseConfig({ ...base, GOOGLE_CLIENT_SECRET: 'secret' })).toThrow('GOOGLE')
+        expect(parseConfig({ ...base, CONTACT_EMAIL: '' }).CONTACT_EMAIL).toBeUndefined()
+        expect(parseConfig({ ...base, CONTACT_EMAIL: 'org@example.com' }).CONTACT_EMAIL).toBe('org@example.com')
+        expect(() => parseConfig({ ...base, CONTACT_EMAIL: 'not-an-email' })).toThrow('CONTACT_EMAIL')
+    })
     test('configuration errors do not expose secrets', () => {
         try { parseConfig({ MANAGER_PASSWORD: 'secret', SESSION_SECRET: 'private' }) }
         catch (e) { expect(String(e)).not.toContain('private'); expect(String(e)).not.toContain('secret') }

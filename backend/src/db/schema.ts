@@ -39,12 +39,13 @@ const ruleColumns = () => ({
 
 export const users = pgTable('users', {
     id: serial('id').primaryKey(),
-    username: varchar('username', { length: 50 }).notNull().unique(),
+    // Organization members sign in with Google; only this verified email is accepted.
+    // Stored lowercase. The .env manager is not a row here.
+    email: varchar('email', { length: 254 }).notNull().unique(),
     displayName: varchar('display_name', { length: 100 }).notNull(),
-    passwordHash: varchar('password_hash', { length: 255 }).notNull(),
     role: userRoleEnum('role').notNull(),
     active: boolean('active').notNull().default(true),
-    // Bumped on password, role or access changes: open sessions stop working.
+    // Bumped on email, role or access changes: open sessions stop working.
     sessionVersion: integer('session_version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

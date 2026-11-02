@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, test, expect, beforeAll, afterAll, spyOn } from 'bun:test'
 import { sql } from 'drizzle-orm'
 
 const integration = describe.skipIf(process.env.RUN_DB_TESTS !== 'true')
@@ -9,7 +9,8 @@ integration('roles, set rules, rotation and standings', () => {
     let admin: string, scorer: string
     let categoryId: number, clubId: number, home: number, away: number
     const name = `rules-${crypto.randomUUID().slice(0, 8)}`
-    const scorerName = `${name}-scorer`
+    const scorerEmail = `${name}-scorer@example.com`
+    let scorerId: number
     const call = (cookie: string | null, path: string, method = 'GET', body?: unknown) => app.request(path, {
         method, headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -23,6 +24,14 @@ integration('roles, set rules, rotation and standings', () => {
         const res = await call(null, '/api/auth/login', 'POST', { username, password })
         expect(res.status).toBe(200)
         return res.headers.get('set-cookie')!.split(';')[0]
+    }
+    // Member sessions normally come from Google; tests sign the same token the callback issues.
+    const memberCookie = async (id: number) => {
+        const { issueToken, memberSession } = await import('../src/middleware/auth')
+        const { users } = await import('../src/db/schema')
+        const { eq } = await import('drizzle-orm')
+        const [user] = await db.select().from(users).where(eq(users.id, id))
+        return `session=${await issueToken(memberSession(user!), user!.sessionVersion)}`
     }
     const detail = (id: number) => json(null, `/api/matches/${id}`)
     const newMatch = async (rules?: object) => {
@@ -45,8 +54,8 @@ integration('roles, set rules, rotation and standings', () => {
         await (await import('../src/db/migrate')).migrateDatabase()
         app = (await import('../src/index')).default
         admin = await login(process.env.MANAGER_USER ?? 'manager', process.env.MANAGER_PASSWORD!)
-        await json(admin, '/api/users', 'POST', { username: scorerName, displayName: 'Planillero de prueba', role: 'scorer', password: 'scorer-password-1' })
-        scorer = await login(scorerName, 'scorer-password-1')
+        scorerId = (await json(admin, '/api/users', 'POST', { email: scorerEmail, displayName: 'Planillero de prueba', role: 'scorer' })).id
+        scorer = await memberCookie(scorerId)
         categoryId = (await json(admin, '/api/categories', 'POST', { name, bestOf: 3, setPoints: 5, tiebreakPoints: 3, minLead: 2, pointCap: null })).id
         const form = new FormData(); form.set('name', name)
         clubId = ((await (await app.request('/api/clubs', { method: 'POST', body: form, headers: { Cookie: admin } })).json()) as any).id
@@ -61,7 +70,7 @@ integration('roles, set rules, rotation and standings', () => {
         await db.execute(sql`delete from teams where category_id = ${categoryId}`)
         await db.execute(sql`delete from clubs where id = ${clubId}`)
         await db.execute(sql`delete from categories where id = ${categoryId}`)
-        await db.execute(sql`delete from users where username like ${name + '%'}`)
+        await db.execute(sql`delete from users where email like ${name + '%'}`)
         // The DB client is shared by every test file in this process; bun closes it on exit.
     })
 
@@ -83,7 +92,7 @@ integration('roles, set rules, rotation and standings', () => {
         expect((await call(scorer, `/api/sets/${set.id}`, 'PUT', { status: 'cancelled', expectedLastPointId: null })).status).toBe(403)
         expect((await call(scorer, `/api/matches/${match.id}`, 'DELETE')).status).toBe(403)
         const history: any[] = await json(scorer, `/api/matches/${match.id}/history`)
-        expect(history[0].actor).toBe(scorerName)
+        expect(history[0].actor).toBe(scorerEmail)
     })
 
     test('category rules are copied to matches and validated', async () => {
@@ -204,16 +213,88 @@ integration('roles, set rules, rotation and standings', () => {
 
     test('revoking a user or changing their role reaches open sessions', async () => {
         const users = (await json(admin, '/api/users')).users as any[]
-        const target = users.find(u => u.username === scorerName)
+        const target = users.find(u => u.email === scorerEmail)
+        expect(target.id).toBe(scorerId)
         expect(target.passwordHash).toBeUndefined()
-        expect((await call(admin, '/api/users', 'POST', { username: process.env.MANAGER_USER ?? 'manager', displayName: 'x', role: 'admin', password: 'another-password' })).status).toBe(409)
+        expect((await call(admin, '/api/users', 'POST', { email: scorerEmail.toUpperCase(), role: 'admin' })).status).toBe(409)
         await json(admin, `/api/users/${target.id}`, 'PUT', { active: false })
         expect((await call(scorer, '/api/auth/me')).status).toBe(401)
-        expect((await call(null, '/api/auth/login', 'POST', { username: scorerName, password: 'scorer-password-1' })).status).toBe(401)
         await json(admin, `/api/users/${target.id}`, 'PUT', { active: true, role: 'admin' })
-        const promoted = await login(scorerName, 'scorer-password-1')
+        expect((await call(scorer, '/api/auth/me')).status).toBe(401)
+        const promoted = await memberCookie(target.id)
         expect((await json(promoted, '/api/auth/me')).role).toBe('admin')
-        expect((await call(promoted, `/api/users/${target.id}`, 'PUT', { role: 'scorer' })).status).toBe(409)
-        expect((await call(admin, '/api/users', 'POST', { username: 'ab', displayName: 'x', role: 'scorer', password: 'short' })).status).toBe(400)
+        expect((await json(promoted, '/api/auth/me')).manager).toBe(false)
+        expect((await call(admin, '/api/users', 'POST', { email: 'not-an-email', role: 'scorer' })).status).toBe(400)
+        await json(admin, `/api/users/${target.id}`, 'PUT', { role: 'scorer' })
+        scorer = await memberCookie(target.id)
+    })
+
+    test('only the .env manager manages users; organization admins keep everything else', async () => {
+        const created = await json(admin, '/api/users', 'POST', { email: `${name}-org@example.com`, role: 'admin' })
+        expect(created.displayName).toBe(`${name}-org`)
+        const org = await memberCookie(created.id)
+        expect((await json(org, '/api/auth/me')).manager).toBe(false)
+        expect((await json(admin, '/api/auth/me')).manager).toBe(true)
+        expect((await call(org, '/api/users')).status).toBe(403)
+        expect((await call(org, '/api/users', 'POST', { email: `${name}-x@example.com`, role: 'admin' })).status).toBe(403)
+        expect((await call(org, `/api/users/${created.id}`, 'PUT', { role: 'admin' })).status).toBe(403)
+        expect((await call(org, `/api/users/${scorerId}`, 'DELETE')).status).toBe(403)
+        expect((await call(org, '/manager/users.html')).status).toBe(302)
+        expect((await call(org, '/manager/categories.html')).status).toBe(200)
+        expect((await call(admin, '/manager/users.html')).status).toBe(200)
+        const category = await json(org, '/api/categories', 'POST', { name: `${name}-org-cat`, bestOf: 3, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null })
+        await json(org, `/api/categories/${category.id}`, 'DELETE')
+        await json(admin, `/api/users/${created.id}`, 'DELETE')
+        expect((await call(org, '/api/auth/me')).status).toBe(401)
+    })
+
+    test('members cannot use the password login; the manager login page is served but not linked', async () => {
+        expect((await call(null, '/api/auth/login', 'POST', { username: scorerEmail, password: 'anything-at-all' })).status).toBe(401)
+        const page = await call(null, '/manager_login')
+        expect(page.status).toBe(200)
+        expect(page.headers.get('x-robots-tag')).toContain('noindex')
+        expect(await page.text()).toContain('/api/auth/login')
+        for (const path of ['/login.html', '/index.html', '/standings.html']) expect(await (await call(null, path)).text()).not.toContain('manager_login')
+        const privacy = await call(null, '/privacy_policy')
+        expect(privacy.status).toBe(200)
+        expect(await privacy.text()).toContain('Política de privacidad')
+    })
+
+    const googleTest = process.env.GOOGLE_CLIENT_ID ? test : test.skip
+    googleTest('Google sign-in admits only listed, active, verified emails', async () => {
+        const start = async () => {
+            const res = await call(null, '/api/auth/google')
+            expect(res.status).toBe(302)
+            const location = new URL(res.headers.get('location')!)
+            expect(location.origin).toBe('https://accounts.google.com')
+            expect(location.searchParams.get('code_challenge_method')).toBe('S256')
+            const flow = res.headers.getSetCookie().find(cookie => cookie.startsWith('google_flow='))!.split(';')[0]!
+            return { flow, state: location.searchParams.get('state')!, nonce: location.searchParams.get('nonce')! }
+        }
+        const idToken = (claims: object) => `x.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.x`
+        const finish = async (email: string, extra: object = {}, tamper?: { state?: string }) => {
+            const { flow, state, nonce } = await start()
+            const claims = { iss: 'https://accounts.google.com', aud: process.env.GOOGLE_CLIENT_ID, exp: Math.floor(Date.now() / 1000) + 300, nonce, email, email_verified: true, ...extra }
+            const google = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ id_token: idToken(claims) }))
+            try {
+                const res = await call(flow, `/api/auth/google/callback?code=test-code&state=${tamper?.state ?? state}`)
+                return { location: res.headers.get('location'), cookies: res.headers.getSetCookie(), calls: google.mock.calls }
+            } finally { google.mockRestore() }
+        }
+        const ok = await finish(scorerEmail.toUpperCase())
+        expect(ok.location).toBe('/manager/')
+        expect(String(ok.calls[0]![0])).toBe('https://oauth2.googleapis.com/token')
+        const session = ok.cookies.find(cookie => cookie.startsWith('session='))!.split(';')[0]!
+        expect((await json(session, '/api/auth/me')).username).toBe(scorerEmail)
+        expect((await finish(`${name}-stranger@example.com`)).location).toBe('/login.html?error=no-member')
+        expect((await finish(scorerEmail, { email_verified: false })).location).toBe('/login.html?error=failed')
+        expect((await finish(scorerEmail, { aud: 'someone-else' })).location).toBe('/login.html?error=failed')
+        expect((await finish(scorerEmail, { nonce: 'replayed' })).location).toBe('/login.html?error=failed')
+        expect((await finish(scorerEmail, {}, { state: 'forged' })).location).toBe('/login.html?error=failed')
+        expect((await call(null, '/api/auth/google/callback?code=x&state=y')).headers.get('location')).toBe('/login.html?error=failed')
+        await json(admin, `/api/users/${scorerId}`, 'PUT', { active: false })
+        expect((await finish(scorerEmail)).location).toBe('/login.html?error=no-member')
+        await json(admin, `/api/users/${scorerId}`, 'PUT', { active: true })
+        scorer = await memberCookie(scorerId)
     })
 })

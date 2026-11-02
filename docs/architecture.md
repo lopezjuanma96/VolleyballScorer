@@ -14,7 +14,7 @@ El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud exige 
 
 ## Roles, reglas y rotación
 
-- Sesión JWT firmada de 12 h con `sub` y versión; el rol y el estado del usuario se leen de PostgreSQL en cada pedido, así una revocación alcanza sesiones abiertas. `manager` del `.env` es el administrador principal.
+- Sesión JWT firmada de 12 h con `sub` y versión; el rol y el estado del usuario se leen de PostgreSQL en cada pedido, así una revocación alcanza sesiones abiertas. `manager` del `.env` es el administrador principal y el único que gestiona usuarios; entra con contraseña por `/manager_login`. Organización y planilleros entran con Google (OIDC, código + PKCE, `state` y `nonce` en una cookie firmada de 10 minutos); el email verificado tiene que estar en `users` y activo. El ID token llega directo del endpoint de tokens de Google por TLS con el client secret, así que se validan `iss`, `aud`, `exp`, `nonce` y `email_verified` sin verificar la firma (OIDC Core 3.1.3.7).
 - Reglas en la categoría y copia en cada partido (`best_of`, `set_points`, `tiebreak_points`, `min_lead`, `point_cap`). `src/rules.ts` es puro y probado: ganador del set, set decisivo, resultado final válido y puntos de tabla.
 - Puntos con tipo `rally`, `final` o `correction`. Sólo `rally` alimenta la rotación; `correction` no se deshace desde el marcador.
 - Rotación: se guardan formación inicial (`set_lineups`, posiciones I–VI), quién saca (`sets.first_serve_home`) y cambios (`substitutions`, con la cantidad de rallies jugados). La rotación actual se reconstruye en `src/rotation.ts` repasando los rallies: el equipo que gana un punto con saque rival rota. No hay estado de rotación que pueda quedar desfasado al deshacer.
