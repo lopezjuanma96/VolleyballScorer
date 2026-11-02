@@ -17,6 +17,8 @@ Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede ha
 Opción simple, sin tokens en archivos (OAuth en el navegador):
 
 ```bash
+# Registra el servidor MCP remoto de Hostinger en Claude Code. La primera vez que se usa
+# abre el navegador para autorizar (OAuth), así que no queda ningún token guardado en archivos.
 claude mcp add --transport http hostinger https://mcp.hostinger.com
 ```
 
@@ -27,26 +29,69 @@ Alternativa: hPanel → Integraciones → «Hostinger Connector». Si preferís 
 Entrá como root una sola vez y creá el usuario que va a operar la app:
 
 ```bash
+# Conectarse a la VPS como root usando tu clave SSH (la que cargaste en el asistente).
 ssh root@IP
-# Sólo si elegiste Ubuntu plano (sin la plantilla de Docker):
+
+# Sólo si elegiste Ubuntu plano (sin la plantilla de Docker): el script oficial de Docker
+# agrega su repositorio de paquetes e instala Docker Engine y el plugin de Compose.
 #   curl -fsSL https://get.docker.com | sh
-docker compose version        # tiene que responder
+docker compose version        # comprueba que Docker y Compose estén instalados; tiene que responder
+
+# Crear el usuario "deploy", que va a operar la app. Trabajar como root todos los días es
+# riesgoso: un error o un acceso robado tiene control total del servidor.
+#   --disabled-password: el usuario no tiene contraseña; sólo puede entrar con clave SSH.
+#   --gecos "": salta las preguntas de nombre completo, teléfono, etc.
 adduser --disabled-password --gecos "" deploy
+
+# Agregarlo al grupo "docker" para que pueda manejar contenedores sin sudo.
+# (Ojo: el grupo docker equivale en la práctica a root; por eso sólo lo tiene este usuario.)
 usermod -aG docker deploy
+
+# Darle sudo para tareas de administración (instalar paquetes, reiniciar), porque después
+# del endurecimiento root ya no puede entrar por SSH. La contraseña sólo sirve para sudo:
+# SSH no acepta contraseñas. Guardala en tu gestor de contraseñas.
+passwd deploy
+usermod -aG sudo deploy
+
+# Crear /home/deploy/.ssh con permisos 700 (sólo el dueño puede entrar). SSH rechaza
+# claves guardadas en carpetas con permisos más abiertos.
 install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+
+# Copiar a deploy las claves públicas autorizadas de root (o sea, tu clave), y hacer
+# a deploy dueño del archivo. Así entrás como deploy con la misma clave.
 cp ~/.ssh/authorized_keys /home/deploy/.ssh/ && chown deploy:deploy /home/deploy/.ssh/authorized_keys
+
 # Actualizaciones de seguridad automáticas y firewall.
-apt update && apt -y upgrade && apt -y install unattended-upgrades ufw git
+#   apt update: refresca la lista de paquetes disponibles.
+#   apt -y upgrade: instala las actualizaciones pendientes (-y responde "sí" solo).
+#   unattended-upgrades: instala parches de seguridad todos los días sin intervención.
+#   ufw: firewall simple ("uncomplicated firewall"). git: para clonar el repositorio.
+#   unzip: lo necesita el instalador de Bun (paso 5).
+apt update && apt -y upgrade && apt -y install unattended-upgrades ufw git unzip
+
+# Firewall: bloquear todo lo entrante salvo SSH (22), HTTP (80) y HTTPS (443).
+# OpenSSH va primero para no cortarte el acceso al activar. --force evita la confirmación.
 ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 ```
 
 Probá en otra terminal que `ssh deploy@IP` funciona **antes** de cerrar el acceso por contraseña y de root:
 
 ```bash
+# Endurecer SSH: después de esto sólo se entra con clave y nunca como root.
+#   PasswordAuthentication no: no acepta contraseñas (frena los ataques de fuerza bruta,
+#     que en una IP pública empiezan a los pocos minutos).
+#   KbdInteractiveAuthentication no: cierra la otra vía por la que se pueden pedir contraseñas.
+#   PermitRootLogin no: root no puede entrar por SSH; se entra como deploy.
 # Va en un archivo propio: las imágenes de Ubuntu traen sshd_config.d/50-cloud-init.conf
 # y SSH usa el primer valor que encuentra, así que editar sshd_config no alcanza.
+# El prefijo "00-" hace que este archivo se lea antes que "50-cloud-init.conf".
 printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n' > /etc/ssh/sshd_config.d/00-hardening.conf
+
+# sshd -t valida la configuración; sólo si está bien (&&) recarga SSH. Recargar no corta
+# la sesión abierta, así que si algo falla todavía podés corregirlo desde esta terminal.
 sshd -t && systemctl reload ssh
+
+# sshd -T muestra la configuración efectiva final, después de combinar todos los archivos.
 sshd -T | grep -Ei '^(passwordauthentication|permitrootlogin)'   # tiene que decir "no" en ambas
 ```
 
@@ -61,14 +106,38 @@ En tu proveedor DNS creá un registro **A** `voley.tudominio.com → IP` (y AAAA
 Como `deploy`:
 
 ```bash
+# Entrar como deploy (ya no como root).
 ssh deploy@IP
+
+# Instalar Bun (el runtime de JavaScript del proyecto) en ~/.bun, fijando la versión para
+# que coincida con la que usa el proyecto. Sólo se usa para los scripts de ayuda;
+# la app en sí corre dentro de Docker.
 curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.0"
+
+# Reiniciar la shell como "login shell" para que tome el PATH nuevo y encuentre "bun".
 exec $SHELL -l
+
+# Descargar el código en ~/volleyball-scorer y entrar a la carpeta.
 git clone https://github.com/lopezjuanma96/VolleyballScorer.git ~/volleyball-scorer
 cd ~/volleyball-scorer
+
 bun scripts/setup.ts          # genera .env con secretos aleatorios (no los imprime)
+
+# Editar la configuración (Ctrl+O guarda, Ctrl+X sale):
+#   DEPLOY_MODE=cloud: levanta Caddy (HTTPS) en lugar de ngrok.
+#   DOMAIN: el nombre al que Caddy responde y para el que pide el certificado.
+#   PUBLIC_URL: la dirección pública completa. La app sólo acepta formularios y escrituras
+#     que vengan de ese origen (protección CSRF). Su host tiene que ser igual a DOMAIN.
 nano .env                     # DEPLOY_MODE=cloud, PUBLIC_URL=https://voley.tudominio.com, DOMAIN=voley.tudominio.com
+
+# Construir las imágenes y levantar todo (app, PostgreSQL, Caddy) en segundo plano (-d).
+# stack.sh es un envoltorio de "docker compose": lee DEPLOY_MODE de .env, revisa que
+# PUBLIC_URL y DOMAIN estén bien y activa los servicios de ese modo (en cloud, Caddy).
+# La primera vez tarda unos minutos y Caddy pide el certificado HTTPS.
 scripts/stack.sh up -d --build
+
+# Probar desde afuera que la app responde por HTTPS. -f falla si el código no es 2xx,
+# -sS no muestra la barra de progreso pero sí los errores.
 curl -fsS https://voley.tudominio.com/healthz
 ```
 
@@ -82,12 +151,23 @@ El flujo `.github/workflows/deploy.yml` corre cuando **Check** termina bien en u
 
 1. En tu computadora, una clave exclusiva para despliegues (sin passphrase):
    ```bash
+   # -t ed25519: tipo de clave moderno, corto y seguro.
+   # -N "": sin passphrase, porque GitHub Actions la usa sin nadie que la escriba.
+   # -C: comentario para reconocerla en authorized_keys.
+   # -f: crea ./github-deploy (privada, va a GitHub) y ./github-deploy.pub (pública, va a la VPS).
    ssh-keygen -t ed25519 -N "" -C "github-deploy" -f ./github-deploy
    ```
 2. En la VPS, como `deploy`, agregá la pública a `~/.ssh/authorized_keys` en **una línea** con comando forzado:
    ```
+   # Clave de GitHub Actions. Aunque alguien la robe, sólo puede desplegar:
+   #   command="…": cualquier comando que pida esta clave se reemplaza por deploy.sh.
+   #   no-port-forwarding, no-agent-forwarding, no-X11-forwarding: no puede usar el servidor
+   #     como túnel hacia otros lugares ni reenviar claves o ventanas.
+   #   no-pty: no obtiene una terminal interactiva.
    command="/home/deploy/volleyball-scorer/scripts/deploy.sh",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 AAAA… github-deploy
    ```
+
+   Las líneas que empiezan con `#` son comentarios válidos en `authorized_keys`; la clave en sí tiene que quedar en una sola línea.
 3. En GitHub → Settings → Environments, creá `production` (podés exigir aprobación manual). Cargá:
    - Secrets: `DEPLOY_SSH_KEY` = contenido de `./github-deploy` (privada). `DEPLOY_KNOWN_HOSTS` = salida de `ssh-keyscan -t ed25519 IP`.
    - Variables: `DEPLOY_HOST` = IP, `DEPLOY_USER` = `deploy`, `PUBLIC_URL` = `https://voley.tudominio.com`.
@@ -101,8 +181,16 @@ Un deploy pausa la app unos segundos (backup y reinicio). El día del torneo no 
 Un volumen o snapshot en la misma VPS no reemplaza una copia externa.
 
 - Activá los backups semanales de Hostinger y tomá un snapshot manual antes del torneo.
-- Diario, con cron de `deploy` (`crontab -e`), y copia a otro lugar con [rclone](https://rclone.org/) (Google Drive, Backblaze B2, etc.) configurado con `rclone config`:
+- Diario, con cron de `deploy` (`crontab -e`), y copia a otro lugar con [rclone](https://rclone.org/) (Google Drive, Backblaze B2, etc.; se instala con `sudo apt install rclone`) configurado con `rclone config`:
   ```
+  # Formato de cron: minuto hora día-del-mes mes día-de-la-semana comando.
+  # "30 4 * * *" = todos los días a las 04:30 (hora del servidor).
+  #   scripts/backup.sh: pausa la app unos segundos, vuelca la base y los logos subidos
+  #     a backups/<fecha>-… y vuelve a arrancarla (>/dev/null descarta el mensaje de éxito).
+  #     Los errores no se avisan solos: revisá cada tanto que haya carpetas nuevas.
+  #   rclone copy … --max-age 2d: sube a la nube sólo lo de los últimos 2 días, sin borrar
+  #     nada del destino. "remoto" es el nombre que le pusiste en "rclone config".
+  # Cada && hace que el paso siguiente corra sólo si el anterior salió bien.
   30 4 * * * cd ~/volleyball-scorer && scripts/backup.sh >/dev/null && rclone copy backups remoto:voley-backups --max-age 2d
   ```
 - Ensayá una restauración completa en local al menos una vez ([cómo](operations.md#backup-y-restauración)).
