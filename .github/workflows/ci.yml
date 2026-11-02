@@ -20,6 +20,9 @@ jobs:
       MANAGER_PASSWORD: test-manager-password
       SESSION_SECRET: test-session-secret-at-least-32-characters
       RUN_DB_TESTS: 'true'
+      # Fake values: the suite mocks Google's token endpoint.
+      GOOGLE_CLIENT_ID: test-client.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: test-only-client-secret
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2

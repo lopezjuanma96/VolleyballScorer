@@ -45,11 +45,11 @@ export const matchUpdate = matchBase.omit({ categoryId: true }).partial().extend
     startNewSet: z.boolean().optional(),
 }).refine(value => ['status', 'court', 'scheduledAt', 'teamHomeId', 'teamAwayId', 'rules'].some(key => key in value), 'Indicá algún cambio.')
 
-const username = z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,50}$/, 'Usá de 3 a 50 letras, números, punto, guion o guion bajo.')
-const password = z.string().min(10, 'La contraseña debe tener al menos 10 caracteres.').max(200)
+const email = z.string().trim().toLowerCase().max(254).pipe(z.email('Ingresá un email válido.'))
 const role = z.enum(['admin', 'scorer'])
-export const userInput = z.object({ username, displayName: name, role, password })
-export const userUpdate = z.object({ displayName: name.optional(), role: role.optional(), active: z.boolean().optional(), password: password.optional() })
+const displayName = z.string().trim().max(100)
+export const userInput = z.object({ email, displayName: displayName.optional(), role })
+export const userUpdate = z.object({ email: email.optional(), displayName: displayName.optional(), role: role.optional(), active: z.boolean().optional() })
     .refine(value => Object.keys(value).length > 0, 'Indicá algún cambio.')
 
 const lineup = z.array(jersey).length(6).refine(numbers => new Set(numbers).size === 6, 'Cada posición necesita un número distinto.')

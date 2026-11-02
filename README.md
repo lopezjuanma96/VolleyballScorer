@@ -4,7 +4,8 @@ Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación,
 
 - Público, sin cuenta: fixture, resultados, punto a punto, rotación en vivo y tabla de posiciones; actualización automática con SSE.
 - Planilleros: inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
-- Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture, usuarios y decisiones administrativas con historial.
+- Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture y decisiones administrativas con historial.
+- Administrador principal (`manager` del `.env`): todo lo anterior y además decide quién entra: carga los emails de Google habilitados con su rol. Planilleros y organización entran con «Ingresar con Google»; un email que no está en la lista ve «No sos parte de la organización».
 - Reglas por categoría (mejor de 1/3/5/7, puntos por set, desempate, diferencia mínima y tope opcional), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
 - Tabla automática: el ganador suma *sets del formato − sets perdidos* y el perdedor *sets ganados* (mejor de 3: 3/0 o 2/1; mejor de 5: 5/0, 4/1 o 3/2). Un resultado adjudicado por la organización que los sets no respaldan (walkover, abandono) vale como administrativo: todos los puntos para el ganador, 0 para el perdedor.
 
@@ -19,7 +20,7 @@ bun scripts/setup.ts
 scripts/stack.sh up -d --build
 ```
 
-Abrí <http://localhost:3000>. La organización entra por `/manager/`; usuario `manager` (administrador principal), contraseña aleatoria en `MANAGER_PASSWORD` del `.env` local. Desde **Usuarios** se crean las cuentas personales de organización y planilleros. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
+Abrí <http://localhost:3000>. El administrador principal entra por `/manager_login` (no hay enlaces a esa página) con usuario `manager` y la contraseña aleatoria de `MANAGER_PASSWORD` del `.env` local. Desde **Usuarios** habilita los emails de Google de la organización y los planilleros, que entran por «Ingresar» con Google ([configurar Google](docs/hostinger.md#google)). Sin `GOOGLE_CLIENT_ID` sólo puede entrar el administrador principal. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
 
 Las migraciones se aplican antes de aceptar tráfico. PostgreSQL y los logos usan volúmenes persistentes. El puerto de la base no se publica.
 
@@ -43,7 +44,7 @@ Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCEN
 
 ## Preparar el fixture
 
-1. Entrá a `/manager/` y creá en **Usuarios** una cuenta por persona (Organización o Planillero).
+1. Entrá por `/manager_login` y cargá en **Usuarios** el email de Google de cada persona con su rol (Organización o Planillero).
 2. Creá categorías con sus reglas, y clubes; logos PNG/JPG/WebP de hasta 2 MB.
 3. Creá equipos y partidos, o importá equipos por CSV. Cada partido copia las reglas de su categoría; podés cambiarlas para un partido puntual.
 4. El planillero abre el partido, toca «Iniciar partido», carga (opcional) quién saca y las formaciones, y anota punto a punto o el resultado final de cada set.

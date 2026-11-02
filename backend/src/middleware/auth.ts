@@ -8,6 +8,7 @@ import { db } from '../db'
 import { users } from '../db/schema'
 
 export type Role = 'admin' | 'scorer'
+// userId is null only for the .env manager. username is the manager name or the member's email.
 export type Session = { userId: number | null; username: string; displayName: string; role: Role }
 export const SESSION_SECONDS = 60 * 60 * 12
 
@@ -18,6 +19,11 @@ const envSubject = `env:${config.MANAGER_USER}`
 export function envAdmin(): Session {
     return { userId: null, username: config.MANAGER_USER, displayName: config.MANAGER_USER, role: 'admin' }
 }
+
+export function memberSession(user: { id: number; email: string; displayName: string; role: Role }): Session {
+    return { userId: user.id, username: user.email, displayName: user.displayName, role: user.role }
+}
+export const isManager = (session: Session | null) => session?.userId === null
 
 export async function issueToken(session: Session, sessionVersion = 0) {
     const now = Math.floor(Date.now() / 1000)
@@ -39,7 +45,7 @@ export async function getSession(c: Context): Promise<Session | null> {
             const id = typeof payload.sub === 'string' && /^user:\d+$/.test(payload.sub) ? Number(payload.sub.slice(5)) : null
             if (id !== null) {
                 const [user] = await db.select().from(users).where(eq(users.id, id))
-                if (user?.active && user.sessionVersion === payload.ver) session = { userId: user.id, username: user.username, displayName: user.displayName, role: user.role }
+                if (user?.active && user.sessionVersion === payload.ver) session = memberSession(user)
             }
         } catch { session = null }
     }
@@ -59,8 +65,15 @@ function requireRole(...roles: Role[]) {
 }
 // Scorers run matches: start, rallies, undo, lineups and set results.
 export const scorerOnly = requireRole('admin', 'scorer')
-// Admins also manage fixture, categories, rules, teams, users and rulings.
+// Admins also manage fixture, categories, rules, teams and rulings.
 export const adminOnly = requireRole('admin')
+// Only the .env manager manages members, so no Google account can grant access.
+export async function managerOnly(c: Context, next: Next) {
+    const session = await getSession(c)
+    if (!session) return c.json({ error: 'Iniciá sesión para continuar.' }, 401)
+    if (!isManager(session)) return c.json({ error: 'Sólo el administrador principal gestiona usuarios.' }, 403)
+    await next()
+}
 
 export async function actor(c: Context) {
     return (await getSession(c))?.username ?? 'desconocido'

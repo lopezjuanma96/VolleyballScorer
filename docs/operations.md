@@ -17,7 +17,8 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 | `PSQL_HOST/PORT/DATABASE/USER/PASSWORD` | Conexión PostgreSQL tradicional; Compose fija host `db` y puerto 5432 |
 | `PSQL_ADMIN_USER/PASSWORD` | Opcional, sólo migraciones sobre instalaciones anteriores con roles separados |
 | `AUTO_MIGRATE` | `true` por defecto; `false` exige aplicar migraciones antes del arranque |
-| `MANAGER_USER/PASSWORD` | Acceso de organización; contraseña mínima de 12 caracteres |
+| `MANAGER_USER/PASSWORD` | Administrador principal (único que gestiona usuarios), entra por `/manager_login`; contraseña mínima de 12 caracteres |
+| `GOOGLE_CLIENT_ID/SECRET` | Ingreso con Google de organización y planilleros; ambos o ninguno. Sin ellos sólo entra el administrador principal ([cómo crearlos](hostinger.md#google)) |
 | `SESSION_SECRET` | Firma de sesión; mínimo 32 caracteres; cambiarlo invalida sesiones anteriores |
 | `COOKIE_SECURE` | Automático: false en local, true en onprem/cloud. No puede desactivarse en público |
 | `TRUST_PROXY_HOPS` | Cantidad de proxies confiables: default 0 en local, 1 en onprem/cloud; origen inaccesible desde internet por otra ruta |
@@ -76,7 +77,9 @@ Las reglas del partido deciden: un punto que completa el set lo cierra y abre el
 
 ## Usuarios y roles
 
-`manager` (variables `MANAGER_USER`/`MANAGER_PASSWORD`) es el administrador principal y de emergencia; cambiar su contraseña en `.env` cierra sus sesiones. Las demás cuentas se crean en **Usuarios** con contraseña Argon2id (`Bun.password`). Rol, estado y contraseña se leen en cada pedido: desactivar, cambiar el rol o la contraseña corta las sesiones abiertas de esa persona. Planillero: iniciar partidos, puntos, deshacer, saque, formación, cambios y resultado de set. Organización: además fixture, categorías y reglas, clubes, equipos, usuarios, estado oficial, cancelación y corrección de sets. El historial registra el usuario de cada decisión.
+`manager` (variables `MANAGER_USER`/`MANAGER_PASSWORD`) es el administrador principal y de emergencia: entra con contraseña por `/manager_login` (ninguna página la enlaza; la protección real es la contraseña aleatoria y el límite de intentos) y es el **único** que gestiona usuarios. Cambiar su contraseña en `.env` cierra sus sesiones.
+
+Las demás personas no tienen contraseña: el administrador principal carga en **Usuarios** su email de Google con un rol, y entran con «Ingresar con Google» (OpenID Connect con PKCE, `state` y `nonce`; sólo se aceptan emails verificados por Google). Un email que no está en la lista, o desactivado, ve «No sos parte de la organización». Email, rol y estado se leen en cada pedido: desactivar, eliminar, cambiar el email o el rol corta las sesiones abiertas de esa persona. Planillero: iniciar partidos, puntos, deshacer, saque, formación, cambios y resultado de set. Organización: además fixture, categorías y reglas, clubes, equipos, estado oficial, cancelación y corrección de sets (no usuarios). El historial registra el email de quien tomó cada decisión.
 
 ## Correcciones y recuperación
 
@@ -91,7 +94,7 @@ API autenticada:
 - `GET /api/matches/:id/history`: historial de decisiones; no es público.
 - Al cerrar un partido con puntos pendientes, `PUT /api/matches/:id` exige `expectedActiveSet: { id, lastPointId }`. La interfaz envía también `expectedStatus`. Una pantalla desactualizada recibe 409 y debe volver a revisar. Para iniciar un nuevo set en lugar de recuperar el último cancelado con puntos, hace falta `startNewSet: true`.
 
-La migración `0003_chubby_scorpion` añade la revisión del set y el historial; `0004_roles_rules_rotation` añade usuarios, reglas (3/25/15/2 sin tope para lo existente), tipo de punto, saque inicial, formaciones y cambios, y marca como corrección los registros de correcciones anteriores. Se aplican al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
+La migración `0003_chubby_scorpion` añade la revisión del set y el historial; `0004_roles_rules_rotation` añade usuarios, reglas (3/25/15/2 sin tope para lo existente), tipo de punto, saque inicial, formaciones y cambios, y marca como corrección los registros de correcciones anteriores; `0005_google_members` reemplaza usuario y contraseña por email: las cuentas existentes quedan desactivadas como `usuario@sin-email.invalid` hasta que el administrador principal les cargue el email de Google (o las elimine). Se aplican al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
 
 ## Lecturas bajo carga
 

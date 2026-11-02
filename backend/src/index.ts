@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
 import { config } from './config'
-import { getSession } from './middleware/auth'
+import { getSession, isManager } from './middleware/auth'
 import { validateRequest } from './validation'
 import { liveRoutes, publishChange } from './live'
 import authRoutes from './routes/auth'
@@ -24,7 +24,7 @@ import { publicReads } from './read-cache'
 
 // Validation messages reach the UI; custom messages in validation.ts take precedence.
 z.config(z.locales.es())
-const fieldNames: Record<string, string> = { bestOf: 'Sets', setPoints: 'Puntos por set', tiebreakPoints: 'Puntos del desempate', minLead: 'Diferencia mínima', pointCap: 'Tope de puntos', username: 'Usuario', password: 'Contraseña', displayName: 'Nombre', name: 'Nombre', home: 'Formación local', away: 'Formación visitante', reason: 'Motivo' }
+const fieldNames: Record<string, string> = { bestOf: 'Sets', setPoints: 'Puntos por set', tiebreakPoints: 'Puntos del desempate', minLead: 'Diferencia mínima', pointCap: 'Tope de puntos', email: 'Email', displayName: 'Nombre', name: 'Nombre', home: 'Formación local', away: 'Formación visitante', reason: 'Motivo' }
 mkdirSync(config.UPLOAD_DIR, { recursive: true })
 const app = new Hono()
 app.use('*', secureHeaders())
@@ -60,14 +60,22 @@ app.route('/api/standings', standingRoutes)
 app.route('/api/users', userRoutes)
 app.all('/api/*', c => c.json({ error: 'Ruta no encontrada.' }, 404))
 // Scorers only see the match list and scoreboard; the API enforces the same roles.
-const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/users.html', '/manager/match-form.html'])
+const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/match-form.html'])
 app.use('/manager/*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
     const session = await getSession(c)
     if (!session) return c.redirect('/login.html')
     if (session.role !== 'admin' && adminPages.has(c.req.path)) return c.redirect('/manager/')
+    if (!isManager(session) && c.req.path === '/manager/users.html') return c.redirect('/manager/')
     await next()
 })
+// Password login for the .env manager. Nothing links here; the password is the protection.
+app.get('/manager_login', async c => {
+    c.header('Cache-Control', 'no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    return c.html(await Bun.file('./static/manager-login.html').text())
+})
+app.get('/manager-login.html', c => c.redirect('/manager_login'))
 app.get('/uploads/:file', async c => {
     const name = c.req.param('file')
     if (!/^[\w.-]+$/.test(name)) return c.notFound()

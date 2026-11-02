@@ -12,27 +12,25 @@
     <header class="bar"></header>
     <main class="login">
         <h1 class="title">Ingresar</h1>
-        <p class="small muted" style="margin:4px 0 20px">Para planilleros y organización. El público no necesita cuenta.</p>
-        <form id="login-form" class="stack">
-            <div class="field"><label for="username">Usuario</label><input type="text" id="username" autocomplete="username" autocapitalize="none" required /></div>
-            <div class="field"><label for="password">Contraseña</label><input type="password" id="password" autocomplete="current-password" required /></div>
+        <p class="small muted" style="margin:4px 0 20px">Para planilleros y organización, con la cuenta de Google que cargó la organización. El público no necesita cuenta.</p>
+        <div class="stack">
             <p id="error-msg" class="error hidden" role="alert"></p>
-            <button type="submit" class="btn btn-primary" style="width:100%">Ingresar</button>
-        </form>
+            <a href="/api/auth/google" class="btn btn-primary" style="width:100%">Ingresar con Google</a>
+        </div>
     </main>
     <script>
-        document.getElementById('login-form').addEventListener('submit', async event => {
-            event.preventDefault()
+        const messages = {
+            'no-member': 'No sos parte de la organización. Pedile al administrador que agregue tu email.',
+            unavailable: 'El ingreso con Google todavía no está configurado.',
+            failed: 'No se pudo completar el ingreso con Google. Intentá otra vez.',
+        }
+        const code = new URLSearchParams(location.search).get('error')
+        if (messages[code]) {
             const error = document.getElementById('error-msg')
-            const response = await fetch('/api/auth/login', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value }),
-            }).catch(() => null)
-            if (response?.ok) return location.assign('/manager/')
-            const body = await response?.json().catch(() => ({}))
-            error.textContent = body?.error ?? 'No hay conexión. Intentá otra vez.'
+            error.textContent = messages[code]
             error.classList.remove('hidden')
-        })
+            history.replaceState(null, '', location.pathname)
+        }
     </script>
 </body>
 </html>

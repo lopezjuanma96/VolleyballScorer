@@ -5,7 +5,7 @@ window.App = {
     async fetch(url, options = {}) {
         try {
             const response = await fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(15000) })
-            if (response.status === 401 && location.pathname.startsWith('/manager')) location.assign('/login.html')
+            if (response.status === 401 && location.pathname.startsWith('/manager/')) location.assign('/login.html')
             if (!response.ok && options.method && options.method !== 'GET') {
                 const body = await response.clone().json().catch(() => ({}))
                 App.toast(body.error ?? 'No se pudo guardar el cambio.', true)
@@ -93,9 +93,9 @@ window.App = {
         if (!bar) return
         const here = location.pathname
         const link = ([href, label]) => `<a href="${href}" ${here === href || (href !== '/' && href !== '/manager/' && here.startsWith(href)) ? 'aria-current="page"' : ''}>${label}</a>`
-        const manager = here.startsWith('/manager')
+        const manager = here.startsWith('/manager/')
         const links = manager
-            ? [['/manager/', 'Partidos'], ...(App.isAdmin() ? [['/manager/categories.html', 'Categorías'], ['/manager/clubs.html', 'Clubes'], ['/manager/teams.html', 'Equipos'], ['/manager/users.html', 'Usuarios']] : [])]
+            ? [['/manager/', 'Partidos'], ...(App.isAdmin() ? [['/manager/categories.html', 'Categorías'], ['/manager/clubs.html', 'Clubes'], ['/manager/teams.html', 'Equipos']] : []), ...(App.session?.manager ? [['/manager/users.html', 'Usuarios']] : [])]
             : [['/', 'Partidos'], ['/standings.html', 'Posiciones']]
         const end = manager
             ? `<a href="/">Ver sitio</a><button type="button" onclick="App.logout()" title="${App.escape(App.session?.displayName ?? '')}">Salir</button>`
@@ -107,7 +107,7 @@ window.App = {
             App.config = await App.json('/api/config')
             document.documentElement.style.setProperty('--accent', App.config.accent)
         } catch { /* Pages have their own visible error state. */ }
-        if (location.pathname.startsWith('/manager')) {
+        if (location.pathname.startsWith('/manager/')) {
             const response = await App.fetch('/api/auth/me')
             if (!response.ok) { location.assign('/login.html'); throw new Error('Iniciá sesión.') }
             App.session = await response.json()

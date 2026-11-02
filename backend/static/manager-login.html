@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Administrador · Torneo de vóley</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="login">
+        <h1 class="title">Administrador principal</h1>
+        <p class="small muted" style="margin:4px 0 20px">Acceso del usuario configurado en el servidor. La organización y los planilleros ingresan con Google.</p>
+        <form id="login-form" class="stack">
+            <div class="field"><label for="username">Usuario</label><input type="text" id="username" autocomplete="username" autocapitalize="none" required /></div>
+            <div class="field"><label for="password">Contraseña</label><input type="password" id="password" autocomplete="current-password" required /></div>
+            <p id="error-msg" class="error hidden" role="alert"></p>
+            <button type="submit" class="btn btn-primary" style="width:100%">Ingresar</button>
+        </form>
+    </main>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            const error = document.getElementById('error-msg')
+            const response = await fetch('/api/auth/login', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value }),
+            }).catch(() => null)
+            if (response?.ok) return location.assign('/manager/')
+            const body = await response?.json().catch(() => ({}))
+            error.textContent = body?.error ?? 'No hay conexión. Intentá otra vez.'
+            error.classList.remove('hidden')
+        })
+    </script>
+</body>
+</html>
