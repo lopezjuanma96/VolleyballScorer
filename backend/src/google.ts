@@ -14,7 +14,7 @@ export const pkceChallenge = (verifier: string) => createHash('sha256').update(v
 export function authorizationUrl(clientId: string, redirectUri: string, state: string, nonce: string, verifier: string) {
     const url = new URL(GOOGLE_AUTHORIZE)
     url.search = new URLSearchParams({
-        client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: 'openid email profile',
+        client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: 'openid email',
         state, nonce, code_challenge: pkceChallenge(verifier), code_challenge_method: 'S256', prompt: 'select_account',
     }).toString()
     return url.toString()

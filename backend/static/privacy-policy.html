@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Qué datos usa el marcador del torneo de vóley y para qué." />
+    <title>Política de privacidad · Torneo de vóley</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+    <style>.policy p + p { margin-top: 10px } .policy a { text-decoration: underline }</style>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="page policy" style="max-width:720px">
+        <h1 class="title">Política de privacidad</h1>
+        <p class="small muted">Vigente desde el 2 de noviembre de 2026.</p>
+
+        <p style="margin-top:16px">Este sitio publica el fixture, los resultados en vivo y las posiciones de <strong data-name>un torneo de vóley amateur</strong>. Lo administra la organización del torneo, que es responsable de los datos descriptos acá.</p>
+
+        <h2 class="section">Público</h2>
+        <p>Para ver el sitio no hace falta cuenta. No usamos cookies, publicidad, analítica ni scripts de terceros en las páginas públicas.</p>
+        <p>Se publican los nombres de clubes y equipos, sus logos y los resultados. No se publican nombres de jugadores: la rotación muestra sólo números de camiseta.</p>
+
+        <h2 class="section">Organización y planilleros</h2>
+        <p>Las personas que anotan partidos o administran el torneo entran con su cuenta de Google. De Google recibimos sólo el <strong>email</strong> y la confirmación de que está verificado. Usamos el email únicamente para comprobar que figura en la lista de personas habilitadas y para registrar en el historial del partido quién tomó cada decisión (por ejemplo, una corrección de puntaje).</p>
+        <p>Guardamos, por cada persona habilitada: email, nombre visible (lo carga el administrador), rol y si está activa. No accedemos a contactos, archivos, calendario ni a ningún otro dato de la cuenta de Google.</p>
+        <p>El uso de la información recibida de las APIs de Google cumple la <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Política de datos de usuario de los servicios de API de Google</a>, incluidos los requisitos de uso limitado.</p>
+
+        <h2 class="section">Cookies técnicas</h2>
+        <p>Sólo al ingresar: una cookie de sesión firmada que vence a las 12 horas, y una cookie temporal de 10 minutos que protege el ingreso con Google. No sirven para rastrear ni se comparten.</p>
+
+        <h2 class="section">Registros del servidor</h2>
+        <p>Para limitar intentos de ingreso, el servidor guarda la dirección IP en memoria durante un minuto. Los registros de errores no incluyen direcciones IP, contraseñas ni datos personales.</p>
+
+        <h2 class="section">Con quién se comparte</h2>
+        <p>Con nadie. No vendemos ni cedemos datos. El sitio está alojado en un servidor privado contratado a Hostinger, que sólo provee la infraestructura. Google interviene únicamente para el ingreso.</p>
+
+        <h2 class="section">Cuánto tiempo</h2>
+        <p>El email de una persona se guarda mientras esté habilitada; al eliminarla de la lista se borra. Su email puede seguir figurando en el historial de los partidos en los que intervino, que se conserva como registro del torneo. Las copias de seguridad se renuevan periódicamente.</p>
+
+        <h2 class="section">Tus derechos</h2>
+        <p>Podés pedir acceso, corrección o eliminación de tus datos <span data-contact>a la organización del torneo</span>. La Agencia de Acceso a la Información Pública es el órgano de control de la Ley 25.326 de Protección de Datos Personales.</p>
+
+        <h2 class="section">Cambios</h2>
+        <p>Si esta política cambia, publicaremos la versión nueva en esta página con su fecha.</p>
+    </main>
+    <script>
+        App.ready.then(() => {
+            if (App.config.name) document.querySelector('[data-name]').textContent = App.config.name
+            if (App.config.contactEmail) {
+                const email = App.escape(App.config.contactEmail)
+                document.querySelector('[data-contact]').innerHTML = `escribiendo a <a href="mailto:${email}">${email}</a>`
+            }
+        })
+    </script>
+</body>
+</html>

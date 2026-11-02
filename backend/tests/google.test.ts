@@ -19,6 +19,6 @@ describe('Google sign-in claims', () => {
         expect(url.searchParams.get('code_challenge_method')).toBe('S256')
         expect(url.searchParams.get('state')).toBe('s')
         expect(url.searchParams.get('nonce')).toBe('n')
-        expect(url.searchParams.get('scope')).toBe('openid email profile')
+        expect(url.searchParams.get('scope')).toBe('openid email')
     })
 })

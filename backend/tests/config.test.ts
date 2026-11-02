@@ -32,6 +32,9 @@ describe('deployment configuration', () => {
         expect(parseConfig({ ...base, GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }).googleEnabled).toBe(true)
         expect(() => parseConfig({ ...base, GOOGLE_CLIENT_ID: 'id' })).toThrow('GOOGLE')
         expect(() => parseConfig({ ...base, GOOGLE_CLIENT_SECRET: 'secret' })).toThrow('GOOGLE')
+        expect(parseConfig({ ...base, CONTACT_EMAIL: '' }).CONTACT_EMAIL).toBeUndefined()
+        expect(parseConfig({ ...base, CONTACT_EMAIL: 'org@example.com' }).CONTACT_EMAIL).toBe('org@example.com')
+        expect(() => parseConfig({ ...base, CONTACT_EMAIL: 'not-an-email' })).toThrow('CONTACT_EMAIL')
     })
     test('configuration errors do not expose secrets', () => {
         try { parseConfig({ MANAGER_PASSWORD: 'secret', SESSION_SECRET: 'private' }) }

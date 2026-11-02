@@ -19,6 +19,8 @@ const envSchema = z.object({
     TOURNAMENT_SUBTITLE: z.string().max(200).default('Cada punto cuenta.'),
     TOURNAMENT_ACCENT: z.string().regex(/^#[0-9a-f]{6}$/i).default('#b9ed64'),
     TOURNAMENT_TIMEZONE: z.string().default('America/Argentina/Cordoba'),
+    // Shown on /privacy_policy as the contact for data requests.
+    CONTACT_EMAIL: optionalText.pipe(z.email().optional()),
     // Google sign-in for organization members. Without both, only the manager can log in.
     GOOGLE_CLIENT_ID: optionalText,
     GOOGLE_CLIENT_SECRET: optionalText,

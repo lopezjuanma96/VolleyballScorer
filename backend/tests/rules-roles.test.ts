@@ -255,6 +255,9 @@ integration('roles, set rules, rotation and standings', () => {
         expect(page.headers.get('x-robots-tag')).toContain('noindex')
         expect(await page.text()).toContain('/api/auth/login')
         for (const path of ['/login.html', '/index.html', '/standings.html']) expect(await (await call(null, path)).text()).not.toContain('manager_login')
+        const privacy = await call(null, '/privacy_policy')
+        expect(privacy.status).toBe(200)
+        expect(await privacy.text()).toContain('Política de privacidad')
     })
 
     const googleTest = process.env.GOOGLE_CLIENT_ID ? test : test.skip

@@ -46,7 +46,7 @@ app.get('/healthz', async c => {
     try { await db.execute(sql`select 1`); return c.json({ ok: true }) }
     catch { return c.json({ ok: false }, 503) }
 })
-app.get('/api/config', c => c.json({ name: config.TOURNAMENT_NAME, subtitle: config.TOURNAMENT_SUBTITLE, accent: config.TOURNAMENT_ACCENT, timeZone: config.TOURNAMENT_TIMEZONE }))
+app.get('/api/config', c => c.json({ name: config.TOURNAMENT_NAME, subtitle: config.TOURNAMENT_SUBTITLE, accent: config.TOURNAMENT_ACCENT, timeZone: config.TOURNAMENT_TIMEZONE, contactEmail: config.CONTACT_EMAIL ?? null }))
 app.route('/api/events', liveRoutes)
 app.use('/api/*', validateRequest)
 app.route('/api/auth', authRoutes)
@@ -76,6 +76,9 @@ app.get('/manager_login', async c => {
     return c.html(await Bun.file('./static/manager-login.html').text())
 })
 app.get('/manager-login.html', c => c.redirect('/manager_login'))
+// Linked from every public page and from the Google consent screen.
+app.get('/privacy_policy', async c => c.html(await Bun.file('./static/privacy-policy.html').text()))
+app.get('/privacy-policy.html', c => c.redirect('/privacy_policy'))
 app.get('/uploads/:file', async c => {
     const name = c.req.param('file')
     if (!/^[\w.-]+$/.test(name)) return c.notFound()

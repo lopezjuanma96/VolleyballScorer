@@ -18,6 +18,7 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 | `PSQL_ADMIN_USER/PASSWORD` | Opcional, sólo migraciones sobre instalaciones anteriores con roles separados |
 | `AUTO_MIGRATE` | `true` por defecto; `false` exige aplicar migraciones antes del arranque |
 | `MANAGER_USER/PASSWORD` | Administrador principal (único que gestiona usuarios), entra por `/manager_login`; contraseña mínima de 12 caracteres |
+| `CONTACT_EMAIL` | Opcional: contacto para pedidos sobre datos personales en `/privacy_policy` |
 | `GOOGLE_CLIENT_ID/SECRET` | Ingreso con Google de organización y planilleros; ambos o ninguno. Sin ellos sólo entra el administrador principal ([cómo crearlos](hostinger.md#google)) |
 | `SESSION_SECRET` | Firma de sesión; mínimo 32 caracteres; cambiarlo invalida sesiones anteriores |
 | `COOKIE_SECURE` | Automático: false en local, true en onprem/cloud. No puede desactivarse en público |

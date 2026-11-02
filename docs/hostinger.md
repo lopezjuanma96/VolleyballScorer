@@ -209,7 +209,7 @@ Un volumen o snapshot en la misma VPS no reemplaza una copia externa.
 Organización y planilleros entran con su cuenta de Google; no hay contraseñas que repartir. Es gratis y no requiere verificación de Google porque sólo se piden nombre y email.
 
 1. Entrá a <https://console.cloud.google.com/> con tu cuenta y creá un proyecto (por ejemplo «Voley»).
-2. **Google Auth Platform → Branding** (antes «Pantalla de consentimiento OAuth»): nombre de la app, email de soporte. Tipo de usuario **Externo**.
+2. **Google Auth Platform → Branding** (antes «Pantalla de consentimiento OAuth»): nombre de la app, email de soporte, página principal `https://voley.zagador123.cloud` y política de privacidad `https://voley.zagador123.cloud/privacy_policy` (todas las páginas públicas la enlazan al pie). Tipo de usuario **Externo**. Opcional: `CONTACT_EMAIL=…` en el `.env` para que la política muestre a quién escribir.
 3. **Audience**: tocá **Publish app** para pasarla a «In production». En modo «Testing» sólo entran los usuarios de prueba y las sesiones de Google vencen a los 7 días.
 4. **Clients → Create client**: tipo **Web application**.
    - Authorized JavaScript origins: `https://voley.zagador123.cloud`
