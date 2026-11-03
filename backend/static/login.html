@@ -16,6 +16,11 @@
         <div class="stack">
             <p id="error-msg" class="error hidden" role="alert"></p>
             <a href="/api/auth/google" class="btn btn-primary" style="width:100%">Ingresar con Google</a>
+            <form id="dev-login" class="stack-sm hidden" onsubmit="devLogin(event)">
+                <p class="tiny muted">Prueba local (DEV_LOGIN): entrar como un usuario cargado en Usuarios.</p>
+                <div class="field"><label for="dev-email">Email</label><input id="dev-email" type="email" autocapitalize="none" required /></div>
+                <button type="submit" class="btn" style="width:100%">Entrar sin Google</button>
+            </form>
         </div>
     </main>
     <script>
@@ -23,6 +28,12 @@
             'no-member': 'No sos parte de la organización. Pedile al administrador que agregue tu email.',
             unavailable: 'El ingreso con Google todavía no está configurado.',
             failed: 'No se pudo completar el ingreso con Google. Intentá otra vez.',
+        }
+        App.ready.then(() => document.getElementById('dev-login').classList.toggle('hidden', !App.config.devLogin))
+        async function devLogin(event) {
+            event.preventDefault()
+            const res = await App.send('/api/auth/dev-login', 'POST', { email: document.getElementById('dev-email').value })
+            if (res.ok) location.assign('/manager/')
         }
         const code = new URLSearchParams(location.search).get('error')
         if (messages[code]) {

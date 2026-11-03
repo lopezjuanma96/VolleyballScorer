@@ -20,6 +20,7 @@ import setRoutes from './routes/sets'
 import pointRoutes from './routes/points'
 import standingRoutes from './routes/standings'
 import userRoutes from './routes/users'
+import claimRoutes from './routes/claims'
 import { publicReads } from './read-cache'
 
 // Validation messages reach the UI; custom messages in validation.ts take precedence.
@@ -46,7 +47,7 @@ app.get('/healthz', async c => {
     try { await db.execute(sql`select 1`); return c.json({ ok: true }) }
     catch { return c.json({ ok: false }, 503) }
 })
-app.get('/api/config', c => c.json({ name: config.TOURNAMENT_NAME, subtitle: config.TOURNAMENT_SUBTITLE, accent: config.TOURNAMENT_ACCENT, timeZone: config.TOURNAMENT_TIMEZONE, contactEmail: config.CONTACT_EMAIL ?? null }))
+app.get('/api/config', c => c.json({ name: config.TOURNAMENT_NAME, subtitle: config.TOURNAMENT_SUBTITLE, accent: config.TOURNAMENT_ACCENT, timeZone: config.TOURNAMENT_TIMEZONE, contactEmail: config.CONTACT_EMAIL ?? null, devLogin: config.devLogin }))
 app.route('/api/events', liveRoutes)
 app.use('/api/*', validateRequest)
 app.route('/api/auth', authRoutes)
@@ -58,6 +59,7 @@ app.route('/api/sets', setRoutes)
 app.route('/api/points', pointRoutes)
 app.route('/api/standings', standingRoutes)
 app.route('/api/users', userRoutes)
+app.route('/api/claims', claimRoutes)
 app.all('/api/*', c => c.json({ error: 'Ruta no encontrada.' }, 404))
 // Scorers only see the match list and scoreboard; the API enforces the same roles.
 const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/match-form.html'])

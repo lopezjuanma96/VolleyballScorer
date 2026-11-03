@@ -77,12 +77,16 @@ integration('API against an isolated PostgreSQL database', () => {
         const match: any = await (await request(`/api/matches/${matchId}`)).json()
         expect(match.sets).toHaveLength(1)
         setId = match.sets[0].id
-        expect((await request('/api/points', 'POST', { setId, homeScored: true })).status).toBe(409)
+        expect((await request('/api/points', 'POST', { setId, homeScored: true, expectedLastPointId: null })).status).toBe(409)
         expect((await request(`/api/matches/${matchId}`, 'PUT', { status: 'in_progress' })).status).toBe(200)
     })
-    test('twenty simultaneous points preserve every rally and reject stale undo', async () => {
-        const results = await Promise.all(Array.from({ length: 20 }, (_, i) => request('/api/points', 'POST', { setId, homeScored: i % 2 === 0 })))
-        for (const result of results) expect(result.status).toBe(201)
+    test('simultaneous taps on the same score count once; every fresh rally is kept; stale undo is rejected', async () => {
+        // Five devices (or retries) send the rally they saw at 0–0: only one is counted.
+        const race = await Promise.all(Array.from({ length: 5 }, () => request('/api/points', 'POST', { setId, homeScored: true, expectedLastPointId: null })))
+        expect(race.map(r => r.status).sort()).toEqual([201, 409, 409, 409, 409])
+        let last: any = await race.find(r => r.status === 201)!.json()
+        expect((await request('/api/points', 'POST', { setId, homeScored: false })).status).toBe(400)
+        for (let i = 1; i < 20; i++) last = await create('/api/points', { setId, homeScored: i % 2 === 0, expectedLastPointId: last.id })
         const match: any = await (await request(`/api/matches/${matchId}`)).json()
         expect(match.sets[0].scoreHome).toBe(10); expect(match.sets[0].scoreAway).toBe(10)
         expect(match.sets[0].points).toHaveLength(20)
@@ -94,7 +98,7 @@ integration('API against an isolated PostgreSQL database', () => {
     })
     test('rejects negative/fractional scores and duplicate set finish; cancellation creates playable replacement', async () => {
         expect((await request(`/api/sets/${setId}/finish`, 'POST', { scoreHome: -1, scoreAway: 1, status: 'finished_home' })).status).toBe(400)
-        expect((await request('/api/points', 'POST', { setId, homeScored: 'false' })).status).toBe(400)
+        expect((await request('/api/points', 'POST', { setId, homeScored: 'false', expectedLastPointId: null })).status).toBe(400)
         const before: any = await (await request(`/api/matches/${matchId}`)).json()
         const expectedLastPointId = before.sets[0].points.at(-1)?.id ?? null
         const results = await Promise.all([1, 2].map(() => request(`/api/sets/${setId}/finish`, 'POST', { scoreHome: 25, scoreAway: 23, status: 'finished_home', expectedLastPointId })))
@@ -105,14 +109,14 @@ integration('API against an isolated PostgreSQL database', () => {
         match = await (await request(`/api/matches/${matchId}`)).json()
         expect(match.sets.filter((s: any) => s.status === 'in_progress')).toHaveLength(1)
         expect((await request(`/api/matches/${matchId}`, 'PUT', { status: 'finished_home' })).status).toBe(200)
-        expect((await request('/api/points', 'POST', { setId: match.sets.at(-1).id, homeScored: true })).status).toBe(409)
+        expect((await request('/api/points', 'POST', { setId: match.sets.at(-1).id, homeScored: true, expectedLastPointId: null })).status).toBe(409)
     })
     test('stale close/cancel requests cannot overwrite a rally; fresh manual rulings remain allowed', async () => {
         const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const activeId = detail.sets[0].id
-        const point = await create('/api/points', { setId: activeId, homeScored: true })
+        const point = await create('/api/points', { setId: activeId, homeScored: true, expectedLastPointId: null })
         const final = { scoreHome: 23, scoreAway: 25, status: 'finished_away' }
         expect((await request(`/api/sets/${activeId}/finish`, 'POST', final)).status).toBe(400)
         expect((await request(`/api/sets/${activeId}/finish`, 'POST', { ...final, expectedLastPointId: null })).status).toBe(409)
@@ -133,9 +137,9 @@ integration('API against an isolated PostgreSQL database', () => {
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const id = detail.sets[0].id
-        const first = await create('/api/points', { setId: id, homeScored: true })
+        const first = await create('/api/points', { setId: id, homeScored: true, expectedLastPointId: null })
         expect((await request(`/api/matches/${match.id}`, 'PUT', { status: 'finished_away' })).status).toBe(409)
-        const second = await create('/api/points', { setId: id, homeScored: false })
+        const second = await create('/api/points', { setId: id, homeScored: false, expectedLastPointId: first.id })
         const close = (lastPointId: number) => request(`/api/matches/${match.id}`, 'PUT', { status: 'finished_away', expectedStatus: 'in_progress', expectedActiveSet: { id, lastPointId } })
         expect((await close(first.id)).status).toBe(409)
         expect((await close(second.id)).status).toBe(200)
@@ -170,7 +174,7 @@ integration('API against an isolated PostgreSQL database', () => {
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const id = detail.sets[0].id
-        const point = await create('/api/points', { setId: id, homeScored: true })
+        const point = await create('/api/points', { setId: id, homeScored: true, expectedLastPointId: null })
         const correction = { scoreHome: 2, scoreAway: 7, status: 'finished_home', expectedStatus: 'in_progress', expectedRevision: 0, expectedLastPointId: point.id, reason: 'Acta revisada por la organización' }
         expect((await request(`/api/sets/${id}/correct`, 'POST', correction)).status).toBe(409)
         expect((await request(`/api/sets/${id}/finish`, 'POST', { scoreHome: 25, scoreAway: 20, status: 'finished_home', expectedLastPointId: point.id })).status).toBe(200)

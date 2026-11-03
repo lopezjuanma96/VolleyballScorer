@@ -78,6 +78,11 @@ export const matches = pgTable('matches', {
     scheduledAt: timestamp('scheduled_at').notNull(),
     status: matchStatusEnum('status').notNull().default('upcoming'),
     ...ruleColumns(),
+    // Only the member holding the match scores it (session username: email, or the
+    // .env manager name). Free when null. Kept after the match ends so undo still works.
+    claimedBy: varchar('claimed_by', { length: 254 }),
+    claimedName: varchar('claimed_name', { length: 100 }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
 }, table => [index('matches_category_schedule_idx').on(table.categoryId, table.scheduledAt)])
 
 export const sets = pgTable('sets', {

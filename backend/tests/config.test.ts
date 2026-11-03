@@ -18,6 +18,11 @@ describe('deployment configuration', () => {
             expect(config.TRUST_PROXY_HOPS).toBe(1)
         }
     })
+    test('the local dev login is refused outside local mode', () => {
+        expect(parseConfig(base).devLogin).toBe(false)
+        expect(parseConfig({ ...base, DEV_LOGIN: 'true' }).devLogin).toBe(true)
+        for (const DEPLOY_MODE of ['onprem', 'cloud']) expect(() => parseConfig({ ...base, DEPLOY_MODE, PUBLIC_URL: 'https://example.com', DEV_LOGIN: 'true' })).toThrow('DEV_LOGIN')
+    })
     test('validates the forwarding policy', () => {
         expect(parseConfig({ ...base, TRUST_PROXY_HOPS: '2', CLIENT_IP_HEADER: 'x-real-ip' }).CLIENT_IP_HEADER).toBe('x-real-ip')
         expect(() => parseConfig({ ...base, TRUST_PROXY_HOPS: '-1' })).toThrow()

@@ -4,7 +4,7 @@ import { sets, points, matches, scoringAudit, setLineups, substitutions } from '
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { HTTPException } from 'hono/http-exception'
 import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
-import { closeSet, lastPoint, lockActiveSet, lockSet, setRotation, setsWon } from '../scoring'
+import { closeSet, lastPoint, lockActiveSet, lockSet, requireHolder, setRotation, setsWon } from '../scoring'
 import { finalScoreWinner, rulesOf } from '../rules'
 import { lineupInput, substitutionInput } from '../validation'
 import { substitutionsFit } from '../rotation'
@@ -36,8 +36,10 @@ setRoutes.put('/:id', adminOnly, async c => {
 setRoutes.post('/:id/finish', scorerOnly, async c => {
     const { scoreHome, scoreAway, status, expectedLastPointId } = await c.req.json()
     const id = Number(c.req.param('id'))
+    const { username } = (await getSession(c))!
     return c.json(await db.transaction(async tx => {
         const { match, set } = await lockActiveSet(tx, id)
+        requireHolder(match, username)
         checkLastPoint(await lastPoint(tx, id), expectedLastPointId)
         const winner = finalScoreWinner(rulesOf(match), await setsWon(tx, match.id, id), scoreHome, scoreAway)
         if (!winner) throw new HTTPException(400, { message: `${scoreHome}–${scoreAway} no es un resultado final válido para las reglas de este partido.` })
@@ -95,9 +97,12 @@ setRoutes.post('/:id/recover', adminOnly, async c => {
 setRoutes.put('/:id/lineup', scorerOnly, async c => {
     const id = Number(c.req.param('id'))
     const body = lineupInput.parse(await c.req.json())
-    const admin = (await getSession(c))!.role === 'admin'
+    const session = (await getSession(c))!
+    const admin = session.role === 'admin'
     return c.json(await db.transaction(async tx => {
         const { match, set } = admin ? await lockSet(tx, id) : await lockActiveSet(tx, id)
+        // Fixing the lineup of a closed set is an admin ruling; the set in play belongs to its scorer.
+        if (set.status === 'in_progress') requireHolder(match, session.username)
         const changes = await tx.select().from(substitutions).where(eq(substitutions.setId, id)).orderBy(asc(substitutions.id))
         for (const side of ['home', 'away'] as const) {
             if (!substitutionsFit(body[side], changes.filter(c => c.side === side))) {
@@ -118,8 +123,10 @@ setRoutes.put('/:id/lineup', scorerOnly, async c => {
 setRoutes.post('/:id/substitutions', scorerOnly, async c => {
     const id = Number(c.req.param('id'))
     const body = substitutionInput.parse(await c.req.json())
+    const { username } = (await getSession(c))!
     const row = await db.transaction(async tx => {
-        const { set } = await lockActiveSet(tx, id)
+        const { match, set } = await lockActiveSet(tx, id)
+        requireHolder(match, username)
         const { rallyCount, state } = await setRotation(tx, set)
         const court = state.positions[body.side]
         if (!court) throw new HTTPException(409, { message: 'Cargá primero la formación inicial de ese equipo.' })
@@ -133,8 +140,10 @@ setRoutes.post('/:id/substitutions', scorerOnly, async c => {
 // Only the latest change, and only before another rally is played.
 setRoutes.delete('/:id/substitutions/:changeId', scorerOnly, async c => {
     const id = Number(c.req.param('id')), changeId = Number(c.req.param('changeId'))
+    const { username } = (await getSession(c))!
     await db.transaction(async tx => {
-        const { set } = await lockActiveSet(tx, id)
+        const { match, set } = await lockActiveSet(tx, id)
+        requireHolder(match, username)
         const [latest] = await tx.select().from(substitutions).where(eq(substitutions.setId, id)).orderBy(desc(substitutions.id)).limit(1)
         const { rallyCount } = await setRotation(tx, set)
         if (latest?.id !== changeId || latest.afterRallies !== rallyCount) throw new HTTPException(409, { message: 'Solo se deshace el último cambio, antes del punto siguiente.' })

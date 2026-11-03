@@ -24,6 +24,8 @@ const envSchema = z.object({
     // Google sign-in for organization members. Without both, only the manager can log in.
     GOOGLE_CLIENT_ID: optionalText,
     GOOGLE_CLIENT_SECRET: optionalText,
+    // Local testing only: sign in as any active member by email, without Google.
+    DEV_LOGIN: z.enum(['true', 'false']).default('false'),
 })
 
 export function parseConfig(env: Record<string, string | undefined>) {
@@ -36,12 +38,14 @@ export function parseConfig(env: Record<string, string | undefined>) {
     if (config.DEPLOY_MODE !== 'local' && (!config.PUBLIC_URL?.startsWith('https://') || config.COOKIE_SECURE === 'false')) {
         throw new Error('onprem/cloud require an HTTPS PUBLIC_URL and secure cookies')
     }
+    if (config.DEV_LOGIN === 'true' && config.DEPLOY_MODE !== 'local') throw new Error('DEV_LOGIN is only allowed with DEPLOY_MODE=local')
     if (!config.GOOGLE_CLIENT_ID !== !config.GOOGLE_CLIENT_SECRET) throw new Error('Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither')
     try { new Intl.DateTimeFormat('es-AR', { timeZone: config.TOURNAMENT_TIMEZONE }) }
     catch { throw new Error('Invalid TOURNAMENT_TIMEZONE') }
     return Object.freeze({ ...config,
         TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.DEPLOY_MODE === 'local' ? 0 : 1),
         googleEnabled: Boolean(config.GOOGLE_CLIENT_ID),
+        devLogin: config.DEV_LOGIN === 'true',
         secureCookie: config.COOKIE_SECURE ? config.COOKIE_SECURE === 'true' : config.DEPLOY_MODE !== 'local',
     })
 }

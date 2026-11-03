@@ -18,6 +18,8 @@ El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud exige 
 - Reglas en la categoría y copia en cada partido (`best_of`, `set_points`, `tiebreak_points`, `min_lead`, `point_cap`). `src/rules.ts` es puro y probado: ganador del set, set decisivo, resultado final válido y puntos de tabla.
 - Puntos con tipo `rally`, `final` o `correction`. Sólo `rally` alimenta la rotación; `correction` no se deshace desde el marcador.
 - Rotación: se guardan formación inicial (`set_lineups`, posiciones I–VI), quién saca (`sets.first_serve_home`) y cambios (`substitutions`, con la cantidad de rallies jugados). La rotación actual se reconstruye en `src/rotation.ts` repasando los rallies: el equipo que gana un punto con saque rival rota. No hay estado de rotación que pueda quedar desfasado al deshacer.
+- Un partido lo anota una sola persona (`matches.claimed_by`, `src/routes/claims.ts`). Puntos, deshacer, formación, cambios y resultado del set exigen tenerlo; iniciar un partido libre lo toma. Sólo quien lo tiene lo libera; la organización puede forzar la liberación (con el nombre de quien lo tenía, para no liberar un reclamo más nuevo) pero no tomarlo de un paso. Las decisiones administrativas no lo requieren. Tomar, liberar y forzar quedan en el historial. No vence solo: una pausa entre sets no debe liberar el partido.
+- Cada punto lleva el último punto que vio la pantalla (`expectedLastPointId`). Una pestaña desactualizada o un reintento después de perder la respuesta recibe 409 en vez de duplicar el punto; reintentar a mano es seguro.
 - La tabla (`src/standings.ts`) se calcula al leer, a partir de partidos finalizados, y pasa por la misma caché pública.
 
 ## Correcciones respecto de la base anterior

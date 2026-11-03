@@ -43,6 +43,17 @@ auth.post('/logout', c => {
     return c.json({ ok: true })
 })
 
+// Local testing without Google (DEV_LOGIN=true, refused outside DEPLOY_MODE=local):
+// signs in as an active member by email so two people can be simulated on one machine.
+auth.post('/dev-login', async c => {
+    if (!config.devLogin) return c.json({ error: 'Not found' }, 404)
+    const { email } = z.object({ email: z.string().trim().toLowerCase().max(254) }).parse(await c.req.json())
+    const [user] = await db.select().from(users).where(eq(users.email, email))
+    if (!user?.active) return c.json({ error: 'No hay un usuario activo con ese email. Cargalo en Usuarios.' }, 401)
+    await startSession(c, memberSession(user), user.sessionVersion)
+    return c.json({ ok: true })
+})
+
 // --- Google sign-in ---
 const FLOW_COOKIE = 'google_flow'
 const FLOW_PATH = '/api/auth/google'
