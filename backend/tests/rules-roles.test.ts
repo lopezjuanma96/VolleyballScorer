@@ -43,7 +43,7 @@ integration('roles, set rules, rotation and standings', () => {
         let last: any
         for (let i = 0; i < times; i++) {
             const active = (await detail(matchId)).sets.find((s: any) => s.status === 'in_progress')
-            last = await json(scorer, '/api/points', 'POST', { setId: active.id, homeScored })
+            last = await json(scorer, '/api/points', 'POST', { setId: active.id, homeScored, expectedLastPointId: active.points.at(-1)?.id ?? null })
         }
         return last
     }
@@ -77,7 +77,7 @@ integration('roles, set rules, rotation and standings', () => {
     test('roles: public reads, scorers run matches, admins manage the tournament', async () => {
         expect((await json(scorer, '/api/auth/me')).role).toBe('scorer')
         expect((await call(null, '/api/standings')).status).toBe(200)
-        expect((await call(null, '/api/points', 'POST', { setId: 1, homeScored: true })).status).toBe(401)
+        expect((await call(null, '/api/points', 'POST', { setId: 1, homeScored: true, expectedLastPointId: null })).status).toBe(401)
         expect((await call(scorer, '/api/categories', 'POST', { name: `${name}-x` })).status).toBe(403)
         expect((await call(scorer, '/api/users')).status).toBe(403)
         expect((await call(scorer, '/manager/categories.html')).status).toBe(302)
@@ -132,7 +132,7 @@ integration('roles, set rules, rotation and standings', () => {
         match = await detail(id)
         expect(match.status).toBe('finished_home')
         expect(match.sets).toHaveLength(3)
-        expect((await call(scorer, '/api/points', 'POST', { setId: match.sets[2].id, homeScored: true })).status).toBe(409)
+        expect((await call(scorer, '/api/points', 'POST', { setId: match.sets[2].id, homeScored: true, expectedLastPointId: null })).status).toBe(409)
         // Undo the match-winning rally reopens the match.
         await json(scorer, `/api/points/${final.id}`, 'DELETE')
         match = await detail(id)
@@ -211,6 +211,45 @@ integration('roles, set rules, rotation and standings', () => {
         expect(history.some(e => e.action === 'set_lineup' && e.setId === null)).toBe(true)
     })
 
+    test('one holder per match: claim, release, forced release; rulings do not need the claim', async () => {
+        const otherId = (await json(admin, '/api/users', 'POST', { email: `${name}-other@example.com`, displayName: 'Otro planillero', role: 'scorer' })).id
+        const other = await memberCookie(otherId)
+        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        // Starting a free match claims it; nobody else can start or take it.
+        await json(scorer, `/api/matches/${match.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
+        const claims = await json(other, '/api/claims')
+        expect(claims.find((c: any) => c.matchId === match.id)).toMatchObject({ name: 'Planillero de prueba', mine: false })
+        expect((await json(scorer, '/api/claims')).find((c: any) => c.matchId === match.id).mine).toBe(true)
+        expect(JSON.stringify(claims)).not.toContain('@')
+        expect((await call(null, '/api/claims')).status).toBe(401)
+        expect((await call(null, '/api/auth/dev-login', 'POST', { email: scorerEmail })).status).toBe(process.env.DEV_LOGIN === 'true' ? 200 : 404)
+        const active = (await detail(match.id)).sets[0]
+        for (const cookie of [other, admin]) {
+            expect((await call(cookie, '/api/points', 'POST', { setId: active.id, homeScored: true, expectedLastPointId: null })).status).toBe(409)
+            expect((await call(cookie, `/api/sets/${active.id}/lineup`, 'PUT', { firstServeHome: true, home: null, away: null })).status).toBe(409)
+            expect((await call(cookie, `/api/sets/${active.id}/finish`, 'POST', { scoreHome: 5, scoreAway: 0, expectedLastPointId: null })).status).toBe(409)
+        }
+        expect((await call(other, `/api/claims/${match.id}`, 'POST', {})).status).toBe(409)
+        expect((await call(other, `/api/claims/${match.id}/release`, 'POST', {})).status).toBe(403)
+        const point = await json(scorer, '/api/points', 'POST', { setId: active.id, homeScored: true, expectedLastPointId: null })
+        expect((await call(other, `/api/points/${point.id}`, 'DELETE')).status).toBe(409)
+        // The organization frees a match left behind, naming the holder it means to remove.
+        expect((await call(admin, `/api/claims/${match.id}/release`, 'POST', { expectedHolder: 'Otro planillero' })).status).toBe(409)
+        await json(admin, `/api/claims/${match.id}/release`, 'POST', { expectedHolder: 'Planillero de prueba' }, 200)
+        expect((await call(scorer, '/api/points', 'POST', { setId: active.id, homeScored: true, expectedLastPointId: point.id })).status).toBe(409)
+        // Two people taking a free match at once: exactly one gets it.
+        const race = await Promise.all([scorer, other].map(cookie => call(cookie, `/api/claims/${match.id}`, 'POST', {})))
+        expect(race.map(r => r.status).sort()).toEqual([200, 409])
+        const winner = race[0].status === 200 ? scorer : other, loser = winner === scorer ? other : scorer
+        await json(winner, `/api/points/${point.id}`, 'DELETE', undefined, 200)
+        await json(winner, `/api/claims/${match.id}/release`, 'POST', {}, 200)
+        await json(winner, `/api/claims/${match.id}/release`, 'POST', {}, 200)
+        await json(loser, `/api/claims/${match.id}`, 'POST', {}, 200)
+        const last = await json(loser, '/api/points', 'POST', { setId: active.id, homeScored: false, expectedLastPointId: null })
+        const history = await json(admin, `/api/matches/${match.id}/history`)
+        expect(history.map((e: any) => e.action)).toEqual(expect.arrayContaining(['claim', 'release', 'release_forced']))
+        await json(admin, `/api/matches/${match.id}`, 'PUT', { status: 'finished_home', expectedStatus: 'in_progress', expectedActiveSet: { id: active.id, lastPointId: last.id } })
+    })
     test('revoking a user or changing their role reaches open sessions', async () => {
         const users = (await json(admin, '/api/users')).users as any[]
         const target = users.find(u => u.email === scorerEmail)

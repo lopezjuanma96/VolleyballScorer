@@ -9,6 +9,7 @@ const server = Bun.serve({
     port: config.PORT, hostname: '0.0.0.0', idleTimeout: 60,
 })
 console.info(`VolleyballScorer listening on :${server.port} (${config.DEPLOY_MODE})`)
+if (config.devLogin) console.warn('DEV_LOGIN=true: anyone reaching this server can sign in as any active member. Local testing only.')
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, async () => {
         server.stop(true)

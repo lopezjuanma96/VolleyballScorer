@@ -68,7 +68,8 @@ export const setSchemas: Record<string, z.ZodType> = {
 }
 const schemas: Record<string, z.ZodType> = {
     categories: categoryInput, teams: teamInput, matches: matchInput, users: userInput,
-    points: z.object({ setId: positiveId, homeScored: z.boolean() }),
+    points: z.object({ setId: positiveId, homeScored: z.boolean(), expectedLastPointId: positiveId.nullable() }),
+    claims: z.object({ expectedHolder: z.string().max(254).nullable().optional() }),
 }
 
 export async function validateRequest(c: Context, next: Next) {

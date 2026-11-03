@@ -18,6 +18,15 @@ export async function lockActiveSet(tx: Transaction, id: number) {
     return { match, set }
 }
 
+// Only the member holding the match scores it, so two scorers never log the same
+// rally. Organization rulings (corrections, recoveries, official results) skip this.
+export function requireHolder(match: Match, username: string) {
+    if (match.claimedBy === username) return
+    throw new HTTPException(409, { message: match.claimedBy
+        ? `Este partido lo anota ${match.claimedName ?? match.claimedBy}. Pedile que lo libere.`
+        : 'Tomá el partido antes de anotar.' })
+}
+
 export async function lockSet(tx: Transaction, id: number) {
     const [lookup] = await tx.select().from(sets).where(eq(sets.id, id))
     if (!lookup) throw new HTTPException(404, { message: 'Set no encontrado.' })
@@ -56,9 +65,15 @@ export async function closeSet(tx: Transaction, match: Match, set: Set, winner: 
     return { setWinner: winner, matchWinner: null }
 }
 
-export async function addRally(tx: Transaction, setId: number, homeScored: boolean) {
+// expectedLastPointId is the latest point the scorer saw. A stale screen, a second
+// tab or a retry after a lost response gets 409 instead of logging the rally twice.
+export async function addRally(tx: Transaction, setId: number, homeScored: boolean, expectedLastPointId: number | null, username: string) {
     const { match, set } = await lockActiveSet(tx, setId)
+    requireHolder(match, username)
     const last = await lastPoint(tx, setId)
+    if ((last?.id ?? null) !== expectedLastPointId) {
+        throw new HTTPException(409, { message: `El marcador ya estaba ${last?.scoreHome ?? 0}–${last?.scoreAway ?? 0}. Revisalo antes de anotar otra vez.` })
+    }
     const [point] = await tx.insert(points).values({
         setId, homeScored, kind: 'rally',
         scoreHome: (last?.scoreHome ?? 0) + (homeScored ? 1 : 0),
@@ -71,10 +86,11 @@ export async function addRally(tx: Transaction, setId: number, homeScored: boole
 
 // Undo the latest rally or entered final score of the match. If that entry closed
 // the set or the match, both reopen and the empty set created after it is removed.
-export async function undoPoint(tx: Transaction, pointId: number) {
+export async function undoPoint(tx: Transaction, pointId: number, username: string) {
     const [lookup] = await tx.select().from(points).where(eq(points.id, pointId))
-    if (!lookup) throw new HTTPException(404, { message: 'Punto no encontrado.' })
+    if (!lookup) throw new HTTPException(404, { message: 'Ese punto ya no existe. Revisá el marcador.' })
     const { match, set } = await lockSet(tx, lookup.setId)
+    requireHolder(match, username)
     const last = await lastPoint(tx, set.id)
     if (last?.id !== pointId) throw new HTTPException(409, { message: 'Solo se puede deshacer el último punto.' })
     if (last.kind === 'correction') throw new HTTPException(409, { message: 'El último registro es una corrección administrativa; no se deshace desde el marcador.' })

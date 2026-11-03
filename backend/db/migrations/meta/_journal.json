@@ -43,6 +43,13 @@
       "when": 1793662038555,
       "tag": "0005_google_members",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793739245380,
+      "tag": "0006_match_claims",
+      "breakpoints": true
     }
   ]
 }

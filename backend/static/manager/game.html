@@ -53,6 +53,9 @@
         // Court order as seen from the team's own side: front IV III II, back V VI I.
         const COURT_ORDER = [3, 2, 1, 4, 5, 0]
         let m = null, history = [], adjustment = null, subSide = null, busy = false, setupDirty = false, setupFor = null
+        // Who holds the match. Only the holder sees scoring controls; the server enforces it too.
+        let claim = null, heldBefore = null
+        const mine = () => claim?.mine === true
 
         const activeSet = () => m.sets.find(s => s.status === 'in_progress') ?? null
         const teamName = side => esc(side === 'home' ? m.teamHome.name : m.teamAway.name)
@@ -66,7 +69,11 @@
 
         async function load() {
             if (!/^\d+$/.test(matchId ?? '')) throw new Error('Partido no encontrado.')
-            m = await App.json(`/api/matches/${matchId}`)
+            const [match, claims] = await Promise.all([App.json(`/api/matches/${matchId}`), App.json('/api/claims')])
+            m = match
+            claim = claims.find(c => c.matchId === m.id) ?? null
+            if (heldBefore && !mine()) App.toast(claim ? `Ahora lo anota ${claim.name}.` : 'El partido quedó libre: ya no lo anotás vos.', true)
+            heldBefore = mine()
             render()
             if (document.getElementById('history').open) await loadHistory()
         }
@@ -100,7 +107,9 @@
                 </div>`
             let body = ''
             if (m.status === 'upcoming') {
-                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p><button class="btn btn-primary btn-point" onclick="act(startMatch)">Iniciar partido</button></div>`
+                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${!claim || mine() ? '<button class="btn btn-primary btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
+            } else if (live && active && !mine()) {
+                body = `${rotationBlock(active, false)}`
             } else if (live && active) {
                 body = `<div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
                         <button class="btn btn-primary btn-point" onclick="act(addPoint, true)">+ ${teamName('home')}</button>
@@ -110,7 +119,7 @@
                         <button class="btn" onclick="act(undo)" ${last ? '' : 'disabled'}>↶ Deshacer último punto</button>
                         <span class="tiny muted">${App.rulesText(m.rules)}</span>
                     </div>
-                    ${rotationBlock(active)}
+                    ${rotationBlock(active, true)}
                     <details class="panel" style="margin-top:20px"><summary>Cargar resultado final del set ${active.setNumber}</summary>
                         <p class="tiny muted" style="margin:8px 0">Para cuando no se anota punto a punto. El ganador se calcula con las reglas del partido.</p>
                         <div class="form-grid"><div class="field"><label for="final-home">${teamName('home')}</label><input id="final-home" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreHome}" /></div>
@@ -120,23 +129,32 @@
             } else {
                 body = `<div class="stack" style="margin-top:20px">
                     <p class="small muted">${m.status === 'cancelled' ? 'Partido cancelado.' : winner ? `Partido terminado. Ganó ${esc(winner.name)}.` : 'Partido detenido.'}</p>
-                    ${last && m.status !== 'cancelled' ? `<button class="btn" onclick="act(undo)">↶ Deshacer último punto (reabre el partido)</button>` : ''}</div>`
+                    ${last && mine() && m.status !== 'cancelled' ? `<button class="btn" onclick="act(undo)">↶ Deshacer último punto (reabre el partido)</button>` : ''}</div>`
             }
             const sets = m.sets.filter(s => s.status !== 'in_progress')
             const setList = sets.length ? `<h2 class="section">Sets</h2>${sets.map(s => `<div class="list-row"><span class="grow">Set ${s.setNumber} · <span class="num">${s.scoreHome}–${s.scoreAway}</span> <span class="muted small">· ${s.status === 'cancelled' ? 'cancelado' : `ganó ${teamName(s.status.slice(9))}`}</span></span>${App.isAdmin() ? `<button class="btn btn-sm" onclick="openAdjustment(${s.id}, 'correct')">Corregir</button>` : ''}</div>`).join('')}` : ''
-            document.getElementById('score').innerHTML = header + scoreline + body + setList
+            document.getElementById('score').innerHTML = header + claimBar() + scoreline + body + setList
         }
 
-        function rotationBlock(set) {
+        function claimBar() {
+            const since = claim ? ` desde las ${App.time(claim.since)}` : ''
+            const text = !claim ? 'Nadie está anotando este partido.' : mine() ? `Lo anotás vos${since}.` : `Lo anota <strong>${esc(claim.name)}</strong>${since}. Para anotarlo, pedile que lo libere.`
+            const button = !claim ? '<button class="btn btn-sm btn-primary" onclick="act(takeMatch)">Tomar partido</button>'
+                : mine() ? '<button class="btn btn-sm" onclick="act(releaseMatch)">Liberar</button>'
+                : App.isAdmin() ? '<button class="btn btn-sm btn-danger" onclick="act(forceRelease)">Forzar liberación</button>' : ''
+            return `<div id="claim-bar" class="spread small" style="margin-top:12px;gap:8px"><span class="${mine() ? '' : 'muted'}">${text}</span>${button}</div>`
+        }
+
+        function rotationBlock(set, editable) {
             const r = set.rotation
             if (!r.positions.home && !r.positions.away) return ''
             const changes = set.substitutions
             const lastChange = changes.at(-1)
             const rallies = set.points.filter(p => p.kind === 'rally').length
-            const side = key => r.positions[key] ? `<div><div class="spread" style="margin-bottom:6px"><span class="small">${teamName(key)}${r.serving === key ? ' · saca' : ''}</span><button class="btn btn-sm" onclick="openSubstitution('${key}')">Cambio</button></div>${court(r.positions[key], r.serving === key, key)}</div>` : ''
+            const side = key => r.positions[key] ? `<div><div class="spread" style="margin-bottom:6px"><span class="small">${teamName(key)}${r.serving === key ? ' · saca' : ''}</span>${editable ? `<button class="btn btn-sm" onclick="openSubstitution('${key}')">Cambio</button>` : ''}</div>${court(r.positions[key], r.serving === key, key)}</div>` : ''
             return `<h2 class="section">Rotación</h2><div class="courts">${side('home')}${side('away')}</div>
                 ${changes.length ? `<p class="tiny muted" style="margin-top:8px">Cambios: ${changes.map(c => `${teamName(c.side)} ${c.playerOut}→${c.playerIn}`).join(' · ')}
-                ${lastChange.afterRallies === rallies ? ` <button class="btn-link tiny" onclick="act(undoSubstitution, ${lastChange.id})">deshacer último</button>` : ''}</p>` : ''}`
+                ${editable && lastChange.afterRallies === rallies ? ` <button class="btn-link tiny" onclick="act(undoSubstitution, ${lastChange.id})">deshacer último</button>` : ''}</p>` : ''}`
         }
 
         // Toss and starting lineup for the set in play.
@@ -144,7 +162,7 @@
             const active = activeSet()
             setupDirty = false
             setupFor = active?.id ?? null
-            if (!active || m.status !== 'in_progress') { document.getElementById('setup').innerHTML = ''; return }
+            if (!active || m.status !== 'in_progress' || !mine()) { document.getElementById('setup').innerHTML = ''; return }
             const started = active.points.length > 0
             // Teams often repeat their lineup: offer the previous set's, saved only on "Guardar".
             const previous = [...m.sets].filter(s => s.setNumber < active.setNumber).sort((a, b) => b.setNumber - a.setNumber)
@@ -185,13 +203,13 @@
 
         // The history panel stays outside the re-rendered sections so opening it is stable.
         function renderHistory() {
-            const labels = { set_correction: 'Corrección de set', set_recovery: 'Recuperación de set', match_close: 'Cierre con set activo', match_status: 'Estado del partido', set_cancel: 'Set cancelado', set_lineup: 'Saque y formación' }
+            const labels = { claim: 'Tomó el partido', release: 'Liberó el partido', release_forced: 'Liberación forzada', set_correction: 'Corrección de set', set_recovery: 'Recuperación de set', match_close: 'Cierre con set activo', match_status: 'Estado del partido', set_cancel: 'Set cancelado', set_lineup: 'Saque y formación' }
             document.getElementById('history-list').innerHTML = history.map(e => `<div class="list-row small"><div class="grow"><strong>${esc(labels[e.action] ?? e.action)}</strong>${e.setId ? ` · set ${m.sets.find(s => s.id === e.setId)?.setNumber ?? '—'}` : ''}<br><span class="muted">${esc(e.reason)}${auditState(e.before) || auditState(e.after) ? ' · ' : ''}${esc(auditState(e.before))}${auditState(e.before) && auditState(e.after) ? ' → ' : ''}${esc(auditState(e.after))}</span></div><span class="tiny muted">${esc(e.actor)} · ${App.date(e.createdAt)} ${App.time(e.createdAt)}</span></div>`).join('') || '<p class="small muted">Sin decisiones registradas.</p>'
         }
         async function loadHistory() { history = await App.json(`/api/matches/${matchId}/history`); renderHistory() }
         function auditState(value) {
             const labels = { upcoming: 'Próximo', in_progress: 'En juego', finished_home: 'Ganó local', finished_away: 'Ganó visitante', cancelled: 'Cancelado' }
-            return [value.matchStatus ? `Partido: ${labels[value.matchStatus]}` : '', value.status ? `Set: ${labels[value.status]}` : '', value.scoreHome !== undefined ? `${value.scoreHome}–${value.scoreAway}` : ''].filter(Boolean).join(' · ')
+            return [value.holder ? `Planillero: ${value.holder}` : '', value.matchStatus ? `Partido: ${labels[value.matchStatus]}` : '', value.status ? `Set: ${labels[value.status]}` : '', value.scoreHome !== undefined ? `${value.scoreHome}–${value.scoreAway}` : ''].filter(Boolean).join(' · ')
         }
 
         // --- Actions (one at a time; every result comes from the server) ---
@@ -209,6 +227,20 @@
                 paused.forEach(b => { b.disabled = false })
             }
         }
+        async function takeMatch() {
+            const res = await App.send(`/api/claims/${m.id}`, 'POST', {})
+            if (res.ok) App.toast('Tomaste el partido. Liberalo cuando dejes de anotar.')
+        }
+        async function releaseMatch() {
+            if (!confirm('¿Liberar el partido? Otra persona podrá tomarlo y vos dejarás de anotarlo.')) return
+            const res = await App.send(`/api/claims/${m.id}/release`, 'POST', {})
+            if (res.ok) { heldBefore = false; App.toast('Partido liberado.') }
+        }
+        async function forceRelease() {
+            if (!confirm(`¿Quitarle el partido a ${claim.name}? Usalo si se fue o perdió el teléfono: deja de poder anotar y cualquiera puede tomarlo. Queda en el historial.`)) return
+            const res = await App.send(`/api/claims/${m.id}/release`, 'POST', { expectedHolder: claim.name })
+            if (res.ok) App.toast('Partido liberado. Ya lo puede tomar otra persona.')
+        }
         async function startMatch() {
             const res = await App.send(`/api/matches/${m.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
             if (res.ok) App.toast('Partido iniciado. Cargá el saque y las formaciones si las tenés.')
@@ -220,7 +252,19 @@
         async function addPoint(homeScored) {
             const active = activeSet()
             if (!active) return
-            const res = await App.send('/api/points', 'POST', { setId: active.id, homeScored })
+            // The last point this screen saw: a stale tap or a retried request is rejected, not counted twice.
+            const expectedLastPointId = active.points.at(-1)?.id ?? null
+            let res
+            try { res = await App.send('/api/points', 'POST', { setId: active.id, homeScored, expectedLastPointId }) }
+            catch (error) {
+                // The answer was lost, but the point may have been saved. Say which before the scorer taps again.
+                const fresh = await App.json(`/api/matches/${matchId}`).catch(() => null)
+                if (!fresh) throw error // Still offline: the screen stays stale, so a retry is rejected if it was saved.
+                const set = fresh.sets.find(s => s.id === active.id)
+                if ((set?.points.at(-1)?.id ?? null) === expectedLastPointId) App.toast('Se cortó la conexión y el punto no se anotó. Tocá de nuevo.', true)
+                else App.toast(`Se cortó la conexión, pero el punto quedó anotado${set?.status === 'in_progress' ? ` (${set.scoreHome}–${set.scoreAway})` : ''}. No lo anotes de nuevo.`)
+                return
+            }
             if (res.ok) announce(await res.json())
         }
         async function undo() {

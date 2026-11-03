@@ -7,6 +7,7 @@ import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
 import { publicReads } from '../read-cache'
 import { rulesOf } from '../rules'
 import { rotationState } from '../rotation'
+import { requireHolder } from '../scoring'
 
 const matchRoutes = new Hono()
 
@@ -160,7 +161,8 @@ matchRoutes.post('/', adminOnly, async (c) => {
 matchRoutes.put('/:id', scorerOnly, async (c) => {
     const id = Number(c.req.param('id'))
     const body = await c.req.json()
-    const admin = (await getSession(c))!.role === 'admin'
+    const session = (await getSession(c))!
+    const admin = session.role === 'admin'
     const start = body.status === 'in_progress' && Object.keys(body).every(key => ['status', 'expectedStatus'].includes(key))
     if (!admin && !start) return c.json({ error: 'Tu usuario no tiene permiso para esta acción.' }, 403)
     const who = await actor(c)
@@ -181,6 +183,12 @@ matchRoutes.put('/:id', scorerOnly, async (c) => {
             throw new HTTPException(409, { message: 'El estado del partido cambió. Actualizá la pantalla.' })
         }
         if (!admin && current.status !== 'upcoming') throw new HTTPException(409, { message: 'Solo la organización puede reabrir un partido terminado o cancelado.' })
+        // Starting a free match claims it for whoever starts it. A scorer cannot start
+        // a match someone else holds; an admin ruling leaves the holder unchanged.
+        if (start) {
+            if (!current.claimedBy) Object.assign(updates, { claimedBy: session.username, claimedName: session.displayName, claimedAt: new Date() })
+            else if (!admin) requireHolder(current, session.username)
+        }
         if (body.status && body.status !== 'in_progress' && body.status !== 'upcoming') {
             const [active] = await tx.select().from(sets).where(and(eq(sets.matchId, id), eq(sets.status, 'in_progress'))).for('update')
             const [last] = active ? await tx.select().from(points).where(eq(points.setId, active.id)).orderBy(desc(points.id)).limit(1) : []

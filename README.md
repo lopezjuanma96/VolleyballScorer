@@ -3,7 +3,7 @@
 Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación, una rama activa (`main`) y tres despliegues elegidos por configuración.
 
 - Público, sin cuenta: fixture, resultados, punto a punto, rotación en vivo y tabla de posiciones; actualización automática con SSE.
-- Planilleros: inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
+- Planilleros: toman un partido libre (o lo toman al iniciarlo) y sólo quien lo tiene lo anota hasta liberarlo; la organización puede forzar la liberación si alguien se fue sin liberarlo. Inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
 - Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture y decisiones administrativas con historial.
 - Administrador principal (`manager` del `.env`): todo lo anterior y además decide quién entra: carga los emails de Google habilitados con su rol. Planilleros y organización entran con «Ingresar con Google»; un email que no está en la lista ve «No sos parte de la organización».
 - Reglas por categoría (mejor de 1/3/5/7, puntos por set, desempate, diferencia mínima y tope opcional), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
@@ -20,7 +20,7 @@ bun scripts/setup.ts
 scripts/stack.sh up -d --build
 ```
 
-Abrí <http://localhost:3000>. El administrador principal entra por `/manager_login` (no hay enlaces a esa página) con usuario `manager` y la contraseña aleatoria de `MANAGER_PASSWORD` del `.env` local. Desde **Usuarios** habilita los emails de Google de la organización y los planilleros, que entran por «Ingresar» con Google ([configurar Google](docs/hostinger.md#google)). Sin `GOOGLE_CLIENT_ID` sólo puede entrar el administrador principal. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
+Abrí <http://localhost:3000>. El administrador principal entra por `/manager_login` (no hay enlaces a esa página) con usuario `manager` y la contraseña aleatoria de `MANAGER_PASSWORD` del `.env` local. Desde **Usuarios** habilita los emails de Google de la organización y los planilleros, que entran por «Ingresar» con Google ([configurar Google](docs/hostinger.md#google)). Sin `GOOGLE_CLIENT_ID` sólo puede entrar el administrador principal. Para probar con varias personas sin Google, poné `DEV_LOGIN=true` en el `.env` local (sólo funciona con `DEPLOY_MODE=local`): `/login.html` muestra «Entrar sin Google» con el email de cualquier usuario activo de **Usuarios**; usá otra ventana privada o perfil del navegador por persona. El script genera secretos y no los imprime. Si ya tenés `.env`, no lo sobrescribe: comparalo con `.env.example` y seguí la [migración](docs/operations.md#migrar-la-instalación-anterior).
 
 Las migraciones se aplican antes de aceptar tráfico. PostgreSQL y los logos usan volúmenes persistentes. El puerto de la base no se publica.
 
