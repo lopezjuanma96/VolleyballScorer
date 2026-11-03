@@ -142,7 +142,7 @@
             const button = !claim ? '<button class="btn btn-sm btn-primary" onclick="act(takeMatch)">Tomar partido</button>'
                 : mine() ? '<button class="btn btn-sm" onclick="act(releaseMatch)">Liberar</button>'
                 : App.isAdmin() ? '<button class="btn btn-sm btn-danger" onclick="act(forceRelease)">Forzar liberación</button>' : ''
-            return `<div class="spread small" style="margin-top:12px;gap:8px"><span class="${mine() ? '' : 'muted'}">${text}</span>${button}</div>`
+            return `<div id="claim-bar" class="spread small" style="margin-top:12px;gap:8px"><span class="${mine() ? '' : 'muted'}">${text}</span>${button}</div>`
         }
 
         function rotationBlock(set, editable) {
@@ -253,7 +253,18 @@
             const active = activeSet()
             if (!active) return
             // The last point this screen saw: a stale tap or a retried request is rejected, not counted twice.
-            const res = await App.send('/api/points', 'POST', { setId: active.id, homeScored, expectedLastPointId: active.points.at(-1)?.id ?? null })
+            const expectedLastPointId = active.points.at(-1)?.id ?? null
+            let res
+            try { res = await App.send('/api/points', 'POST', { setId: active.id, homeScored, expectedLastPointId }) }
+            catch (error) {
+                // The answer was lost, but the point may have been saved. Say which before the scorer taps again.
+                const fresh = await App.json(`/api/matches/${matchId}`).catch(() => null)
+                if (!fresh) throw error // Still offline: the screen stays stale, so a retry is rejected if it was saved.
+                const set = fresh.sets.find(s => s.id === active.id)
+                if ((set?.points.at(-1)?.id ?? null) === expectedLastPointId) App.toast('Se cortó la conexión y el punto no se anotó. Tocá de nuevo.', true)
+                else App.toast(`Se cortó la conexión, pero el punto quedó anotado${set?.status === 'in_progress' ? ` (${set.scoreHome}–${set.scoreAway})` : ''}. No lo anotes de nuevo.`)
+                return
+            }
             if (res.ok) announce(await res.json())
         }
         async function undo() {
