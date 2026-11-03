@@ -25,7 +25,7 @@
                 <div class="field"><label for="sub-in">Entra (número)</label><input id="sub-in" type="number" inputmode="numeric" min="0" max="99" required /></div>
             </div>
             <p class="tiny muted">El jugador que entra ocupa la misma posición. El líbero no se registra.</p>
-            <div class="row"><button type="submit" class="btn btn-primary">Registrar cambio</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Volver</button></div>
+            <div class="row"><button type="submit" class="btn btn-accent">Registrar cambio</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Volver</button></div>
         </form>
     </dialog>
 
@@ -49,9 +49,6 @@
     <script>
         const matchId = new URLSearchParams(location.search).get('id')
         const esc = App.escape
-        const POSITIONS = ['I', 'II', 'III', 'IV', 'V', 'VI']
-        // Court order as seen from the team's own side: front IV III II, back V VI I.
-        const COURT_ORDER = [3, 2, 1, 4, 5, 0]
         let m = null, history = [], adjustment = null, subSide = null, busy = false, setupDirty = false, setupFor = null
         // Who holds the match. Only the holder sees scoring controls; the server enforces it too.
         let claim = null, heldBefore = null
@@ -79,7 +76,7 @@
         }
 
         function court(positions, serving, side) {
-            return `<div class="court" aria-label="Rotación de ${teamName(side)}">${COURT_ORDER.map(i => `<div class="${serving && i === 0 ? 'server' : ''}">${positions[i]}<small>${POSITIONS[i]}</small></div>`).join('')}</div>`
+            return App.rotationCourt(i => positions[i], { serving, label: `Rotación de ${teamName(side)}` })
         }
 
         function render() {
@@ -107,7 +104,7 @@
                 </div>`
             let body = ''
             if (m.status === 'upcoming') {
-                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${!claim || mine() ? '<button class="btn btn-primary btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
+                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${!claim || mine() ? '<button class="btn btn-accent btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
             } else if (live && active && !mine()) {
                 body = `${rotationBlock(active, false)}`
             } else if (live && active) {
@@ -124,7 +121,7 @@
                         <p class="tiny muted" style="margin:8px 0">Para cuando no se anota punto a punto. El ganador se calcula con las reglas del partido.</p>
                         <div class="form-grid"><div class="field"><label for="final-home">${teamName('home')}</label><input id="final-home" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreHome}" /></div>
                         <div class="field"><label for="final-away">${teamName('away')}</label><input id="final-away" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreAway}" /></div></div>
-                        <button class="btn" style="margin-top:12px" onclick="act(finishSet)">Guardar resultado del set</button>
+                        <button class="btn btn-accent" style="margin-top:12px" onclick="act(finishSet)">Guardar resultado del set</button>
                     </details>`
             } else {
                 body = `<div class="stack" style="margin-top:20px">
@@ -169,7 +166,7 @@
             const lineupInputs = side => {
                 const saved = active.lineups[side]
                 const current = saved ?? previous.find(s => s.lineups[side])?.lineups[side]
-                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}${!saved && current ? ' <span class="tiny muted">· precargada del set anterior</span>' : ''}</p><div class="court">${COURT_ORDER.map(i => `<div><input class="input num" style="text-align:center;padding:6px 2px" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${POSITIONS[i]}" value="${current ? current[i] : ''}" /><small>${POSITIONS[i]}</small></div>`).join('')}</div></div>`
+                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}${!saved && current ? ' <span class="tiny muted">· precargada del set anterior</span>' : ''}</p>${App.rotationCourt(i => `<input class="input num" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${i + 1}" value="${current ? current[i] : ''}" />`)}</div>`
             }
             const serve = active.firstServeHome
             const form = `<div class="stack" style="margin-top:12px" oninput="setupDirty = true">
@@ -177,10 +174,10 @@
                         <label class="check"><input type="radio" name="first-serve" value="home" ${serve === true ? 'checked' : ''}> ${teamName('home')}</label>
                         <label class="check"><input type="radio" name="first-serve" value="away" ${serve === false ? 'checked' : ''}> ${teamName('away')}</label>
                     </fieldset>
-                    <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (IV III II), abajo la línea de fondo (V VI I). La posición I saca. Podés cargar un solo equipo.</p>
+                    <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (posiciones 4, 3 y 2), abajo la línea de fondo (5, 6 y 1). La posición 1 saca. Podés cargar un solo equipo.</p>
                     <div class="courts">${lineupInputs('home')}${lineupInputs('away')}</div>
                     ${started ? '<p class="tiny muted">El set ya empezó: al guardar, la rotación se recalcula con todos los puntos anotados.</p>' : ''}
-                    <div class="row"><button class="btn btn-primary" onclick="act(saveLineup)">Guardar formación</button></div>
+                    <div class="row"><button class="btn btn-accent" onclick="act(saveLineup)">Guardar formación</button></div>
                 </div>`
             const complete = serve !== null && active.lineups.home && active.lineups.away
             document.getElementById('setup').innerHTML = `<details class="panel" style="margin-top:20px" ${complete || started ? '' : 'open'}><summary>Saque y formación inicial · set ${active.setNumber}${complete ? ' ✓' : ''}</summary>${form}</details>`
@@ -301,7 +298,7 @@
             if (!active || busy) return
             subSide = side
             document.getElementById('sub-title').textContent = `Cambio · ${side === 'home' ? m.teamHome.name : m.teamAway.name}`
-            document.getElementById('sub-out').innerHTML = active.rotation.positions[side].map((n, i) => `<option value="${n}">${n} (posición ${POSITIONS[i]})</option>`).join('')
+            document.getElementById('sub-out').innerHTML = active.rotation.positions[side].map((n, i) => `<option value="${n}">${n} (posición ${i + 1})</option>`).join('')
             document.getElementById('sub-in').value = ''
             document.getElementById('sub-dialog').showModal()
         }

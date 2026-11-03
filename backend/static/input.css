@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
-/* Minimal, table-first. The accent only marks live state and the current tab. */
+/* Minimal, table-first and mostly grayscale. The accent (TOURNAMENT_ACCENT, set at runtime by app.js)
+   marks live matches, the rotation court and the scorer's key setup and closing actions; --accent-ink
+   is whichever of ink or white reads on it. Everything else stays ink on paper. */
 :root {
-    --accent: #b9ed64; --ink: #16181d; --muted: #6b7079; --faint: #9aa0a8;
-    --line: #e6e7ea; --soft: #f6f7f8; --paper: #fff; --danger: #b42318; --ok: #1f7a3a;
+    --accent: #b9ed64; --accent-ink: #16181d;
+    --ink: #16181d; --muted: #6b7079; --faint: #9aa0a8;
+    --line: #e6e7ea; --soft: #f6f7f8; --paper: #fff;
+    --danger: #b42318; --ok: #1f7a3a; --live: #e5484d; --live-text: #c62a2f; --warn: #a15c07;
     --radius: 8px;
 }
 body { background: var(--paper); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
@@ -46,12 +50,12 @@ h2.section { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .tab[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
 
 /* Status */
-.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5484d; display: inline-block; flex-shrink: 0; animation: pulse 1.6s ease-in-out infinite; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); display: inline-block; flex-shrink: 0; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 .badge { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
-.badge-live { color: #c62a2f; display: inline-flex; align-items: center; gap: 6px; }
+.badge-live { color: var(--live-text); display: inline-flex; align-items: center; gap: 6px; }
 .connection { font-size: 12px; color: var(--faint); white-space: nowrap; }
-.connection.offline { color: #a15c07; }
+.connection.offline { color: var(--warn); }
 .serve { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); vertical-align: middle; margin: 0 6px; }
 
 /* Match list: one line per match */
@@ -92,20 +96,26 @@ a.match-row:hover { background: var(--soft); }
 .rally-strip span { font-size: 11px; min-width: 26px; text-align: center; padding: 3px 4px; border-radius: 4px; background: var(--soft); color: var(--muted); font-variant-numeric: tabular-nums; }
 .rally-strip span.home { background: var(--ink); color: #fff; }
 
-/* Rotation: front row IV III II, back row V VI I as seen from behind the team's baseline */
+/* Rotation (App.rotationCourt): net on top, front row 4 3 2, back row 5 6 1, seen from the team's baseline */
 .courts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
-.court { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.court > div { padding: 10px 4px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; border-right: 1px solid var(--line); }
+.court { --court-line: color-mix(in srgb, var(--accent), var(--ink) 22%); display: grid; grid-template-columns: repeat(3, 1fr); background: color-mix(in srgb, var(--accent) 32%, var(--paper)); border: 1px solid var(--court-line); border-radius: var(--radius); overflow: hidden; }
+.court::before { content: "Red"; grid-column: 1 / -1; padding: 2px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; text-align: center; color: var(--muted); background: var(--paper); border-bottom: 2px solid var(--ink); }
+.court > div { padding: 6px 6px 10px; text-align: center; font-size: 20px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; border-right: 1px solid var(--court-line); }
 .court > div:nth-child(3n) { border-right: 0; }
-.court > div:nth-child(-n+3) { border-bottom: 1px dashed var(--line); }
-.court > div small { display: block; font-size: 10px; color: var(--faint); font-weight: 400; }
-.court > div.server { background: var(--soft); }
+.court > div:nth-child(-n+3) { border-bottom: 1px dashed var(--court-line); }
+.court .pos { display: block; margin-bottom: 2px; font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.court > div.server { background: var(--accent); color: var(--accent-ink); }
+.court > div.server .pos { color: inherit; }
+.court .input { text-align: center; padding: 6px 2px; font-size: 18px; font-weight: 700; border-color: var(--court-line); appearance: textfield; -moz-appearance: textfield; }
+.court .input::-webkit-inner-spin-button, .court .input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* Forms and buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--paper); font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; }
 .btn:hover { border-color: var(--faint); }
 .btn-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
 .btn-primary:hover { background: #2b2f36; }
+.btn-accent { background: var(--accent); border-color: color-mix(in srgb, var(--accent), var(--ink) 15%); color: var(--accent-ink); font-weight: 600; }
+.btn-accent:hover { background: color-mix(in srgb, var(--accent), var(--ink) 10%); border-color: color-mix(in srgb, var(--accent), var(--ink) 25%); }
 .btn-danger { color: var(--danger); }
 .btn-danger:hover { border-color: var(--danger); }
 .btn-link { border: 0; background: none; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }

@@ -16,11 +16,7 @@
         const matchId = new URLSearchParams(location.search).get('id')
         let currentMatch, activeSetId = null
         const esc = App.escape
-        // Front row IV III II, back row V VI I; positions[0] is I, the server.
-        function court(positions, serving) {
-            const cell = index => `<div class="${serving && index === 0 ? 'server' : ''}">${positions[index]}<small>${['I', 'II', 'III', 'IV', 'V', 'VI'][index]}</small></div>`
-            return `<div class="court">${[3, 2, 1, 4, 5, 0].map(cell).join('')}</div>`
-        }
+        const court = (positions, serving) => App.rotationCourt(i => positions[i], { serving })
         function rotation(m, set) {
             const r = set?.rotation
             if (!r || (!r.positions.home && !r.positions.away)) return ''

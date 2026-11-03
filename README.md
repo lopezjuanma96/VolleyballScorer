@@ -40,7 +40,7 @@ En Railway/Render se despliega la misma imagen con `DATABASE_URL` y un volumen p
 
 ## Identidad del torneo
 
-Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
+Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. El acento colorea los partidos en juego, la cancha de rotación y las acciones clave del planillero (iniciar partido, guardar formación, cambios, resultado del set); el texto encima se elige solo, negro o blanco, según el contraste. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
 
 ## Preparar el fixture
 
