@@ -41,6 +41,21 @@ window.App = {
         return canonical(a) === canonical(b)
     },
     court(value) { return { court1: 'Cancha 1', court2: 'Cancha 2' }[value] ?? value },
+    // Rotation grid seen from the team's own side: net on top (4 3 2), baseline below (5 6 1).
+    // positions[0] is position 1, the server. `content(i)` renders the cell for positions[i].
+    COURT_ORDER: [3, 2, 1, 4, 5, 0],
+    rotationCourt(content, { serving = false, label = '' } = {}) {
+        const cell = i => `<div class="${serving && i === 0 ? 'server' : ''}"><span class="pos">${i + 1}${serving && i === 0 ? ' · saca' : ''}</span>${content(i)}</div>`
+        return `<div class="court"${label ? ` aria-label="${label}"` : ''}>${App.COURT_ORDER.map(cell).join('')}</div>`
+    },
+    // Text color for the tournament accent: ink on light accents, white on dark ones.
+    accentInk(hex) {
+        const channel = c => { const v = parseInt(c, 16) / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+        const [r, g, b] = (hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i) ?? [null, 'b9', 'ed', '64']).slice(1).map(channel)
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        // Contrast against ink (#16181d, luminance ≈ 0.0094) versus white.
+        return (luminance + 0.05) / (0.0094 + 0.05) >= 1.05 / (luminance + 0.05) ? '#16181d' : '#ffffff'
+    },
     winner(match) { return match.status === 'finished_home' ? match.teamHome : match.status === 'finished_away' ? match.teamAway : null },
     setsWon(match, side) { return match.sets.filter(s => s.status === `finished_${side}`).length },
     rulesText(r) {
@@ -107,6 +122,7 @@ window.App = {
         try {
             App.config = await App.json('/api/config')
             document.documentElement.style.setProperty('--accent', App.config.accent)
+            document.documentElement.style.setProperty('--accent-ink', App.accentInk(App.config.accent))
         } catch { /* Pages have their own visible error state. */ }
         if (location.pathname.startsWith('/manager/')) {
             const response = await App.fetch('/api/auth/me')
