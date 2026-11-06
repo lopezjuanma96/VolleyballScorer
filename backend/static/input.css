@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
 /* Minimal, table-first and mostly grayscale. The accent (TOURNAMENT_ACCENT, set at runtime by app.js)
-   marks live matches, the rotation court and the scorer's key setup and closing actions; --accent-ink
-   is whichever of ink or white reads on it. Everything else stays ink on paper. */
+   marks live matches, the server on the rotation court and the scorer's key setup and closing actions;
+   --accent-ink is whichever of ink or white reads on it. Team identity (club logo, or light red / light
+   blue) backs the score halves and each team's court so viewers can tell the sides apart. Everything
+   else stays ink on paper. */
 :root {
     --accent: #b9ed64; --accent-ink: #16181d;
     --ink: #16181d; --muted: #6b7079; --faint: #9aa0a8;
     --line: #e6e7ea; --soft: #f6f7f8; --paper: #fff;
     --danger: #b42318; --ok: #1f7a3a; --live: #e5484d; --live-text: #c62a2f; --warn: #a15c07;
+    /* Team sides without a club logo: home light red, away light blue. */
+    --home-tint: #fbdada; --away-tint: #d7e5fa;
     --radius: 8px;
 }
 body { background: var(--paper); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
@@ -91,6 +95,10 @@ a.match-row:hover { background: var(--soft); }
 .scoreline .team-name { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
 .scoreline .club { font-size: 13px; color: var(--muted); }
 .scoreline .big { font-size: 44px; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; text-align: center; }
+.score-box { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.score-box > span { flex: 1; min-width: 76px; padding: 12px 14px; text-align: center; }
+.score-box > span + span { border-left: 2px solid var(--ink); }
+
 .scoreline .under { font-size: 12px; color: var(--muted); text-align: center; margin-top: 6px; }
 .rally-strip { display: flex; flex-wrap: wrap; gap: 3px; }
 .rally-strip span { font-size: 11px; min-width: 26px; text-align: center; padding: 3px 4px; border-radius: 4px; background: var(--soft); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -108,6 +116,13 @@ a.match-row:hover { background: var(--soft); }
 .court > div.server .pos { color: inherit; }
 .court .input { text-align: center; padding: 6px 2px; font-size: 18px; font-weight: 700; border-color: var(--court-line); appearance: textfield; -moz-appearance: textfield; }
 .court .input::-webkit-inner-spin-button, .court .input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Team identity backgrounds (App.teamBackground) */
+.team-bg { --team-tint: var(--home-tint); background: var(--team-tint); }
+.team-bg.team-away { --team-tint: var(--away-tint); }
+.team-bg.has-logo { background: linear-gradient(rgb(255 255 255 / .6), rgb(255 255 255 / .6)), var(--team-logo) center / contain no-repeat, var(--paper); }
+.court.team-bg { --court-line: color-mix(in srgb, var(--team-tint), var(--ink) 28%); }
+.court.team-bg.has-logo { --court-line: #c9ccd1; }
 
 /* Forms and buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--paper); font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; }
@@ -158,6 +173,7 @@ textarea { resize: vertical; }
     .match-meta { grid-column: 2; text-align: left; display: flex; gap: 10px; }
     .match-team .sets { display: none; }
     .scoreline .big { font-size: 34px; }
+    .score-box > span { min-width: 58px; padding: 10px; }
     .scoreline .team-name { font-size: 15px; }
     .table .hide-sm { display: none; }
 }

@@ -40,7 +40,7 @@ En Railway/Render se despliega la misma imagen con `DATABASE_URL` y un volumen p
 
 ## Identidad del torneo
 
-Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. El acento colorea los partidos en juego, la cancha de rotación y las acciones clave del planillero (iniciar partido, guardar formación, cambios, resultado del set); el texto encima se elige solo, negro o blanco, según el contraste. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
+Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. El acento colorea los partidos en juego, quién saca en la cancha de rotación y las acciones clave del planillero (iniciar partido y set, guardar formación, cambios, resultado del set). Cada equipo se identifica con el logo de su club, atenuado, detrás de su mitad del marcador y de su cancha de rotación; sin logo (o si los dos equipos son del mismo club) se usa rojo claro para el local y azul claro para el visitante; el texto encima se elige solo, negro o blanco, según el contraste. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
 
 ## Preparar el fixture
 
@@ -50,7 +50,7 @@ Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCEN
 4. El planillero abre el partido, toca «Iniciar partido», carga (opcional) quién saca y las formaciones, y anota punto a punto o el resultado final de cada set.
 5. Sets y partido se cierran solos según las reglas; la tabla se actualiza al instante.
 
-La rotación se recalcula en cada punto: un equipo rota cuando recupera el saque. Los cambios reemplazan al jugador en su posición (el líbero no se registra). Desde «Editar» la organización cambia horario, cancha o reglas. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. La organización puede corregir sets cerrados con motivo, adjudicar un partido (walkover, abandono), cancelar sets y recuperar el último set cancelado; todo queda en el historial con el usuario que lo hizo.
+Cada set empieza con «Iniciar set», que pide quién saca primero y las dos formaciones; sin esos tres datos no se sigue la rotación (se puede omitir con aviso y completar después en «Saque y formación inicial»). «Invertir lados» cambia qué equipo se ve a la izquierda sólo en la pantalla del planillero, para acompañar el cambio de cancha. La rotación se recalcula en cada punto: un equipo rota cuando recupera el saque. Los cambios reemplazan al jugador en su posición (el líbero no se registra). Desde «Editar» la organización cambia horario, cancha o reglas. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. La organización puede corregir sets cerrados con motivo, adjudicar un partido (walkover, abandono), cancelar sets y recuperar el último set cancelado; todo queda en el historial con el usuario que lo hizo.
 
 Importación CSV opcional con Python 3, sin paquetes externos:
 
