@@ -105,3 +105,58 @@ describe('official match result', () => {
         expect(view.elements.get('content').innerHTML).not.toContain('Ganó')
     })
 })
+describe('team sides', () => {
+    test('score halves use the club logo or the side color, and ignore foreign urls', () => {
+        const view = browser()
+        const match = { teamHome: { clubLogo: '/uploads/abc-1.png' }, teamAway: { clubLogo: "https://evil.example/x.png');background:red" } }
+        view.context.match = match
+        const box = runInContext("App.scoreBox(match, { home: 12, away: 10 }, ['away', 'home'])", view.context)
+        expect(box).toContain('aria-label="10–12"')
+        expect(box.indexOf('team-away')).toBeLessThan(box.indexOf('team-home'))
+        expect(box).toContain("--team-logo:url('/uploads/abc-1.png')")
+        expect(box).not.toContain('evil')
+        expect(runInContext("App.rotationCourt(i => i, { team: { match, side: 'away' } })", view.context)).toContain('class="court team-bg team-away"')
+        view.context.sameClub = { teamHome: { clubLogo: '/uploads/a.png' }, teamAway: { clubLogo: '/uploads/a.png' } }
+        expect(runInContext("App.scoreBox(sameClub, { home: 1, away: 2 })", view.context)).not.toContain('has-logo')
+    })
+})
+const liveFixture = () => ({
+    ...fixture('in_progress'), rules: { bestOf: 3, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null },
+    sets: [
+        { id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 10, firstServeHome: true, lineups: { home: [1, 2, 3, 4, 5, 6], away: [7, 8, 9, 10, 11, 12] }, points: [{ id: 9, kind: 'rally' }], substitutions: [], rotation: { positions: {} } },
+        { id: 2, setNumber: 2, status: 'in_progress', scoreHome: 0, scoreAway: 0, firstServeHome: null, lineups: {}, points: [], substitutions: [], rotation: { serving: null, positions: { home: null, away: null } } },
+    ],
+})
+describe('scorer start of set', () => {
+    async function scorer() {
+        const view = browser()
+        runInContext(await pageScript('./static/manager/game.html'), view.context)
+        view.context.fixture = liveFixture()
+        runInContext('m = fixture; claim = { mine: true }', view.context)
+        return view
+    }
+    test('a set without toss and lineups asks to start it instead of offering points', async () => {
+        const view = await scorer()
+        runInContext('renderScore()', view.context)
+        const html = view.elements.get('score').innerHTML
+        expect(html).toContain('Iniciar set 2')
+        expect(html).not.toContain('addPoint')
+        expect(runInContext('listText(missing(setupOf(activeSet()), rawName))', view.context)).toBe('quién saca primero, la formación de Local y la formación de Visitante <A>')
+    })
+    test('a complete setup or a skip shows the point buttons, in the scorer\'s side order', async () => {
+        const view = await scorer()
+        runInContext("skipped.add(2); swapped = true; renderScore()", view.context)
+        const html = view.elements.get('score').innerHTML
+        expect(html).toContain('No se sigue la rotación')
+        expect(html.indexOf('act(addPoint, false)')).toBeLessThan(html.indexOf('act(addPoint, true)'))
+        runInContext("skipped.clear(); Object.assign(activeSet(), { firstServeHome: false, lineups: { home: [1, 2, 3, 4, 5, 6], away: [7, 8, 9, 10, 11, 12] } }); renderScore()", view.context)
+        expect(view.elements.get('score').innerHTML).toContain('act(addPoint, true)')
+        expect(view.elements.get('score').innerHTML).not.toContain('No se sigue la rotación')
+    })
+    test('the toss suggestion alternates with the previous set outside the deciding set', async () => {
+        const view = await scorer()
+        const fields = runInContext("setupFields(activeSet(), 'start')", view.context)
+        expect(fields).toMatch(/value="away" checked/)
+        expect(fields).toContain('value="1"')
+    })
+})

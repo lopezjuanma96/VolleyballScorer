@@ -29,6 +29,15 @@
         </form>
     </dialog>
 
+    <dialog id="start-dialog" aria-labelledby="start-title" style="max-width:560px">
+        <form onsubmit="submitStart(event)" class="stack" oninput="startDirty = true">
+            <h2 id="start-title" class="title" style="font-size:18px"></h2>
+            <div id="start-fields" class="stack"></div>
+            <p id="start-error" role="alert" class="error"></p>
+            <div class="row"><button type="submit" class="btn btn-accent">Empezar set</button><button type="button" class="btn" onclick="skipStart()">Omitir</button></div>
+        </form>
+    </dialog>
+
     <dialog id="adjustment-dialog" aria-labelledby="adjustment-title">
         <form onsubmit="submitAdjustment(event)" class="stack">
             <h2 id="adjustment-title" class="title" style="font-size:18px"></h2>
@@ -53,9 +62,25 @@
         // Who holds the match. Only the holder sees scoring controls; the server enforces it too.
         let claim = null, heldBefore = null
         const mine = () => claim?.mine === true
+        // Device-only preferences: they never reach the server or other screens.
+        const stored = key => { try { return localStorage.getItem(key) } catch { return null } }
+        const store = (key, value) => { try { localStorage.setItem(key, value) } catch { /* Private mode: keep it in memory. */ } }
+        // Left-to-right order of the teams on this screen; the scorer flips it when teams change ends.
+        let swapped = stored(`swap-sides-${matchId}`) === '1'
+        const order = () => swapped ? ['away', 'home'] : ['home', 'away']
+        // Sets the scorer chose to play without a complete toss and lineups.
+        const skipped = new Set(JSON.parse(stored('skipped-sets') ?? '[]'))
+        let startFor = null, startDirty = false, openStartAfterLoad = false
 
         const activeSet = () => m.sets.find(s => s.status === 'in_progress') ?? null
-        const teamName = side => esc(side === 'home' ? m.teamHome.name : m.teamAway.name)
+        const rawName = side => side === 'home' ? m.teamHome.name : m.teamAway.name
+        const teamName = side => esc(rawName(side))
+        // What rotation tracking still needs: { firstServeHome, home, away } as sent to /lineup.
+        const missing = (setup, name = teamName) => [setup.firstServeHome === null ? 'quién saca primero' : '', ...['home', 'away'].filter(side => !setup[side]).map(side => `la formación de ${name(side)}`)].filter(Boolean)
+        const setupOf = set => ({ firstServeHome: set.firstServeHome, home: set.lineups.home ?? null, away: set.lineups.away ?? null })
+        const listText = items => items.length > 1 ? `${items.slice(0, -1).join(', ')} y ${items.at(-1)}` : items[0] ?? ''
+        // A set is ready to score once it has points, a complete setup, or the scorer skipped the setup.
+        const ready = set => set.points.length > 0 || missing(setupOf(set)).length === 0 || skipped.has(set.id)
         // The last undoable entry of the match: the latest point of the most recent set that has points.
         function lastEntry() {
             const set = [...m.sets].sort((a, b) => b.setNumber - a.setNumber).find(s => s.points.length)
@@ -72,12 +97,20 @@
             if (heldBefore && !mine()) App.toast(claim ? `Ahora lo anota ${claim.name}.` : 'El partido quedó libre: ya no lo anotás vos.', true)
             heldBefore = mine()
             render()
+            if (openStartAfterLoad) { openStartAfterLoad = false; const active = activeSet(); if (active && !ready(active)) openStart() }
             if (document.getElementById('history').open) await loadHistory()
         }
 
         function court(positions, serving, side) {
-            return App.rotationCourt(i => positions[i], { serving, label: `Rotación de ${teamName(side)}` })
+            return App.rotationCourt(i => positions[i], { serving, label: `Rotación de ${teamName(side)}`, team: { match: m, side } })
         }
+        function toggleSides() {
+            swapped = !swapped
+            store(`swap-sides-${matchId}`, swapped ? '1' : '0')
+            render()
+            App.toast(`Ahora ${rawName(order()[0])} está a la izquierda. Sólo cambia en esta pantalla.`)
+        }
+        const swapButton = () => '<button class="btn btn-sm" onclick="toggleSides()" title="Sólo en esta pantalla">⇄ Invertir lados</button>'
 
         function render() {
             document.title = `${m.teamHome.name} vs ${m.teamAway.name} · Planilla`
@@ -97,30 +130,40 @@
             const last = lastEntry()
             const header = `<p class="small"><a href="/manager/" class="muted">← Partidos</a></p>
                 <div class="spread small muted" style="margin-top:12px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`}</div>`
+            const [left, right] = order()
+            const dot = side => serving === side ? '<span class="serve" title="Saca"></span>' : ''
             const scoreline = `<div class="scoreline">
-                    <div class="side"><div class="team-name">${teamName('home')}${serving === 'home' ? '<span class="serve" title="Saca"></span>' : ''}</div><div class="club">Sets ${won('home')}</div></div>
-                    <div><div class="big">${active ? `${active.scoreHome}–${active.scoreAway}` : `${won('home')}–${won('away')}`}</div><div class="under">${active ? `Set ${active.setNumber}` : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)}</div></div>
-                    <div class="side"><div class="team-name">${serving === 'away' ? '<span class="serve" title="Saca"></span>' : ''}${teamName('away')}</div><div class="club">Sets ${won('away')}</div></div>
+                    <div class="side"><div class="team-name">${teamName(left)}${dot(left)}</div><div class="club">Sets ${won(left)}</div></div>
+                    <div>${App.scoreBox(m, active ? { home: active.scoreHome, away: active.scoreAway } : { home: won('home'), away: won('away') }, order())}<div class="under">${active ? `Set ${active.setNumber}` : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)}</div></div>
+                    <div class="side"><div class="team-name">${dot(right)}${teamName(right)}</div><div class="club">Sets ${won(right)}</div></div>
                 </div>`
             let body = ''
             if (m.status === 'upcoming') {
                 body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${!claim || mine() ? '<button class="btn btn-accent btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
             } else if (live && active && !mine()) {
                 body = `${rotationBlock(active, false)}`
+            } else if (live && active && !ready(active)) {
+                // The set waits for its toss and lineups: one clear step instead of a panel below.
+                body = `<div class="stack" style="margin-top:20px">
+                        <button class="btn btn-accent btn-point" onclick="openStart()">Iniciar set ${active.setNumber}</button>
+                        <p class="small muted">Cargá quién saca primero y las formaciones de los dos equipos para seguir la rotación.</p>
+                        <div class="spread">${last ? '<button class="btn" onclick="act(undo)">↶ Deshacer último punto</button>' : '<span></span>'}${swapButton()}</div>
+                    </div>`
             } else if (live && active) {
+                const lacking = missing(setupOf(active))
                 body = `<div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
-                        <button class="btn btn-primary btn-point" onclick="act(addPoint, true)">+ ${teamName('home')}</button>
-                        <button class="btn btn-primary btn-point" onclick="act(addPoint, false)">+ ${teamName('away')}</button>
+                        ${order().map(side => `<button class="btn btn-primary btn-point" onclick="act(addPoint, ${side === 'home'})">+ ${teamName(side)}</button>`).join('')}
                     </div>
                     <div class="spread" style="margin-top:12px">
                         <button class="btn" onclick="act(undo)" ${last ? '' : 'disabled'}>↶ Deshacer último punto</button>
-                        <span class="tiny muted">${App.rulesText(m.rules)}</span>
+                        ${swapButton()}
                     </div>
+                    ${lacking.length ? `<p class="small" style="margin-top:12px;color:var(--warn)">No se sigue la rotación: falta ${listText(lacking)}. Completalo en «Saque y formación inicial».</p>` : ''}
+                    <p class="tiny muted" style="margin-top:8px">${App.rulesText(m.rules)}</p>
                     ${rotationBlock(active, true)}
                     <details class="panel" style="margin-top:20px"><summary>Cargar resultado final del set ${active.setNumber}</summary>
                         <p class="tiny muted" style="margin:8px 0">Para cuando no se anota punto a punto. El ganador se calcula con las reglas del partido.</p>
-                        <div class="form-grid"><div class="field"><label for="final-home">${teamName('home')}</label><input id="final-home" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreHome}" /></div>
-                        <div class="field"><label for="final-away">${teamName('away')}</label><input id="final-away" type="number" inputmode="numeric" min="0" max="999" value="${active.scoreAway}" /></div></div>
+                        <div class="form-grid">${order().map(side => `<div class="field"><label for="final-${side}">${teamName(side)}</label><input id="final-${side}" type="number" inputmode="numeric" min="0" max="999" value="${side === 'home' ? active.scoreHome : active.scoreAway}" /></div>`).join('')}</div>
                         <button class="btn btn-accent" style="margin-top:12px" onclick="act(finishSet)">Guardar resultado del set</button>
                     </details>`
             } else {
@@ -149,38 +192,106 @@
             const lastChange = changes.at(-1)
             const rallies = set.points.filter(p => p.kind === 'rally').length
             const side = key => r.positions[key] ? `<div><div class="spread" style="margin-bottom:6px"><span class="small">${teamName(key)}${r.serving === key ? ' · saca' : ''}</span>${editable ? `<button class="btn btn-sm" onclick="openSubstitution('${key}')">Cambio</button>` : ''}</div>${court(r.positions[key], r.serving === key, key)}</div>` : ''
-            return `<h2 class="section">Rotación</h2><div class="courts">${side('home')}${side('away')}</div>
+            return `<h2 class="section">Rotación</h2><div class="courts">${order().map(side).join('')}</div>
                 ${changes.length ? `<p class="tiny muted" style="margin-top:8px">Cambios: ${changes.map(c => `${teamName(c.side)} ${c.playerOut}→${c.playerIn}`).join(' · ')}
                 ${editable && lastChange.afterRallies === rallies ? ` <button class="btn-link tiny" onclick="act(undoSubstitution, ${lastChange.id})">deshacer último</button>` : ''}</p>` : ''}`
         }
 
-        // Toss and starting lineup for the set in play.
+        // Toss and lineup inputs, shared by the start dialog and the panel below the score.
+        function setupFields(set, prefix) {
+            // Teams often repeat their lineup: offer the previous set's, saved only when the scorer confirms.
+            const previous = [...m.sets].filter(s => s.setNumber < set.setNumber).sort((a, b) => b.setNumber - a.setNumber)
+            const lineupInputs = side => {
+                const saved = set.lineups[side]
+                const current = saved ?? previous.find(s => s.lineups[side])?.lineups[side]
+                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}${!saved && current ? ' <span class="tiny muted">· precargada del set anterior</span>' : ''}</p>${App.rotationCourt(i => `<input class="input num" type="number" inputmode="numeric" min="0" max="99" id="${prefix}-${side}-${i}" aria-label="${teamName(side)} posición ${i + 1}" value="${current ? current[i] : ''}" />`, { team: { match: m, side } })}</div>`
+            }
+            // Outside the deciding set, the team that received first in the previous set serves first.
+            const last = previous[0]
+            const suggested = set.firstServeHome === null && last?.firstServeHome != null && set.setNumber < m.rules.bestOf
+            const serve = set.firstServeHome ?? (suggested ? !last.firstServeHome : null)
+            return `<fieldset class="row"><legend class="small muted" style="margin-bottom:6px">Saca primero${suggested ? ' <span class="tiny">· sugerido: alterna con el set anterior</span>' : ''}</legend>
+                    ${order().map(side => `<label class="check"><input type="radio" name="${prefix}-serve" value="${side}" ${serve === (side === 'home') ? 'checked' : ''}> ${teamName(side)}</label>`).join('')}
+                </fieldset>
+                <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (posiciones 4, 3 y 2), abajo la línea de fondo (5, 6 y 1). La posición 1 saca.</p>
+                <div class="courts">${order().map(lineupInputs).join('')}</div>`
+        }
+        // Reads the inputs of setupFields. Returns { body } for /lineup or { error }.
+        function readSetup(prefix) {
+            const serve = document.querySelector(`input[name="${prefix}-serve"]:checked`)?.value
+            const body = { firstServeHome: serve ? serve === 'home' : null }
+            for (const side of ['home', 'away']) {
+                const values = [0, 1, 2, 3, 4, 5].map(i => document.getElementById(`${prefix}-${side}-${i}`).value.trim())
+                if (values.every(v => v === '')) { body[side] = null; continue }
+                if (values.some(v => v === '')) return { error: `Completá las 6 posiciones de ${rawName(side)} o dejalas vacías.` }
+                body[side] = values.map(Number)
+                if (new Set(body[side]).size !== 6) return { error: `Hay números repetidos en ${rawName(side)}.` }
+            }
+            return { body }
+        }
+
+        // Toss and starting lineup for the set in play, editable at any time once the set started.
         function renderSetup() {
             const active = activeSet()
             setupDirty = false
             setupFor = active?.id ?? null
-            if (!active || m.status !== 'in_progress' || !mine()) { document.getElementById('setup').innerHTML = ''; return }
+            if (!active || m.status !== 'in_progress' || !mine() || !ready(active)) { document.getElementById('setup').innerHTML = ''; return }
             const started = active.points.length > 0
-            // Teams often repeat their lineup: offer the previous set's, saved only on "Guardar".
-            const previous = [...m.sets].filter(s => s.setNumber < active.setNumber).sort((a, b) => b.setNumber - a.setNumber)
-            const lineupInputs = side => {
-                const saved = active.lineups[side]
-                const current = saved ?? previous.find(s => s.lineups[side])?.lineups[side]
-                return `<div><p class="small" style="margin-bottom:6px">${teamName(side)}${!saved && current ? ' <span class="tiny muted">· precargada del set anterior</span>' : ''}</p>${App.rotationCourt(i => `<input class="input num" type="number" inputmode="numeric" min="0" max="99" id="lineup-${side}-${i}" aria-label="${teamName(side)} posición ${i + 1}" value="${current ? current[i] : ''}" />`)}</div>`
-            }
-            const serve = active.firstServeHome
+            const lacking = missing(setupOf(active))
             const form = `<div class="stack" style="margin-top:12px" oninput="setupDirty = true">
-                    <fieldset class="row"><legend class="small muted" style="margin-bottom:6px">Saca primero</legend>
-                        <label class="check"><input type="radio" name="first-serve" value="home" ${serve === true ? 'checked' : ''}> ${teamName('home')}</label>
-                        <label class="check"><input type="radio" name="first-serve" value="away" ${serve === false ? 'checked' : ''}> ${teamName('away')}</label>
-                    </fieldset>
-                    <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (posiciones 4, 3 y 2), abajo la línea de fondo (5, 6 y 1). La posición 1 saca. Podés cargar un solo equipo.</p>
-                    <div class="courts">${lineupInputs('home')}${lineupInputs('away')}</div>
+                    ${setupFields(active, 'lineup')}
                     ${started ? '<p class="tiny muted">El set ya empezó: al guardar, la rotación se recalcula con todos los puntos anotados.</p>' : ''}
                     <div class="row"><button class="btn btn-accent" onclick="act(saveLineup)">Guardar formación</button></div>
                 </div>`
-            const complete = serve !== null && active.lineups.home && active.lineups.away
-            document.getElementById('setup').innerHTML = `<details class="panel" style="margin-top:20px" ${complete || started ? '' : 'open'}><summary>Saque y formación inicial · set ${active.setNumber}${complete ? ' ✓' : ''}</summary>${form}</details>`
+            document.getElementById('setup').innerHTML = `<details class="panel" style="margin-top:20px" ${lacking.length && !started ? 'open' : ''}><summary>Saque y formación inicial · set ${active.setNumber}${lacking.length ? ` · falta ${listText(lacking)}` : ' ✓'}</summary>${form}</details>`
+        }
+
+        // --- Start of a set: toss and both lineups in one step ---
+        function openStart() {
+            const active = activeSet()
+            if (!active || busy || !mine()) return
+            startFor = active.id
+            startDirty = false
+            document.getElementById('start-title').textContent = `Iniciar set ${active.setNumber}`
+            document.getElementById('start-fields').innerHTML = `<p class="small muted">Para seguir la rotación hacen falta las dos formaciones y quién saca primero.</p>${setupFields(active, 'start')}`
+            document.getElementById('start-error').textContent = ''
+            document.getElementById('start-dialog').showModal()
+        }
+        function startedSet() {
+            const active = activeSet()
+            if (active?.id === startFor) return active
+            document.getElementById('start-dialog').close()
+            App.toast('El set cambió en otra pantalla. Revisá el marcador.', true)
+            return null
+        }
+        function submitStart(event) {
+            event.preventDefault()
+            const active = startedSet()
+            if (!active || busy) return
+            const { body, error } = readSetup('start')
+            const lacking = body ? missing(body, rawName) : []
+            const message = error ?? (lacking.length ? `Falta ${listText(lacking)}. Completalo o tocá «Omitir».` : '')
+            if (message) { document.getElementById('start-error').textContent = message; return }
+            act(async () => {
+                const res = await App.send(`/api/sets/${active.id}/lineup`, 'PUT', body)
+                if (!res.ok) return
+                document.getElementById('start-dialog').close()
+                App.toast(`Set ${active.setNumber} en juego. La rotación se sigue punto a punto.`)
+            })
+        }
+        function skipStart() {
+            const active = startedSet()
+            if (!active || busy) return
+            if (!confirm('Si no cargás las dos formaciones y quién saca primero, no vamos a poder seguir la rotación.\n\nPodés completarlo después en «Saque y formación inicial». ¿Empezar el set igual?')) return
+            const { body } = readSetup('start')
+            skipped.add(active.id)
+            store('skipped-sets', JSON.stringify([...skipped].slice(-50)))
+            document.getElementById('start-dialog').close()
+            // Keep what the scorer typed if it is valid; an untouched prefill is not saved.
+            const typed = startDirty && body && (body.firstServeHome !== null || body.home || body.away)
+            if (typed) act(async () => { await App.send(`/api/sets/${active.id}/lineup`, 'PUT', body) })
+            else render()
+            App.toast(`Set ${active.setNumber} sin rotación. Podés completarla abajo, en «Saque y formación inicial».`, true)
         }
 
         function renderAdmin() {
@@ -240,7 +351,7 @@
         }
         async function startMatch() {
             const res = await App.send(`/api/matches/${m.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
-            if (res.ok) App.toast('Partido iniciado. Cargá el saque y las formaciones si las tenés.')
+            if (res.ok) { App.toast('Partido iniciado.'); openStartAfterLoad = true }
         }
         function announce(result) {
             if (result.matchWinner) App.toast(`Partido terminado. Ganó ${result.matchWinner === 'home' ? m.teamHome.name : m.teamAway.name}.`)
@@ -281,17 +392,10 @@
         }
         async function saveLineup() {
             const active = activeSet()
-            const serve = document.querySelector('input[name="first-serve"]:checked')?.value
-            const body = { firstServeHome: serve ? serve === 'home' : null }
-            for (const side of ['home', 'away']) {
-                const values = [0, 1, 2, 3, 4, 5].map(i => document.getElementById(`lineup-${side}-${i}`).value.trim())
-                if (values.every(v => v === '')) { body[side] = null; continue }
-                if (values.some(v => v === '')) return App.toast(`Completá las 6 posiciones de ${side === 'home' ? m.teamHome.name : m.teamAway.name} o dejalas vacías.`, true)
-                body[side] = values.map(Number)
-                if (new Set(body[side]).size !== 6) return App.toast(`Hay números repetidos en ${side === 'home' ? m.teamHome.name : m.teamAway.name}.`, true)
-            }
+            const { body, error } = readSetup('lineup')
+            if (error) return App.toast(error, true)
             const res = await App.send(`/api/sets/${active.id}/lineup`, 'PUT', body)
-            if (res.ok) { setupDirty = false; App.toast('Formación guardada.') }
+            if (res.ok) { setupDirty = false; App.toast(missing(body).length ? 'Formación guardada. Falta completar para seguir la rotación.' : 'Formación guardada.') }
         }
         function openSubstitution(side) {
             const active = activeSet()

@@ -44,9 +44,25 @@ window.App = {
     // Rotation grid seen from the team's own side: net on top (4 3 2), baseline below (5 6 1).
     // positions[0] is position 1, the server. `content(i)` renders the cell for positions[i].
     COURT_ORDER: [3, 2, 1, 4, 5, 0],
-    rotationCourt(content, { serving = false, label = '' } = {}) {
+    // `team` is { match, side }: the court takes that team's logo or side color.
+    rotationCourt(content, { serving = false, label = '', team = null } = {}) {
         const cell = i => `<div class="${serving && i === 0 ? 'server' : ''}"><span class="pos">${i + 1}${serving && i === 0 ? ' · saca' : ''}</span>${content(i)}</div>`
-        return `<div class="court"${label ? ` aria-label="${label}"` : ''}>${App.COURT_ORDER.map(cell).join('')}</div>`
+        const bg = team ? App.teamBackground(team.match, team.side) : { cls: '', style: '' }
+        return `<div class="court ${bg.cls}"${bg.style ? ` style="${bg.style}"` : ''}${label ? ` aria-label="${label}"` : ''}>${App.COURT_ORDER.map(cell).join('')}</div>`
+    },
+    // Each team's identity on the score and courts: its club logo, faded, or light red (home) / light blue (away).
+    // Only server-issued upload paths become CSS urls.
+    teamBackground(match, side) {
+        const logo = (side === 'home' ? match.teamHome : match.teamAway)?.clubLogo
+        const other = (side === 'home' ? match.teamAway : match.teamHome)?.clubLogo
+        // Two teams of the same club would look alike: they keep the side colors instead.
+        const safe = typeof logo === 'string' && /^\/uploads\/[\w.-]+$/.test(logo) && logo !== other ? logo : null
+        return { cls: `team-bg team-${side}${safe ? ' has-logo' : ''}`, style: safe ? `--team-logo:url('${safe}')` : '' }
+    },
+    // Score split down the middle, one half per team, in the given left-to-right order.
+    scoreBox(match, values, order = ['home', 'away']) {
+        const half = side => { const bg = App.teamBackground(match, side); return `<span class="${bg.cls}"${bg.style ? ` style="${bg.style}"` : ''}>${values[side]}</span>` }
+        return `<div class="score-box big" role="group" aria-label="${values[order[0]]}–${values[order[1]]}">${order.map(half).join('')}</div>`
     },
     // Text color for the tournament accent: ink on light accents, white on dark ones.
     accentInk(hex) {

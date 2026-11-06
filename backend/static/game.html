@@ -16,11 +16,11 @@
         const matchId = new URLSearchParams(location.search).get('id')
         let currentMatch, activeSetId = null
         const esc = App.escape
-        const court = (positions, serving) => App.rotationCourt(i => positions[i], { serving })
+        const court = (m, side, positions, serving) => App.rotationCourt(i => positions[i], { serving, team: { match: m, side } })
         function rotation(m, set) {
             const r = set?.rotation
             if (!r || (!r.positions.home && !r.positions.away)) return ''
-            const side = key => r.positions[key] ? `<div><p class="small" style="margin-bottom:6px">${esc(key === 'home' ? m.teamHome.name : m.teamAway.name)}${r.serving === key ? ' · saca' : ''}</p>${court(r.positions[key], r.serving === key)}</div>` : ''
+            const side = key => r.positions[key] ? `<div><p class="small" style="margin-bottom:6px">${esc(key === 'home' ? m.teamHome.name : m.teamAway.name)}${r.serving === key ? ' · saca' : ''}</p>${court(m, key, r.positions[key], r.serving === key)}</div>` : ''
             return `<h2 class="section">Rotación · set ${set.setNumber}</h2><div class="courts">${side('home')}${side('away')}</div>`
         }
         function render() {
@@ -31,7 +31,9 @@
             const counted = m.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away')
             const selected = m.sets.find(s => s.id === activeSetId) ?? active ?? counted.at(-1) ?? m.sets.at(-1)
             const serve = side => active?.rotation?.serving === side ? '<span class="serve" title="Saca"></span>' : ''
-            const big = active ? `${active.scoreHome}–${active.scoreAway}` : m.status === 'upcoming' ? App.time(m.scheduledAt) : `${App.setsWon(m, 'home')}–${App.setsWon(m, 'away')}`
+            const big = active ? App.scoreBox(m, { home: active.scoreHome, away: active.scoreAway })
+                : m.status === 'upcoming' ? `<div class="big">${App.time(m.scheduledAt)}</div>`
+                : App.scoreBox(m, { home: App.setsWon(m, 'home'), away: App.setsWon(m, 'away') })
             const under = active ? `Set ${active.setNumber} · sets ${App.setsWon(m, 'home')}–${App.setsWon(m, 'away')}` : m.status === 'upcoming' ? App.day(m.scheduledAt) : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)
             const status = live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`
             document.title = `${m.teamHome.name} vs ${m.teamAway.name}`
@@ -40,7 +42,7 @@
                 <div class="spread small muted" style="margin-top:16px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${status}</div>
                 <div class="scoreline">
                     <div class="side"><div class="team-name">${esc(m.teamHome.name)}${serve('home')}</div><div class="club">${esc(m.teamHome.clubName)}</div></div>
-                    <div><div class="big">${big}</div><div class="under">${under}</div></div>
+                    <div>${big}<div class="under">${under}</div></div>
                     <div class="side"><div class="team-name">${serve('away')}${esc(m.teamAway.name)}</div><div class="club">${esc(m.teamAway.clubName)}</div></div>
                 </div>
                 ${counted.length || active ? `<div class="table-wrap"><table class="table"><thead><tr><th class="left">Equipo</th>${m.sets.filter(s => s.status !== 'cancelled').map(s => `<th>${s.setNumber}</th>`).join('')}<th>Sets</th></tr></thead><tbody>
