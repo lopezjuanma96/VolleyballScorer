@@ -50,7 +50,7 @@
                 </tbody></table></div>` : ''}
                 ${rotation(m, active || null)}
                 ${m.sets.some(s => s.points.length) ? `<h2 class="section">Punto a punto</h2>
-                    <p class="tiny muted" data-tip="rallies" style="margin-bottom:8px">Marcador después de cada punto. Oscuro: punto de ${esc(m.teamHome.name)}. Claro: punto de ${esc(m.teamAway.name)}.</p>
+                    <p class="tiny muted" data-tip="rallies">Marcador después de cada punto. Oscuro: punto de ${esc(m.teamHome.name)}. Claro: punto de ${esc(m.teamAway.name)}.</p>
                     <nav class="tabs" aria-label="Elegir set">${m.sets.filter(s => s.points.length).map(s => `<button class="tab" onclick="selectSet(${s.id})" aria-pressed="${selected?.id === s.id}">Set ${s.setNumber}${s.status === 'cancelled' ? ' (cancelado)' : ''}</button>`).join('')}</nav>
                     <div class="rally-strip" style="margin-top:12px" aria-label="Marcador después de cada punto">${(selected?.points ?? []).map(p => `<span class="${p.homeScored ? 'home' : ''}" title="${p.homeScored ? esc(m.teamHome.name) : esc(m.teamAway.name)}">${p.scoreHome}-${p.scoreAway}</span>`).join('')}</div>` : ''}
                 <p class="tiny muted" style="margin-top:32px">${App.rulesText(m.rules ?? { bestOf: 3, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null })}</p>`

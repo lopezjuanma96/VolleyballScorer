@@ -169,8 +169,11 @@ textarea { resize: vertical; }
 .tip-note:not(.open) { margin-top: 0; margin-bottom: 0; }
 .tip-note.open { grid-template-rows: 1fr; opacity: 1; }
 .tip-inner { min-height: 0; overflow: hidden; }
-.tip-inner > :first-child { margin-top: 0; }
+.tip-inner > :first-child { margin-top: 0; margin-bottom: 0; }
+.tip-inner::after { content: ""; display: block; height: 8px; } /* Space below the text, folded away with it. */
 .tip-timer { display: none; width: 72px; height: 2px; margin-top: 6px; border-radius: 1px; background: var(--faint); transform-origin: left; opacity: .6; }
+.tip-inner > .tip-center { text-align: center; }
+.tip-inner:has(> .tip-center) .tip-timer { margin-inline: auto; transform-origin: center; }
 .tip-note.counting .tip-timer { display: block; }
 
 /* A score that just changed pops once (App.bump). */

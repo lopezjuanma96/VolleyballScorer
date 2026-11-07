@@ -167,7 +167,7 @@
                     </div>`
             } else if (live && active) {
                 const lacking = missing(setupOf(active))
-                body = `<p class="tiny muted" data-tip="rules" data-tip-at="score-under" style="text-align:center;margin-top:10px">${App.rulesText(m.rules)}. El set y el partido se cierran solos al llegar al puntaje.</p>
+                body = `<p class="tiny muted tip-center" data-tip="rules" data-tip-at="score-under" style="margin-top:10px">${App.rulesText(m.rules)}. El set y el partido se cierran solos al llegar al puntaje.</p>
                     <div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
                         ${order().map(side => `<button class="btn btn-primary btn-point" onclick="act(addPoint, ${side === 'home'})">+ ${teamName(side)}</button>`).join('')}
                     </div>
@@ -318,7 +318,7 @@
             const latest = m.sets.at(-1)
             const statuses = [['upcoming', 'Próximo'], ['in_progress', 'En juego'], ['finished_home', `Ganó ${teamName('home')}`], ['finished_away', `Ganó ${teamName('away')}`], ['cancelled', 'Cancelado']]
             document.getElementById('admin').innerHTML = `<h2 class="section">Organización</h2>
-                <p class="small muted" data-tip="admin-rulings" style="margin-bottom:12px">Decisiones administrativas: quedan en el historial con su motivo. Usalas para walkover, abandono o errores de planilla.</p>
+                <p class="small muted" data-tip="admin-rulings">Decisiones administrativas: quedan en el historial con su motivo. Usalas para walkover, abandono o errores de planilla.</p>
                 <div class="stack">
                     <p class="small"><a class="btn-link" href="/manager/match-form.html?id=${m.id}">Editar horario, cancha o reglas</a></p>
                     <div><p class="small" style="margin-bottom:6px">Estado oficial del partido</p><div class="row">${statuses.map(([value, label]) => `<button class="btn btn-sm" ${m.status === value ? 'aria-pressed="true" style="border-color:var(--ink);font-weight:600"' : ''} onclick="act(updateMatchStatus, '${value}')">${label}</button>`).join('')}</div></div>
