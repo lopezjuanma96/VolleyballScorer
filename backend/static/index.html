@@ -23,7 +23,7 @@
         function teamLine(m, side, score, won) {
             const team = side === 'home' ? m.teamHome : m.teamAway
             const sets = m.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away').map(s => side === 'home' ? s.scoreHome : s.scoreAway).join(' ')
-            return `<div class="match-team ${won ? 'won' : ''}"><span class="name">${esc(team.name)}</span><span class="sets">${sets}</span><span class="score">${score}</span></div>`
+            return `<div class="match-team ${won ? 'won' : ''}"><span class="name">${esc(team.name)}</span><span class="sets">${sets}</span><span class="score" data-bump="m${m.id}-${side}">${score}</span></div>`
         }
         function card(m) {
             const winner = App.winner(m)

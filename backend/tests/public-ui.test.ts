@@ -160,3 +160,27 @@ describe('scorer start of set', () => {
         expect(fields).toContain('value="1"')
     })
 })
+describe('info tips and score feedback', () => {
+    test('tips and toasts stay up about as long as the text takes to read, within bounds', () => {
+        const { context } = browser()
+        expect(context.App.readTime('Ok.')).toBe(3500)
+        expect(context.App.readTime(Array(20).fill('palabra').join(' '))).toBe(1500 + 20 * 320)
+        expect(context.App.readTime(Array(200).fill('palabra').join(' '))).toBe(12000)
+    })
+    test('score halves are marked so a change can pop, keyed by match and side', () => {
+        const { context } = browser()
+        context.match = { id: 7, teamHome: {}, teamAway: {} }
+        const box = runInContext("App.scoreBox(match, { home: 3, away: 4 })", context)
+        expect(box).toContain('data-bump="7-home">3<')
+        expect(box).toContain('data-bump="7-away">4<')
+    })
+    test('the scorer keeps the rules one tap away, attached to the set label', async () => {
+        const view = browser()
+        runInContext(await pageScript('./static/manager/game.html'), view.context)
+        view.context.fixture = liveFixture()
+        runInContext('m = fixture; claim = { mine: true }; skipped.add(2); renderScore()', view.context)
+        const html = view.elements.get('score').innerHTML
+        expect(html).toContain('id="score-under"')
+        expect(html).toMatch(/data-tip="rules" data-tip-at="score-under"[^>]*>Mejor de 3/)
+    })
+})

@@ -19,19 +19,19 @@
 
     <dialog id="sub-dialog" aria-labelledby="sub-title">
         <form onsubmit="submitSubstitution(event)" class="stack">
-            <h2 id="sub-title" class="title" style="font-size:18px">Cambio</h2>
+            <h2 id="sub-title" class="title" style="font-size:18px"><span id="sub-title-text">Cambio</span></h2>
+            <p class="small muted" data-tip="substitution">El jugador que entra ocupa la misma posición. El líbero no se registra.</p>
             <div class="form-grid">
                 <div class="field"><label for="sub-out">Sale</label><select id="sub-out" required></select></div>
                 <div class="field"><label for="sub-in">Entra (número)</label><input id="sub-in" type="number" inputmode="numeric" min="0" max="99" required /></div>
             </div>
-            <p class="tiny muted">El jugador que entra ocupa la misma posición. El líbero no se registra.</p>
             <div class="row"><button type="submit" class="btn btn-accent">Registrar cambio</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Volver</button></div>
         </form>
     </dialog>
 
     <dialog id="start-dialog" aria-labelledby="start-title" style="max-width:560px">
         <form onsubmit="submitStart(event)" class="stack" oninput="startDirty = true">
-            <h2 id="start-title" class="title" style="font-size:18px"></h2>
+            <h2 id="start-title" class="title" style="font-size:18px"><span id="start-title-text"></span></h2>
             <div id="start-fields" class="stack"></div>
             <p id="start-error" role="alert" class="error"></p>
             <div class="row"><button type="submit" class="btn btn-accent">Empezar set</button><button type="button" class="btn" onclick="skipStart()">Omitir</button></div>
@@ -97,9 +97,26 @@
             if (heldBefore && !mine()) App.toast(claim ? `Ahora lo anota ${claim.name}.` : 'El partido quedó libre: ya no lo anotás vos.', true)
             heldBefore = mine()
             render()
+            void keepAwake()
             if (openStartAfterLoad) { openStartAfterLoad = false; const active = activeSet(); if (active && !ready(active)) openStart() }
             if (document.getElementById('history').open) await loadHistory()
         }
+
+        // While this device holds a match in play the screen stays on, so the phone does not lock between rallies.
+        let wakeLock = null, wakeRequest = null
+        async function keepAwake() {
+            const want = Boolean(m) && mine() && m.status === 'in_progress' && !document.hidden
+            if (want && !wakeLock && !wakeRequest && navigator.wakeLock) {
+                wakeRequest = navigator.wakeLock.request('screen')
+                    .then(lock => { wakeLock = lock; lock.addEventListener('release', () => { wakeLock = null }); if (!mine()) void lock.release() })
+                    .catch(() => { /* Battery saver or no support: the phone locks as usual. */ })
+                    .finally(() => { wakeRequest = null })
+            } else if (!want && wakeLock) {
+                void wakeLock.release().catch(() => {})
+                wakeLock = null
+            }
+        }
+        document.addEventListener('visibilitychange', () => { void keepAwake() })
 
         function court(positions, serving, side) {
             return App.rotationCourt(i => positions[i], { serving, label: `Rotación de ${teamName(side)}`, team: { match: m, side } })
@@ -134,7 +151,7 @@
             const dot = side => serving === side ? '<span class="serve" title="Saca"></span>' : ''
             const scoreline = `<div class="scoreline">
                     <div class="side"><div class="team-name">${teamName(left)}${dot(left)}</div><div class="club">Sets ${won(left)}</div></div>
-                    <div>${App.scoreBox(m, active ? { home: active.scoreHome, away: active.scoreAway } : { home: won('home'), away: won('away') }, order())}<div class="under">${active ? `Set ${active.setNumber}` : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)}</div></div>
+                    <div>${App.scoreBox(m, active ? { home: active.scoreHome, away: active.scoreAway } : { home: won('home'), away: won('away') }, order())}<div class="under" id="score-under">${active ? `Set ${active.setNumber}` : winner ? `Ganó ${esc(winner.name)}` : App.statusLabel(m.status)}</div></div>
                     <div class="side"><div class="team-name">${dot(right)}${teamName(right)}</div><div class="club">Sets ${won(right)}</div></div>
                 </div>`
             let body = ''
@@ -146,12 +163,12 @@
                 // The set waits for its toss and lineups: one clear step instead of a panel below.
                 body = `<div class="stack" style="margin-top:20px">
                         <button class="btn btn-accent btn-point" onclick="openStart()">Iniciar set ${active.setNumber}</button>
-                        <p class="small muted">Cargá quién saca primero y las formaciones de los dos equipos para seguir la rotación.</p>
                         <div class="spread">${last ? '<button class="btn" onclick="act(undo)">↶ Deshacer último punto</button>' : '<span></span>'}${swapButton()}</div>
                     </div>`
             } else if (live && active) {
                 const lacking = missing(setupOf(active))
-                body = `<div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
+                body = `<p class="tiny muted" data-tip="rules" data-tip-at="score-under" style="text-align:center;margin-top:10px">${App.rulesText(m.rules)}. El set y el partido se cierran solos al llegar al puntaje.</p>
+                    <div class="form-grid" style="margin-top:20px;grid-template-columns:1fr 1fr">
                         ${order().map(side => `<button class="btn btn-primary btn-point" onclick="act(addPoint, ${side === 'home'})">+ ${teamName(side)}</button>`).join('')}
                     </div>
                     <div class="spread" style="margin-top:12px">
@@ -159,7 +176,6 @@
                         ${swapButton()}
                     </div>
                     ${lacking.length ? `<p class="small" style="margin-top:12px;color:var(--warn)">No se sigue la rotación: falta ${listText(lacking)}. Completalo en «Saque y formación inicial».</p>` : ''}
-                    <p class="tiny muted" style="margin-top:8px">${App.rulesText(m.rules)}</p>
                     ${rotationBlock(active, true)}
                     <details class="panel" style="margin-top:20px"><summary>Cargar resultado final del set ${active.setNumber}</summary>
                         <p class="tiny muted" style="margin:8px 0">Para cuando no se anota punto a punto. El ganador se calcula con las reglas del partido.</p>
@@ -213,7 +229,8 @@
             return `<fieldset class="row"><legend class="small muted" style="margin-bottom:6px">Saca primero${suggested ? ' <span class="tiny">· sugerido: alterna con el set anterior</span>' : ''}</legend>
                     ${order().map(side => `<label class="check"><input type="radio" name="${prefix}-serve" value="${side}" ${serve === (side === 'home') ? 'checked' : ''}> ${teamName(side)}</label>`).join('')}
                 </fieldset>
-                <p class="tiny muted">Números de camiseta según la planilla. Arriba la red (posiciones 4, 3 y 2), abajo la línea de fondo (5, 6 y 1). La posición 1 saca.</p>
+                <p class="small muted" id="${prefix}-lineup-label">Formación inicial</p>
+                <p class="small muted" data-tip="lineup-help">Números de camiseta según la planilla. Arriba la red (posiciones 4, 3 y 2), abajo la línea de fondo (5, 6 y 1). La posición 1 saca.</p>
                 <div class="courts">${order().map(lineupInputs).join('')}</div>`
         }
         // Reads the inputs of setupFields. Returns { body } for /lineup or { error }.
@@ -252,8 +269,8 @@
             if (!active || busy || !mine()) return
             startFor = active.id
             startDirty = false
-            document.getElementById('start-title').textContent = `Iniciar set ${active.setNumber}`
-            document.getElementById('start-fields').innerHTML = `<p class="small muted">Para seguir la rotación hacen falta las dos formaciones y quién saca primero.</p>${setupFields(active, 'start')}`
+            document.getElementById('start-title-text').textContent = `Iniciar set ${active.setNumber}`
+            document.getElementById('start-fields').innerHTML = `<p class="small muted" data-tip="set-start" data-tip-at="start-title">Para seguir la rotación hacen falta las dos formaciones y quién saca primero. Si todavía no las tenés, tocá «Omitir» y completalas después.</p>${setupFields(active, 'start')}`
             document.getElementById('start-error').textContent = ''
             document.getElementById('start-dialog').showModal()
         }
@@ -301,8 +318,9 @@
             const latest = m.sets.at(-1)
             const statuses = [['upcoming', 'Próximo'], ['in_progress', 'En juego'], ['finished_home', `Ganó ${teamName('home')}`], ['finished_away', `Ganó ${teamName('away')}`], ['cancelled', 'Cancelado']]
             document.getElementById('admin').innerHTML = `<h2 class="section">Organización</h2>
+                <p class="small muted" data-tip="admin-rulings" style="margin-bottom:12px">Decisiones administrativas: quedan en el historial con su motivo. Usalas para walkover, abandono o errores de planilla.</p>
                 <div class="stack">
-                    <p class="small muted">Decisiones administrativas: quedan en el historial. Usalas para walkover, abandono o errores de planilla. <a class="btn-link" href="/manager/match-form.html?id=${m.id}">Editar horario, cancha o reglas</a>.</p>
+                    <p class="small"><a class="btn-link" href="/manager/match-form.html?id=${m.id}">Editar horario, cancha o reglas</a></p>
                     <div><p class="small" style="margin-bottom:6px">Estado oficial del partido</p><div class="row">${statuses.map(([value, label]) => `<button class="btn btn-sm" ${m.status === value ? 'aria-pressed="true" style="border-color:var(--ink);font-weight:600"' : ''} onclick="act(updateMatchStatus, '${value}')">${label}</button>`).join('')}</div></div>
                     ${active && m.status === 'in_progress' ? `<div><button class="btn btn-sm btn-danger" onclick="act(cancelSet)">Cancelar set ${active.setNumber}</button></div>` : ''}
                     ${m.status !== 'in_progress' && latest?.status === 'cancelled' && latest.points.length ? `<div class="panel small"><p>¿Se cerró el partido por error? El último set conserva ${latest.scoreHome}–${latest.scoreAway}.</p><button class="btn btn-sm" style="margin-top:8px" onclick="openAdjustment(${latest.id}, 'recover')">Recuperar último set</button></div>` : ''}
@@ -373,7 +391,9 @@
                 else App.toast(`Se cortó la conexión, pero el punto quedó anotado${set?.status === 'in_progress' ? ` (${set.scoreHome}–${set.scoreAway})` : ''}. No lo anotes de nuevo.`)
                 return
             }
-            if (res.ok) announce(await res.json())
+            if (!res.ok) return
+            navigator.vibrate?.(15) // A short buzz confirms the point was saved without looking away from the court.
+            announce(await res.json())
         }
         async function undo() {
             const last = lastEntry()
@@ -401,7 +421,7 @@
             const active = activeSet()
             if (!active || busy) return
             subSide = side
-            document.getElementById('sub-title').textContent = `Cambio · ${side === 'home' ? m.teamHome.name : m.teamAway.name}`
+            document.getElementById('sub-title-text').textContent = `Cambio · ${side === 'home' ? m.teamHome.name : m.teamAway.name}`
             document.getElementById('sub-out').innerHTML = active.rotation.positions[side].map((n, i) => `<option value="${n}">${n} (posición ${i + 1})</option>`).join('')
             document.getElementById('sub-in').value = ''
             document.getElementById('sub-dialog').showModal()

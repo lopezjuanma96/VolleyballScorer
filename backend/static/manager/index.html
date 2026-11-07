@@ -12,10 +12,9 @@
     <header class="bar"></header>
     <main class="page">
         <div class="spread">
-            <h1 class="title">Partidos</h1>
+            <h1 class="title" id="matches-title">Partidos</h1>
             <a id="new-match" class="btn btn-primary hidden" href="/manager/match-form.html">Nuevo partido</a>
         </div>
-        <p id="scorer-hint" class="small muted hidden" style="margin-top:4px">Como planillero podés iniciar partidos y anotar puntos. El fixture lo administra la organización.</p>
         <nav id="category-tabs" class="tabs" aria-label="Filtrar por categoría" style="margin-top:12px"></nav>
         <div id="match-list" aria-busy="true"><p class="empty">Cargando partidos…</p></div>
     </main>
@@ -99,7 +98,7 @@
 
         App.ready.then(() => {
             document.getElementById('new-match').classList.toggle('hidden', !App.isAdmin())
-            document.getElementById('scorer-hint').classList.toggle('hidden', App.isAdmin())
+            if (!App.isAdmin()) document.querySelector('main > .spread').insertAdjacentHTML('afterend', '<p class="small muted" data-tip="scorer-role" data-tip-at="matches-title" style="margin-top:4px">Como planillero podés iniciar partidos y anotar puntos. El fixture lo administra la organización.</p>')
             return load()
         }).catch(() => {
             document.getElementById('match-list').innerHTML = '<p class="empty">No pudimos cargar los partidos. <button type="button" class="btn-link" onclick="location.reload()">Reintentar</button></p>'

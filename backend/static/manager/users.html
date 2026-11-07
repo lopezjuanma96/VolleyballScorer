@@ -30,20 +30,20 @@
                         <p class="hint">Opcional. Si lo dejás vacío se usa la parte del email antes de la @.</p>
                     </div>
                     <div class="field">
-                        <label for="new-role">Rol</label>
+                        <label for="new-role" id="new-role-label">Rol</label>
                         <select id="new-role">
                             <option value="scorer" selected>Planillero</option>
                             <option value="admin">Organización</option>
                         </select>
                     </div>
                 </div>
-                <p class="small muted"><strong>Planillero:</strong> iniciar partidos, anotar puntos, formación y cambios.<br /><strong>Organización:</strong> además, fixture, categorías y reglas, clubes, equipos y correcciones. Sólo el administrador principal gestiona usuarios.</p>
+                <p class="small muted" data-tip="roles" data-tip-at="new-role-label"><strong>Planillero:</strong> iniciar partidos, anotar puntos, formación y cambios.<br /><strong>Organización:</strong> además, fixture, categorías y reglas, clubes, equipos y correcciones. Sólo el administrador principal gestiona usuarios.</p>
                 <p id="create-error" class="error hidden" role="alert"></p>
                 <div><button type="submit" class="btn btn-primary" id="create-user">Agregar</button></div>
             </form>
         </section>
         <h2 class="section">Emails habilitados</h2>
-        <p class="small muted">Cambiar el email, el rol o el acceso de una persona cierra todas sus sesiones abiertas.</p>
+        <p class="small muted" data-tip="user-sessions" style="margin-bottom:8px">Cambiar el email, el rol o el acceso de una persona cierra todas sus sesiones abiertas.</p>
         <p id="list-error" class="error hidden" role="alert"></p>
         <div id="user-list" aria-busy="true"><p class="empty">Cargando usuarios…</p></div>
     </main>
