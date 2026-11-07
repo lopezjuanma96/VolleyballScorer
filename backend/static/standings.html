@@ -14,6 +14,7 @@
     <header class="bar"></header>
     <main class="page">
         <h1 class="title">Posiciones</h1>
+        <p class="small muted" data-tip="standings" style="margin-top:4px">PJ: partidos jugados · PG: ganados · PP: perdidos · Sets y Tantos: a favor–en contra · Pts: puntos de la tabla.<span id="points-legend"></span></p>
         <nav id="category-tabs" class="tabs" aria-label="Elegir categoría" style="margin-top:12px"></nav>
         <div id="tables" aria-busy="true"><p class="empty">Cargando posiciones…</p></div>
     </main>
@@ -24,7 +25,7 @@
         function legend(bestOf) {
             const need = Math.ceil(bestOf / 2)
             const results = Array.from({ length: need }, (_, lost) => `${need}–${lost}: ${bestOf - lost}/${lost}`)
-            return `Puntos por partido (mejor de ${bestOf}, ganador/perdedor): ${results.join(' · ')}.`
+            return `Puntos por partido (${bestOf === 1 ? 'un set' : `mejor de ${bestOf}`}, ganador/perdedor): ${results.join(' · ')}.`
         }
         function table(t) {
             const rows = t.rows.map((r, i) => `<tr>
@@ -36,7 +37,7 @@
                 <td class="pts">${r.points}</td></tr>`).join('')
             return `<section><h2 class="section">${esc(t.categoryName)}</h2>${t.rows.length ? `<div class="table-wrap"><table class="table">
                 <thead><tr><th>#</th><th class="left">Equipo</th><th title="Partidos jugados">PJ</th><th title="Ganados">PG</th><th title="Perdidos">PP</th><th>Sets</th><th class="hide-sm">Tantos</th><th>Pts</th></tr></thead>
-                <tbody>${rows}</tbody></table></div><p class="tiny muted" style="margin-top:8px">${legend(t.bestOf)}</p>` : '<p class="muted small">Sin equipos.</p>'}</section>`
+                <tbody>${rows}</tbody></table></div>` : '<p class="muted small">Sin equipos.</p>'}</section>`
         }
         function render() {
             if (activeCategory && !tables.some(t => t.categoryId === activeCategory)) activeCategory = null
@@ -44,6 +45,8 @@
             document.getElementById('category-tabs').innerHTML = tables.length > 1 ? [{ categoryId: null, categoryName: 'Todas' }, ...tables].map(t => `<button class="tab" onclick="selectCategory(${t.categoryId})" aria-pressed="${t.categoryId === activeCategory}">${esc(t.categoryName)}</button>`).join('') : ''
             document.getElementById('tables').innerHTML = selected.map(table).join('') || '<p class="empty">Todavía no hay categorías.</p>'
             document.getElementById('tables').setAttribute('aria-busy', 'false')
+            const formats = [...new Set(selected.filter(t => t.rows.length).map(t => t.bestOf))].sort()
+            document.getElementById('points-legend').textContent = formats.map(f => ` ${legend(f)}`).join('')
         }
         function selectCategory(id) {
             activeCategory = id

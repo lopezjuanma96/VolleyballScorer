@@ -61,7 +61,7 @@ window.App = {
     },
     // Score split down the middle, one half per team, in the given left-to-right order.
     scoreBox(match, values, order = ['home', 'away']) {
-        const half = side => { const bg = App.teamBackground(match, side); return `<span class="${bg.cls}"${bg.style ? ` style="${bg.style}"` : ''}>${values[side]}</span>` }
+        const half = side => { const bg = App.teamBackground(match, side); return `<span class="${bg.cls}"${bg.style ? ` style="${bg.style}"` : ''}><span data-bump="${match.id}-${side}">${values[side]}</span></span>` }
         return `<div class="score-box big" role="group" aria-label="${values[order[0]]}–${values[order[1]]}">${order.map(half).join('')}</div>`
     },
     // Text color for the tournament accent: ink on light accents, white on dark ones.
@@ -79,13 +79,138 @@ window.App = {
         return r.bestOf === 1 ? `Un set a ${r.setPoints}${cap}` : `Mejor de ${r.bestOf} · sets a ${r.setPoints}, desempate a ${r.tiebreakPoints} · diferencia ${r.minLead}${cap}`
     },
     statusLabel(status) { return { upcoming: 'Próximo', in_progress: 'En juego', finished_home: 'Final', finished_away: 'Final', cancelled: 'Cancelado' }[status] ?? status },
+    // Milliseconds to read a text without hurry: toasts and info tips stay up about this long.
+    readTime(text) { return Math.min(12000, Math.max(3500, 1500 + String(text).trim().split(/\s+/).length * 320)) },
     toast(message, error = false) {
         let toast = document.getElementById('toast')
-        if (!toast) { toast = document.createElement('div'); toast.id = 'toast'; toast.setAttribute('role', 'status'); document.body.append(toast) }
+        if (!toast) {
+            toast = document.createElement('div'); toast.id = 'toast'; toast.setAttribute('role', 'status')
+            toast.addEventListener('click', () => { clearTimeout(App.toastTimer); toast.classList.remove('show') })
+            document.body.append(toast)
+        }
         toast.textContent = message
         toast.className = error ? 'toast error' : 'toast'
+        void toast.offsetWidth // Restart the entrance when a toast replaces another.
+        toast.classList.add('show')
         clearTimeout(App.toastTimer)
-        App.toastTimer = setTimeout(() => { toast.classList.add('hidden') }, 5000)
+        App.toastTimer = setTimeout(() => { toast.classList.remove('show') }, App.readTime(message) + (error ? 2000 : 0))
+    },
+
+    // --- Info tips ---
+    // Explanations fold into an (i) next to what they explain. Write `<p class="small muted" data-tip="key">…</p>`
+    // right after that line, or name the line's id in `data-tip-at`; App.scan turns it into a tip. The first time a
+    // device meets a key, the text stays open while its line is on screen, about as long as it takes to read, and
+    // then folds; the (i) opens and closes it after that. Pages re-render on every point, so state lives per key.
+    tipState: new Map(), // key → { open, anchor, auto: null | { started, visible, hovered, note, timer, animation } }
+    tipAnchors: new WeakMap(),
+    tipIds: 0,
+    tipSeen(key, mark = false) {
+        let seen
+        try { seen = new Set(JSON.parse(localStorage.getItem('tips-seen') ?? '[]')) } catch { seen = new Set() }
+        if (!mark) return seen.has(key)
+        seen.add(key)
+        try { localStorage.setItem('tips-seen', JSON.stringify([...seen])) } catch { /* Private mode: it shows again next visit. */ }
+    },
+    tipObserver() {
+        App.tipWatcher ??= new IntersectionObserver(entries => {
+            for (const entry of entries) {
+                const key = App.tipAnchors.get(entry.target), state = App.tipState.get(key)
+                if (!state?.auto || state.anchor !== entry.target) continue
+                state.auto.visible = entry.isIntersecting && entry.intersectionRatio >= 0.5
+                if (state.auto.visible && !state.auto.started) { state.auto.started = true; state.open = true; App.paintTip(key); App.timeTip(key) }
+                App.runTip(key)
+            }
+        }, { threshold: [0, 0.5, 1] })
+        return App.tipWatcher
+    },
+    enhanceTip(el) {
+        const key = el.dataset.tip
+        el.removeAttribute('data-tip')
+        const anchor = el.dataset.tipAt ? document.getElementById(el.dataset.tipAt) : el.previousElementSibling
+        if (!/^[\w-]+$/.test(key ?? '') || !anchor) return // Without a line to attach to, the text simply stays visible.
+        const note = document.createElement('div'), inner = document.createElement('div'), timer = document.createElement('span')
+        note.className = 'tip-note'; note.id = `tip-${++App.tipIds}`; note.dataset.tipKey = key
+        inner.className = 'tip-inner'; timer.className = 'tip-timer'
+        el.replaceWith(note)
+        inner.append(el, timer)
+        note.append(inner)
+        anchor.querySelectorAll(`:scope > .tip-btn[data-tip-key="${key}"]`).forEach(old => old.remove())
+        const button = document.createElement('button')
+        button.type = 'button'; button.className = 'tip-btn'; button.textContent = 'i'; button.dataset.tipKey = key
+        button.setAttribute('aria-controls', note.id)
+        button.setAttribute('aria-label', 'Más información')
+        button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); App.toggleTip(key) })
+        anchor.append(button)
+        let state = App.tipState.get(key)
+        if (!state) {
+            const auto = !App.tipSeen(key) && typeof IntersectionObserver === 'function' && typeof timer.animate === 'function'
+            state = { open: false, anchor: null, auto: auto ? { started: false, visible: false, hovered: false } : null }
+            App.tipState.set(key, state)
+        }
+        App.paintTip(key)
+        if (!state.auto) return
+        if (state.anchor && state.anchor !== anchor) App.tipObserver().unobserve(state.anchor)
+        state.anchor = anchor
+        Object.assign(state.auto, { note, timer })
+        App.tipAnchors.set(anchor, key)
+        App.tipObserver().observe(anchor)
+        note.addEventListener('pointerenter', () => { if (state.auto) { state.auto.hovered = true; App.runTip(key) } })
+        note.addEventListener('pointerleave', () => { if (state.auto) { state.auto.hovered = false; App.runTip(key) } })
+        if (state.auto.started) App.timeTip(key)
+    },
+    // The countdown bar is the timer: it pauses while the line is off screen, hovered or the tab is hidden.
+    timeTip(key) {
+        const auto = App.tipState.get(key)?.auto
+        if (!auto?.timer) return
+        const previous = auto.animation
+        auto.duration ??= App.readTime(auto.note.textContent)
+        auto.animation = auto.timer.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: auto.duration, easing: 'linear', fill: 'forwards' })
+        if (previous) { auto.animation.currentTime = previous.currentTime; previous.cancel() }
+        auto.animation.onfinish = () => App.endTip(key, false)
+        App.runTip(key)
+    },
+    runTip(key) {
+        const auto = App.tipState.get(key)?.auto
+        if (!auto?.animation) return
+        if (auto.visible && !auto.hovered && !document.hidden) auto.animation.play()
+        else auto.animation.pause()
+    },
+    endTip(key, open) {
+        const state = App.tipState.get(key)
+        if (!state) return
+        if (state.auto) {
+            state.auto.animation?.cancel()
+            if (state.anchor) App.tipObserver().unobserve(state.anchor)
+            state.auto = null
+        }
+        state.open = open
+        App.tipSeen(key, true)
+        App.paintTip(key)
+    },
+    toggleTip(key) { App.endTip(key, !App.tipState.get(key)?.open) },
+    paintTip(key) {
+        const state = App.tipState.get(key)
+        document.querySelectorAll(`.tip-note[data-tip-key="${key}"]`).forEach(note => {
+            note.classList.toggle('open', state.open)
+            note.classList.toggle('counting', Boolean(state.auto?.started))
+        })
+        document.querySelectorAll(`.tip-btn[data-tip-key="${key}"]`).forEach(button => button.setAttribute('aria-expanded', String(state.open)))
+    },
+
+    // A number marked `data-bump="key"` pops briefly when it changes between renders (a point, a set).
+    bumped: new Map(),
+    bump(el) {
+        const key = el.dataset.bump, value = el.textContent
+        const previous = App.bumped.get(key)
+        App.bumped.set(key, value)
+        if (previous !== undefined && previous !== value) el.classList.add('bump')
+    },
+    // Enhances markup as it appears, while the page is parsed or after a render.
+    scan(root) {
+        if (!root.querySelectorAll) return
+        const all = selector => [...(root.matches?.(selector) ? [root] : []), ...root.querySelectorAll(selector)]
+        all('[data-tip]').forEach(App.enhanceTip)
+        all('[data-bump]').forEach(App.bump)
     },
     watch(refresh) {
         let source, timer, busy = false, queued = false
@@ -147,6 +272,12 @@ window.App = {
         }
         App.header()
     },
+}
+if (typeof MutationObserver === 'function' && document.documentElement) {
+    new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) if (node.nodeType === 1 && node.isConnected) App.scan(node)
+    }).observe(document.documentElement, { childList: true, subtree: true })
+    document.addEventListener('visibilitychange', () => App.tipState.forEach((_, key) => App.runTip(key)))
 }
 App.ready = App.init()
 window.addEventListener('unhandledrejection', () => App.toast('No se pudo completar la operación. Intentá nuevamente.', true))

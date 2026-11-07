@@ -13,7 +13,6 @@
     <main class="page page-narrow">
         <h1 class="title" id="form-title">Nuevo partido</h1>
         <form id="match-form" class="stack" style="margin-top:16px" novalidate>
-            <p id="edit-note" class="small muted hidden">Editás horario, cancha y reglas. La categoría y los equipos no se pueden cambiar.</p>
             <div class="form-grid">
                 <div class="field"><label for="category">Categoría</label><select id="category" required><option value="">Elegí una categoría…</option></select></div>
                 <div class="field"><label for="court">Cancha</label><select id="court"><option value="court1">Cancha 1</option><option value="court2">Cancha 2</option></select></div>
@@ -112,7 +111,7 @@
                 document.title = 'Editar partido · Panel'
                 $('form-title').textContent = 'Editar partido'
                 $('save-button').textContent = 'Guardar cambios'
-                $('edit-note').classList.remove('hidden')
+                $('form-title').insertAdjacentHTML('afterend', '<p class="small muted" data-tip="match-edit" style="margin-top:4px">Editás horario, cancha y reglas. La categoría y los equipos no se pueden cambiar.</p>')
                 $('rules-edit-note').classList.remove('hidden')
                 $('category').value = editingMatch.categoryId
                 updateCategory()
