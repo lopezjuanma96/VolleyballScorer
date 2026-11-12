@@ -70,6 +70,42 @@ integration('API against an isolated PostgreSQL database', () => {
         const expired = await sign({ sub: 'manager', exp: 1 }, process.env.SESSION_SECRET!, 'HS256')
         expect((await app.request('/api/auth/me', { headers: { Cookie: `session=${expired}` } })).status).toBe(401)
     })
+    test('API tokens: bearer only, admin without user management, no self-renewal, revocable', async () => {
+        expect((await request('/api/auth/token', 'POST', { hours: 13 })).status).toBe(400)
+        expect((await request('/api/auth/token', 'POST', { hours: 1 }, false)).status).toBe(401)
+        const issued = await request('/api/auth/token', 'POST', { hours: 1 })
+        expect(issued.status).toBe(201)
+        const { token, expiresAt } = await issued.json() as any
+        expect(new Date(expiresAt).getTime() - Date.now()).toBeLessThanOrEqual(3600_000)
+        const bearer = (path: string, value: string, method = 'GET', body?: unknown) => app.request(path, {
+            method, headers: { Authorization: `Bearer ${value}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        })
+        const me = await bearer('/api/auth/me', token)
+        expect(me.status).toBe(200)
+        expect(await me.json()).toMatchObject({ role: 'admin', manager: false })
+        const created = await bearer('/api/categories', token, 'POST', { name: `${name}-token` })
+        expect(created.status).toBe(201)
+        await db.execute(sql`delete from categories where id = ${(await created.json() as any).id}`)
+        expect((await bearer('/api/users', token)).status).toBe(403)
+        expect((await bearer('/api/auth/token', token, 'POST', { hours: 1 })).status).toBe(403)
+        // A browser session is not a bearer token, and an API token is not a cookie.
+        expect((await bearer('/api/auth/me', cookie.slice('session='.length))).status).toBe(401)
+        expect((await app.request('/api/auth/me', { headers: { Cookie: `session=${token}` } })).status).toBe(401)
+        expect((await bearer('/api/auth/me', `${token}x`)).status).toBe(401)
+
+        const email = `${name}-token@example.com`
+        const member = await create('/api/users', { email, role: 'admin' })
+        try {
+            const { issueApiToken } = await import('../src/middleware/auth')
+            const memberToken = (await issueApiToken({ userId: member.id, username: email, displayName: email, role: 'admin' }, 0, 1)).token
+            expect((await bearer('/api/auth/me', memberToken)).status).toBe(200)
+            expect((await request(`/api/users/${member.id}`, 'PUT', { role: 'scorer' })).status).toBe(200)
+            expect((await bearer('/api/auth/me', memberToken)).status).toBe(401)
+        } finally {
+            await request(`/api/users/${member.id}`, 'DELETE')
+        }
+    })
     test('validates teams and creates match atomically', async () => {
         const data = { teamHomeId: home, teamAwayId: away, categoryId, court: 1, scheduledAt: new Date().toISOString() }
         expect((await request('/api/matches', 'POST', { ...data, teamAwayId: home })).status).toBe(400)

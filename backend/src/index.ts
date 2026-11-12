@@ -64,7 +64,7 @@ app.route('/api/claims', claimRoutes)
 app.route('/api/phases', phaseRoutes)
 app.all('/api/*', c => c.json({ error: 'Ruta no encontrada.' }, 404))
 // Scorers only see the match list and scoreboard; the API enforces the same roles.
-const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/match-form.html', '/manager/phases.html'])
+const adminPages = new Set(['/manager/categories.html', '/manager/clubs.html', '/manager/teams.html', '/manager/match-form.html', '/manager/phases.html', '/manager/token.html'])
 app.use('/manager/*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
     const session = await getSession(c)

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Token para scripts · Panel</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="page">
+        <h1 class="title">Token para scripts</h1>
+        <p class="muted small" style="margin-top:8px">Permite que un script o un asistente cargue clubes, equipos y partidos con tus permisos de organización (no gestiona usuarios). Vence solo; cambiar tu acceso en Usuarios o la contraseña del administrador lo anula antes.</p>
+
+        <form id="token-form" class="panel stack" style="margin-top:16px" novalidate>
+            <div class="form-grid">
+                <div class="field"><label for="token-hours">Vigencia</label>
+                    <select id="token-hours">
+                        <option value="1">1 hora</option>
+                        <option value="2" selected>2 horas</option>
+                        <option value="4">4 horas</option>
+                        <option value="12">12 horas</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row"><button type="submit" class="btn btn-primary" id="token-button">Generar token</button></div>
+        </form>
+
+        <section id="token-result" class="panel stack hidden" style="margin-top:16px">
+            <div class="field"><label for="token-value">Token</label><input type="text" id="token-value" readonly spellcheck="false" autocomplete="off" /></div>
+            <p class="small muted" id="token-expiry"></p>
+            <p class="small muted">Pegalo sólo en el campo seguro que te pida el asistente, nunca en el chat. Se muestra una sola vez.</p>
+            <div class="row"><button type="button" class="btn" id="copy-button">Copiar</button></div>
+        </section>
+    </main>
+    <script>
+        const $ = id => document.getElementById(id)
+        $('token-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            $('token-button').disabled = true
+            try {
+                const response = await App.send('/api/auth/token', 'POST', { hours: Number($('token-hours').value) })
+                if (!response.ok) return
+                const { token, expiresAt } = await response.json()
+                $('token-value').value = token
+                $('token-expiry').textContent = `Vence el ${App.date(expiresAt)} a las ${App.time(expiresAt)}.`
+                $('token-result').classList.remove('hidden')
+                $('token-value').select()
+            } finally { $('token-button').disabled = false }
+        })
+        $('copy-button').addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText($('token-value').value); App.toast('Token copiado.') }
+            catch { $('token-value').select() }
+        })
+    </script>
+</body>
+</html>
