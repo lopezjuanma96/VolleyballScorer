@@ -7,7 +7,7 @@
    else stays ink on paper. */
 :root {
     --accent: #b9ed64; --accent-ink: #16181d;
-    --ink: #16181d; --muted: #6b7079; --faint: #9aa0a8;
+    --ink: #16181d; --muted: #646973; --faint: #80868f;
     --line: #e6e7ea; --soft: #f6f7f8; --paper: #fff;
     --danger: #b42318; --ok: #1f7a3a; --live: #e5484d; --live-text: #c62a2f; --warn: #a15c07;
     /* Team sides without a club logo: home light red, away light blue. */
@@ -189,6 +189,15 @@ dialog[open]::backdrop { animation: fade-in .18s ease-out; }
 @keyframes fade-in { from { opacity: 0; } }
 .login { max-width: 360px; margin: 12vh auto 0; padding: 0 20px; }
 
+/* Phones, upright or sideways, are read at arm's length courtside: body text 16px, nothing secondary below 13px. */
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) {
+    body { font-size: 16px; }
+    .small, .match-time, .match-team .sets, .day, .tab, .field label, .scoreline .club, .btn-sm, .table, h2.section { font-size: 14px; }
+    .tiny, .match-meta, .hint, .field .hint, .connection, .footer, .table th, .scoreline .under, .badge { font-size: 13px; }
+    .rally-strip span { font-size: 12px; }
+    .nav a, .bar-end a, .bar-end button { font-size: 15px; }
+    .tip-btn { width: 20px; height: 20px; font-size: 13px; }
+}
 @media (max-width: 640px) {
     /* Brand and session on top, nav on its own scrollable row. */
     .bar-inner { gap: 0 16px; padding: 0 16px; height: auto; flex-wrap: wrap; }
