@@ -19,7 +19,7 @@
         <div id="tables" aria-busy="true"><p class="empty">Cargando posiciones…</p></div>
     </main>
     <script>
-        let tables = [], activeCategory = Number(new URLSearchParams(location.search).get('c')) || null
+        let tables = [], phases = [], matches = [], activeCategory = Number(new URLSearchParams(location.search).get('c')) || null
         const esc = App.escape
         // Winner: sets of the format minus sets lost. Loser: sets won.
         function legend(bestOf) {
@@ -27,6 +27,8 @@
             const results = Array.from({ length: need }, (_, lost) => `${need}–${lost}: ${bestOf - lost}/${lost}`)
             return `Puntos por partido (${bestOf === 1 ? 'un set' : `mejor de ${bestOf}`}, ganador/perdedor): ${results.join(' · ')}.`
         }
+        // Knockout phases of the category, below its table.
+        const brackets = t => phases.filter(p => p.categoryId === t.categoryId).map(p => `<section><h2 class="section">${esc(p.name)}</h2>${App.bracket(p, matches)}</section>`).join('')
         function table(t) {
             const rows = t.rows.map((r, i) => `<tr>
                 <td class="muted">${i + 1}</td>
@@ -37,7 +39,7 @@
                 <td class="pts">${r.points}</td></tr>`).join('')
             return `<section><h2 class="section">${esc(t.categoryName)}</h2>${t.rows.length ? `<div class="table-wrap"><table class="table">
                 <thead><tr><th>#</th><th class="left">Equipo</th><th title="Partidos jugados">PJ</th><th title="Ganados">PG</th><th title="Perdidos">PP</th><th>Sets</th><th class="hide-sm">Tantos</th><th>Pts</th></tr></thead>
-                <tbody>${rows}</tbody></table></div>` : '<p class="muted small">Sin equipos.</p>'}</section>`
+                <tbody>${rows}</tbody></table></div>` : '<p class="muted small">Sin equipos.</p>'}</section>${brackets(t)}`
         }
         function render() {
             if (activeCategory && !tables.some(t => t.categoryId === activeCategory)) activeCategory = null
@@ -53,7 +55,11 @@
             history.replaceState(null, '', id ? `?c=${id}` : location.pathname)
             render()
         }
-        async function load() { tables = await App.json('/api/standings'); render() }
+        async function load() {
+            ;[tables, phases] = await Promise.all([App.json('/api/standings'), App.json('/api/phases')])
+            matches = phases.length ? await App.json('/api/matches') : []
+            render()
+        }
         App.ready.then(load).catch(() => {
             document.getElementById('tables').innerHTML = '<p class="empty">No pudimos cargar las posiciones. <button class="btn-link" onclick="location.reload()">Reintentar</button></p>'
         }).finally(() => App.watch(load))

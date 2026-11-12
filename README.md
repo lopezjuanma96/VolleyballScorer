@@ -4,9 +4,10 @@ Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación,
 
 - Público, sin cuenta: fixture, resultados, punto a punto, rotación en vivo y tabla de posiciones; actualización automática con SSE.
 - Planilleros: toman un partido libre (o lo toman al iniciarlo) y sólo quien lo tiene lo anota hasta liberarlo; la organización puede forzar la liberación si alguien se fue sin liberarlo. Inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
-- Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture y decisiones administrativas con historial.
+- Organización (admin): además categorías con sus reglas, clubes con logos, equipos, fixture, fases eliminatorias y decisiones administrativas con historial.
 - Administrador principal (`manager` del `.env`): todo lo anterior y además decide quién entra: carga los emails de Google habilitados con su rol. Planilleros y organización entran con «Ingresar con Google»; un email que no está en la lista ve «No sos parte de la organización».
-- Reglas por categoría (mejor de 1/3/5/7, puntos por set, desempate, diferencia mínima y tope opcional), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
+- Reglas por categoría (mejor de 1/3/5/7, puntos por set, diferencia mínima y tope opcional; el set decisivo puede tener sus propios puntos, diferencia y tope), copiadas a cada partido. Los sets y el partido se cierran solos al cumplirse; deshacer el último punto los reabre.
+- Fases eliminatorias («Eliminatorias»): la organización elige categoría, cantidad de equipos y la siembra (de la tabla, desde cualquier puesto, o a mano), con tercer puesto opcional. Se crean los partidos de la llave con descripción, cancha y horario; el ganador pasa solo al partido siguiente. Una categoría puede tener varias fases en paralelo (Copa de Oro, Copa de Plata). Sus partidos aparecen en el fixture con la fase y la descripción, la llave se ve en Posiciones y no suman a la tabla.
 - Tabla automática: el ganador suma *sets del formato − sets perdidos* y el perdedor *sets ganados* (mejor de 3: 3/0 o 2/1; mejor de 5: 5/0, 4/1 o 3/2). Un resultado adjudicado por la organización que los sets no respaldan (walkover, abandono) vale como administrativo: todos los puntos para el ganador, 0 para el perdedor.
 
 Bun · Hono · TypeScript · Drizzle · PostgreSQL · Tailwind · Docker Compose.
@@ -40,7 +41,7 @@ En Railway/Render se despliega la misma imagen con `DATABASE_URL` y un volumen p
 
 ## Identidad del torneo
 
-Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`. El acento colorea los partidos en juego, quién saca en la cancha de rotación y las acciones clave del planillero (iniciar partido y set, guardar formación, cambios, resultado del set). Cada equipo se identifica con el logo de su club, atenuado, detrás de su mitad del marcador y de su cancha de rotación; sin logo (o si los dos equipos son del mismo club) se usa rojo claro para el local y azul claro para el visitante; el texto encima se elige solo, negro o blanco, según el contraste. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
+Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCENT` (hexadecimal entre comillas) y `TOURNAMENT_TIMEZONE`; `TOURNAMENT_COURTS` (default 4) fija cuántas canchas se ofrecen al programar. El acento colorea los partidos en juego, quién saca en la cancha de rotación y las acciones clave del planillero (iniciar partido y set, guardar formación, cambios, resultado del set). Cada equipo se identifica con el logo de su club, atenuado, detrás de su mitad del marcador y de su cancha de rotación; sin logo (o si los dos equipos son del mismo club) se usa rojo claro para el local y azul claro para el visitante; el texto encima se elige solo, negro o blanco, según el contraste. No se necesita rebuild para cambiarlas: `scripts/stack.sh up -d --force-recreate app`. El diseño base no descarga imágenes ni fuentes de terceros.
 
 ## Preparar el fixture
 
@@ -49,6 +50,7 @@ Variables en `.env`: `TOURNAMENT_NAME`, `TOURNAMENT_SUBTITLE`, `TOURNAMENT_ACCEN
 3. Creá equipos y partidos, o importá equipos por CSV. Cada partido copia las reglas de su categoría; podés cambiarlas para un partido puntual.
 4. El planillero abre el partido, toca «Iniciar partido», carga (opcional) quién saca y las formaciones, y anota punto a punto o el resultado final de cada set.
 5. Sets y partido se cierran solos según las reglas; la tabla se actualiza al instante.
+6. Al terminar la fase clasificatoria, armá en **Eliminatorias** cada fase con sus equipos; los partidos siguientes se completan a medida que hay ganadores.
 
 Cada set empieza con «Iniciar set», que pide quién saca primero y las dos formaciones; sin esos tres datos no se sigue la rotación (se puede omitir con aviso y completar después en «Saque y formación inicial»). «Invertir lados» cambia qué equipo se ve a la izquierda sólo en la pantalla del planillero, para acompañar el cambio de cancha. La rotación se recalcula en cada punto: un equipo rota cuando recupera el saque. Los cambios reemplazan al jugador en su posición (el líbero no se registra). Desde «Editar» la organización cambia horario, cancha o reglas. La programación muestra la zona del dispositivo y su equivalencia en la zona del torneo. La organización puede corregir sets cerrados con motivo, adjudicar un partido (walkover, abandono), cancelar sets y recuperar el último set cancelado; todo queda en el historial con el usuario que lo hizo.
 

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db'
 import { categories, clubs, matches, teams } from '../db/schema'
 import { publicReads } from '../read-cache'
@@ -17,7 +17,8 @@ standingRoutes.get('/', async c => {
         const [teamRows, matchRows] = await Promise.all([
             db.select({ id: teams.id, name: teams.name, categoryId: teams.categoryId, clubName: clubs.name, clubLogo: clubs.logo }).from(teams).innerJoin(clubs, eq(teams.clubId, clubs.id)).where(inArray(teams.categoryId, ids)),
             db.query.matches.findMany({
-                where: inArray(matches.categoryId, ids),
+                // Knockout matches decide the phase, not the table.
+                where: and(inArray(matches.categoryId, ids), isNull(matches.phaseId)),
                 with: { sets: { with: { points: { orderBy: (p, { desc }) => [desc(p.id)], limit: 1 } } } },
             }),
         ])

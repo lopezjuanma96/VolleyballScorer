@@ -70,7 +70,7 @@ describe('public live updates', () => {
     })
 })
 const fixture = (status: string) => ({
-    id: 1, status, categoryId: 1, categoryName: 'Mixto', court: 'court1', scheduledAt: '2026-10-28T18:00:00Z',
+    id: 1, status, categoryId: 1, categoryName: 'Mixto', court: 1, scheduledAt: '2026-10-28T18:00:00Z',
     teamHome: { id: 1, name: 'Local', clubName: 'Local' },
     teamAway: { id: 2, name: 'Visitante <A>', clubName: 'Visitante' },
     sets: [{ id: 1, setNumber: 1, status: 'finished_home', scoreHome: 25, scoreAway: 10, points: [] }],
@@ -86,11 +86,11 @@ describe('official match result', () => {
         const view = browser()
         runInContext(await pageScript('./static/index.html'), view.context)
         view.context.fixture = fixture('finished_away')
-        const card = runInContext('card(fixture)', view.context)
+        const card = runInContext('App.matchRow(fixture)', view.context)
         expect(card).toContain('Ganó Visitante &lt;A&gt;')
         expect(card).not.toContain('Ganó Local')
         view.context.fixture = { ...fixture('finished_home'), sets: [] }
-        expect(runInContext('card(fixture)', view.context)).toContain('Ganó Local')
+        expect(runInContext('App.matchRow(fixture)', view.context)).toContain('Ganó Local')
     })
     test('detail shows the official winner separately from recorded set totals', async () => {
         const view = browser()

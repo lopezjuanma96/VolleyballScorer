@@ -1,20 +1,22 @@
 import { Hono } from 'hono'
 import { db } from '../db'
-import { matches, sets, points, teams, clubs, categories, scoringAudit, setLineups, substitutions } from '../db/schema'
+import { matches, sets, points, teams, clubs, categories, scoringAudit, setLineups, substitutions, phases } from '../db/schema'
 import { HTTPException } from 'hono/http-exception'
 import { eq, and, inArray, desc, type SQL } from 'drizzle-orm'
 import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
 import { publicReads } from '../read-cache'
 import { rulesOf } from '../rules'
 import { rotationState } from '../rotation'
-import { requireHolder } from '../scoring'
+import { advanceFrom, requireHolder } from '../scoring'
 
 const matchRoutes = new Hono()
 
+type TeamWithClub = typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
 type MatchWithRelations = typeof matches.$inferSelect & {
     category: typeof categories.$inferSelect
-    teamHome: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
-    teamAway: typeof teams.$inferSelect & { club: typeof clubs.$inferSelect }
+    phase: typeof phases.$inferSelect | null
+    teamHome: TeamWithClub | null
+    teamAway: TeamWithClub | null
     sets: (typeof sets.$inferSelect & { points: (typeof points.$inferSelect)[] })[]
 }
 type SetDetail = typeof sets.$inferSelect & {
@@ -22,7 +24,22 @@ type SetDetail = typeof sets.$inferSelect & {
     lineups: (typeof setLineups.$inferSelect)[]
     substitutions: (typeof substitutions.$inferSelect)[]
 }
-function buildMatchShape(match: MatchWithRelations) {
+// Labels of the matches that feed knockout matches still waiting for a team.
+async function sourceLabels(rows: (typeof matches.$inferSelect)[]) {
+    const ids = [...new Set(rows.flatMap(m => [!m.teamHomeId && m.homeFromMatchId, !m.teamAwayId && m.awayFromMatchId]).filter((id): id is number => Boolean(id)))]
+    if (!ids.length) return new Map<number, string>()
+    const found = await db.select({ id: matches.id, label: matches.label }).from(matches).where(inArray(matches.id, ids))
+    return new Map(found.map(m => [m.id, m.label || `partido ${m.id}`]))
+}
+
+function teamShape(team: TeamWithClub | null, from: number | null, losers: boolean, labels: Map<number, string>) {
+    if (team) return { id: team.id, name: team.name, clubName: team.club.name, clubLogo: team.club.logo ?? null }
+    // A knockout side still waiting for an earlier result.
+    const source = from ? labels.get(from) ?? `partido ${from}` : null
+    return { id: null, name: source ? `${losers ? 'Perdedor' : 'Ganador'} de ${source}` : 'A definir', clubName: '', clubLogo: null, pending: true }
+}
+
+function buildMatchShape(match: MatchWithRelations, labels: Map<number, string>) {
     const setsWithScores = match.sets
         .sort((a, b) => a.setNumber - b.setNumber)
         .map((s) => {
@@ -46,24 +63,19 @@ function buildMatchShape(match: MatchWithRelations) {
         scheduledAt: match.scheduledAt,
         status: match.status,
         rules: rulesOf(match),
-        teamHome: {
-            id: match.teamHome.id,
-            name: match.teamHome.name,
-            clubName: match.teamHome.club.name,
-            clubLogo: match.teamHome.club.logo ?? null,
-        },
-        teamAway: {
-            id: match.teamAway.id,
-            name: match.teamAway.name,
-            clubName: match.teamAway.club.name,
-            clubLogo: match.teamAway.club.logo ?? null,
-        },
+        label: match.label,
+        phase: match.phase ? { id: match.phase.id, name: match.phase.name } : null,
+        round: match.round,
+        slot: match.slot,
+        teamHome: teamShape(match.teamHome, match.homeFromMatchId, match.fromLosers, labels),
+        teamAway: teamShape(match.teamAway, match.awayFromMatchId, match.fromLosers, labels),
         sets: setsWithScores,
     }
 }
 
 const withClause = {
     category: true as const,
+    phase: true as const,
     teamHome: { with: { club: true as const } },
     teamAway: { with: { club: true as const } },
     sets: {
@@ -91,7 +103,8 @@ matchRoutes.get('/', async (c) => {
             with: withClause,
         })
 
-        return rows.map(buildMatchShape)
+        const labels = await sourceLabels(rows)
+        return rows.map(row => buildMatchShape(row, labels))
     }), 200, { 'Content-Type': 'application/json; charset=UTF-8' })
 })
 
@@ -109,7 +122,7 @@ matchRoutes.get('/:id', async (c) => {
 
         if (!match) throw new HTTPException(404, { message: 'Partido no encontrado.' })
 
-        const base = buildMatchShape(match)
+        const base = buildMatchShape(match, await sourceLabels([match]))
         const sortedSets = ([...match.sets] as SetDetail[]).sort((a, b) => a.setNumber - b.setNumber)
         const setsWithPoints = base.sets.map((s, i) => {
             const detail = sortedSets[i]
@@ -140,13 +153,13 @@ matchRoutes.get('/:id/history', scorerOnly, async c => {
 })
 
 matchRoutes.post('/', adminOnly, async (c) => {
-    const { teamHomeId, teamAwayId, categoryId, court, scheduledAt, rules } = await c.req.json()
+    const { teamHomeId, teamAwayId, categoryId, court, scheduledAt, rules, label } = await c.req.json()
 
     const result = await db.transaction(async (tx) => {
         await validateTeams(tx, teamHomeId, teamAwayId, categoryId)
         const [category] = await tx.select().from(categories).where(eq(categories.id, categoryId))
         const [match] = await tx.insert(matches).values({
-            teamHomeId, teamAwayId, categoryId, court,
+            teamHomeId, teamAwayId, categoryId, court, label: label ?? null,
             scheduledAt: new Date(scheduledAt),
             ...(rules ?? rulesOf(category)),
         }).returning()
@@ -174,11 +187,16 @@ matchRoutes.put('/:id', scorerOnly, async (c) => {
     if (body.teamHomeId !== undefined) updates.teamHomeId = body.teamHomeId
     if (body.teamAwayId !== undefined) updates.teamAwayId = body.teamAwayId
     if (body.rules !== undefined) Object.assign(updates, body.rules)
+    if (body.label !== undefined) updates.label = body.label
 
     const row = await db.transaction(async tx => {
         const [current] = await tx.select().from(matches).where(eq(matches.id, id)).for('update')
         if (!current) return null
-        await validateTeams(tx, updates.teamHomeId ?? current.teamHomeId, updates.teamAwayId ?? current.teamAwayId, current.categoryId)
+        if (current.phaseId) {
+            if (updates.teamHomeId !== undefined || updates.teamAwayId !== undefined) throw new HTTPException(400, { message: 'Los equipos de una fase eliminatoria salen de la llave.' })
+            const playing = body.status && body.status !== 'upcoming' && body.status !== 'cancelled'
+            if (playing && (!current.teamHomeId || !current.teamAwayId)) throw new HTTPException(409, { message: 'Todavía no se conocen los dos equipos de este partido.' })
+        } else await validateTeams(tx, updates.teamHomeId ?? current.teamHomeId!, updates.teamAwayId ?? current.teamAwayId!, current.categoryId)
         if (body.expectedStatus !== undefined && body.expectedStatus !== current.status) {
             throw new HTTPException(409, { message: 'El estado del partido cambió. Actualizá la pantalla.' })
         }
@@ -216,6 +234,7 @@ matchRoutes.put('/:id', scorerOnly, async (c) => {
             await tx.insert(scoringAudit).values({ matchId: id, action: 'match_status', actor: who, reason: body.startNewSet ? 'Cambio manual de estado; iniciar un set nuevo' : 'Cambio manual de estado', before: { matchStatus: current.status }, after: { matchStatus: body.status } })
         }
         const [updated] = await tx.update(matches).set(updates).where(eq(matches.id, id)).returning()
+        if (body.status && body.status !== current.status) await advanceFrom(tx, id)
         return updated
     })
     if (!row) return c.json({ error: 'Not found' }, 404)
@@ -228,6 +247,7 @@ matchRoutes.delete('/:id', adminOnly, async (c) => {
     await db.transaction(async (tx) => {
         const [current] = await tx.select().from(matches).where(eq(matches.id, id)).for('update')
         if (!current) throw new HTTPException(404, { message: 'Partido no encontrado.' })
+        if (current.phaseId) throw new HTTPException(409, { message: 'Este partido es parte de una fase eliminatoria: eliminá la fase completa.' })
         const matchSets = await tx.select().from(sets).where(eq(sets.matchId, id))
         for (const s of matchSets) {
             await tx.delete(points).where(eq(points.setId, s.id))

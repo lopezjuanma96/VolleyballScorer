@@ -11,7 +11,7 @@ try {
         for (let i = 0; i < 120; i++) {
             const cat = cats[i % cats.length]
             const categoryTeams = teamRows.filter(t => t.categoryId === cat.id)
-            const [match] = await tx.insert(matches).values({ categoryId: cat.id, teamHomeId: categoryTeams[0].id, teamAwayId: categoryTeams[1].id, court: i % 2 ? 'court2' : 'court1', scheduledAt: new Date(Date.UTC(2026, 10, 1, 12, i * 30)), status: i < 2 ? 'in_progress' : i < 82 ? 'finished_home' : 'upcoming' }).returning()
+            const [match] = await tx.insert(matches).values({ categoryId: cat.id, teamHomeId: categoryTeams[0].id, teamAwayId: categoryTeams[1].id, court: i % 4 + 1, scheduledAt: new Date(Date.UTC(2026, 10, 1, 12, i * 30)), status: i < 2 ? 'in_progress' : i < 82 ? 'finished_home' : 'upcoming' }).returning()
             for (let n = 1; n <= (i >= 2 && i < 82 ? 3 : 1); n++) {
                 const [set] = await tx.insert(sets).values({ matchId: match.id, setNumber: n, status: i >= 2 && i < 82 ? 'finished_home' : 'in_progress' }).returning()
                 if (i >= 2 && i < 82) await tx.insert(points).values(Array.from({ length: 45 }, (_, p) => ({ setId: set.id, scoreHome: Math.ceil((p + 1) * 25 / 45), scoreAway: Math.floor((p + 1) * 20 / 45), homeScored: p % 2 === 0 })))

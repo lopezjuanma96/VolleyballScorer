@@ -1,25 +1,37 @@
 export type Side = 'home' | 'away'
-export type Rules = { bestOf: number; setPoints: number; tiebreakPoints: number; minLead: number; pointCap: number | null }
+// The deciding set has its own target, lead and cap; categories that play it like
+// any other set simply repeat the regular values.
+export type Rules = {
+    bestOf: number; setPoints: number; minLead: number; pointCap: number | null
+    tiebreakPoints: number; tiebreakMinLead: number; tiebreakPointCap: number | null
+}
 export type SetsWon = { home: number; away: number }
 
-export const defaultRules: Rules = { bestOf: 3, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null }
-export const rulesOf = (row: Rules): Rules => ({ bestOf: row.bestOf, setPoints: row.setPoints, tiebreakPoints: row.tiebreakPoints, minLead: row.minLead, pointCap: row.pointCap })
+export const defaultRules: Rules = { bestOf: 3, setPoints: 25, minLead: 2, pointCap: null, tiebreakPoints: 15, tiebreakMinLead: 2, tiebreakPointCap: null }
+export const ruleKeys = Object.keys(defaultRules) as (keyof Rules)[]
+export const rulesOf = (row: Rules): Rules => Object.fromEntries(ruleKeys.map(key => [key, row[key]])) as Rules
 export const setsToWin = (rules: Rules) => Math.ceil(rules.bestOf / 2)
 
-// The deciding set (e.g. the 5th at 2–2) is played to tiebreakPoints.
-export function setTarget(rules: Rules, won: SetsWon) {
+export const isDecidingSet = (rules: Rules, won: SetsWon) => {
     const needed = setsToWin(rules)
-    return rules.bestOf > 1 && won.home === needed - 1 && won.away === needed - 1 ? rules.tiebreakPoints : rules.setPoints
+    return rules.bestOf > 1 && won.home === needed - 1 && won.away === needed - 1
 }
 
-// Winner of a set at this score, or null if it continues. Reaching pointCap wins outright.
+// The deciding set (e.g. the 5th at 2–2) is played to the tie-break rules.
+export function setRule(rules: Rules, won: SetsWon) {
+    return isDecidingSet(rules, won)
+        ? { target: rules.tiebreakPoints, minLead: rules.tiebreakMinLead, cap: rules.tiebreakPointCap }
+        : { target: rules.setPoints, minLead: rules.minLead, cap: rules.pointCap }
+}
+
+// Winner of a set at this score, or null if it continues. Reaching the cap wins outright.
 export function setWinner(rules: Rules, won: SetsWon, home: number, away: number): Side | null {
-    const target = setTarget(rules, won)
+    const { target, minLead, cap } = setRule(rules, won)
     const leader: Side = home > away ? 'home' : 'away'
     const high = Math.max(home, away), lead = Math.abs(home - away)
     if (lead === 0) return null
-    if (high >= target && lead >= rules.minLead) return leader
-    if (rules.pointCap !== null && high >= rules.pointCap) return leader
+    if (high >= target && lead >= minLead) return leader
+    if (cap !== null && high >= cap) return leader
     return null
 }
 

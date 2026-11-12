@@ -3,8 +3,9 @@ import { tablePoints, type Rules } from './rules'
 export type StandingTeam = { id: number; name: string; clubName: string; clubLogo: string | null }
 export type StandingMatch = Rules & {
     status: string
-    teamHomeId: number
-    teamAwayId: number
+    // Null only in knockout matches, which the table never counts.
+    teamHomeId: number | null
+    teamAwayId: number | null
     sets: { status: string; scoreHome: number; scoreAway: number }[]
 }
 export type StandingRow = StandingTeam & {
@@ -22,7 +23,7 @@ export function standings(teams: StandingTeam[], matches: StandingMatch[]): Stan
     const rows = new Map<number, StandingRow>(teams.map(team => [team.id, { ...team, played: 0, won: 0, lost: 0, setsWon: 0, setsLost: 0, pointsFor: 0, pointsAgainst: 0, points: 0 }]))
     for (const match of matches) {
         if (match.status !== 'finished_home' && match.status !== 'finished_away') continue
-        const home = rows.get(match.teamHomeId), away = rows.get(match.teamAwayId)
+        const home = rows.get(match.teamHomeId ?? -1), away = rows.get(match.teamAwayId ?? -1)
         if (!home || !away) continue
         const finished = match.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away')
         const setsHome = finished.filter(s => s.status === 'finished_home').length

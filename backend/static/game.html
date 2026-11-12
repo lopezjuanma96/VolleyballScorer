@@ -39,11 +39,11 @@
             document.title = `${m.teamHome.name} vs ${m.teamAway.name}`
             document.getElementById('content').innerHTML = `
                 <p class="small"><a href="/" class="muted">← Partidos</a></p>
-                <div class="spread small muted" style="margin-top:16px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${status}</div>
+                <div class="spread small muted" style="margin-top:16px"><span>${App.matchTag(m) ? `${esc(App.matchTag(m))} · ` : ''}${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${status}</div>
                 <div class="scoreline">
-                    <div class="side"><div class="team-name">${esc(m.teamHome.name)}${serve('home')}</div><div class="club">${esc(m.teamHome.clubName)}</div></div>
+                    <div class="side"><div class="team-name">${App.teamName(m.teamHome)}${serve('home')}</div><div class="club">${esc(m.teamHome.clubName)}</div></div>
                     <div>${big}<div class="under">${under}</div></div>
-                    <div class="side"><div class="team-name">${serve('away')}${esc(m.teamAway.name)}</div><div class="club">${esc(m.teamAway.clubName)}</div></div>
+                    <div class="side"><div class="team-name">${serve('away')}${App.teamName(m.teamAway)}</div><div class="club">${esc(m.teamAway.clubName)}</div></div>
                 </div>
                 ${counted.length || active ? `<div class="table-wrap"><table class="table"><thead><tr><th class="left">Equipo</th>${m.sets.filter(s => s.status !== 'cancelled').map(s => `<th>${s.setNumber}</th>`).join('')}<th>Sets</th></tr></thead><tbody>
                     ${['home', 'away'].map(side => `<tr><td class="left">${esc(side === 'home' ? m.teamHome.name : m.teamAway.name)}</td>${m.sets.filter(s => s.status !== 'cancelled').map(s => `<td ${s.status === `finished_${side}` ? 'style="font-weight:650"' : ''}>${side === 'home' ? s.scoreHome : s.scoreAway}</td>`).join('')}<td class="pts">${App.setsWon(m, side)}</td></tr>`).join('')}

@@ -71,7 +71,7 @@ integration('API against an isolated PostgreSQL database', () => {
         expect((await app.request('/api/auth/me', { headers: { Cookie: `session=${expired}` } })).status).toBe(401)
     })
     test('validates teams and creates match atomically', async () => {
-        const data = { teamHomeId: home, teamAwayId: away, categoryId, court: 'court1', scheduledAt: new Date().toISOString() }
+        const data = { teamHomeId: home, teamAwayId: away, categoryId, court: 1, scheduledAt: new Date().toISOString() }
         expect((await request('/api/matches', 'POST', { ...data, teamAwayId: home })).status).toBe(400)
         matchId = (await create('/api/matches', data)).id
         const match: any = await (await request(`/api/matches/${matchId}`)).json()
@@ -112,7 +112,7 @@ integration('API against an isolated PostgreSQL database', () => {
         expect((await request('/api/points', 'POST', { setId: match.sets.at(-1).id, homeScored: true, expectedLastPointId: null })).status).toBe(409)
     })
     test('stale close/cancel requests cannot overwrite a rally; fresh manual rulings remain allowed', async () => {
-        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 2, scheduledAt: new Date().toISOString() })
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const activeId = detail.sets[0].id
@@ -133,7 +133,7 @@ integration('API against an isolated PostgreSQL database', () => {
         expect(detail.sets[0].points).toHaveLength(2)
     })
     test('match closure protects pending points and recovery resumes the same set', async () => {
-        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court1', scheduledAt: new Date().toISOString() })
+        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 1, scheduledAt: new Date().toISOString() })
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const id = detail.sets[0].id
@@ -170,7 +170,7 @@ integration('API against an isolated PostgreSQL database', () => {
         expect((await request(`/api/sets/${id}/recover`, 'POST', { ...recover, expectedRevision: detail.sets[0].revision + 1, expectedMatchStatus: 'in_progress' })).status).toBe(409)
     })
     test('closed-set corrections preserve history and the independent match ruling', async () => {
-        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        const match = await create('/api/matches', { teamHomeId: home, teamAwayId: away, categoryId, court: 2, scheduledAt: new Date().toISOString() })
         await request(`/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })
         let detail: any = await (await request(`/api/matches/${match.id}`)).json()
         const id = detail.sets[0].id
@@ -201,10 +201,10 @@ integration('API against an isolated PostgreSQL database', () => {
         expect(changes[0].after.scoreAway).toBe(7)
         expect(changes[0].reason).toBe(body.reason)
         expect(changes[0].actor).toBe(process.env.MANAGER_USER ?? 'manager')
-        const moved = await request(`/api/matches/${match.id}`, 'PUT', { court: 'court1', scheduledAt: '2026-11-01T12:30:00-03:00' })
+        const moved = await request(`/api/matches/${match.id}`, 'PUT', { court: 1, scheduledAt: '2026-11-01T12:30:00-03:00' })
         expect(moved.status).toBe(200)
         detail = await (await request(`/api/matches/${match.id}`)).json()
-        expect(detail.court).toBe('court1')
+        expect(detail.court).toBe(1)
         expect(detail.scheduledAt).toBe('2026-11-01T15:30:00.000Z')
         expect(detail.status).toBe('finished_away')
     })

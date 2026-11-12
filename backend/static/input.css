@@ -7,7 +7,7 @@
    else stays ink on paper. */
 :root {
     --accent: #b9ed64; --accent-ink: #16181d;
-    --ink: #16181d; --muted: #6b7079; --faint: #9aa0a8;
+    --ink: #16181d; --muted: #646973; --faint: #80868f;
     --line: #e6e7ea; --soft: #f6f7f8; --paper: #fff;
     --danger: #b42318; --ok: #1f7a3a; --live: #e5484d; --live-text: #c62a2f; --warn: #a15c07;
     /* Team sides without a club logo: home light red, away light blue. */
@@ -74,7 +74,9 @@ a.match-row:hover { background: var(--soft); }
 .match-team.won .name { font-weight: 650; }
 .match-team .score { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
 .match-team .sets { color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: auto; padding-right: 8px; white-space: nowrap; }
-.match-meta { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.match-meta { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.match-tag { color: var(--ink); }
+.pending { color: var(--muted); font-style: italic; font-weight: 400; }
 .match-row.is-live .score { color: var(--ink); }
 .match-row.is-live { box-shadow: inset 2px 0 0 var(--accent); }
 
@@ -187,6 +189,15 @@ dialog[open]::backdrop { animation: fade-in .18s ease-out; }
 @keyframes fade-in { from { opacity: 0; } }
 .login { max-width: 360px; margin: 12vh auto 0; padding: 0 20px; }
 
+/* Phones, upright or sideways, are read at arm's length courtside: body text 16px, nothing secondary below 13px. */
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) {
+    body { font-size: 16px; }
+    .small, .match-time, .match-team .sets, .day, .tab, .field label, .scoreline .club, .btn-sm, .table, h2.section { font-size: 14px; }
+    .tiny, .match-meta, .hint, .field .hint, .connection, .footer, .table th, .scoreline .under, .badge { font-size: 13px; }
+    .rally-strip span { font-size: 12px; }
+    .nav a, .bar-end a, .bar-end button { font-size: 15px; }
+    .tip-btn { width: 20px; height: 20px; font-size: 13px; }
+}
 @media (max-width: 640px) {
     /* Brand and session on top, nav on its own scrollable row. */
     .bar-inner { gap: 0 16px; padding: 0 16px; height: auto; flex-wrap: wrap; }
@@ -199,7 +210,7 @@ dialog[open]::backdrop { animation: fade-in .18s ease-out; }
     .btn-sm { min-height: 40px; }
     .page { padding: 20px 16px 48px; }
     .match-row { grid-template-columns: 44px minmax(0, 1fr); }
-    .match-meta { grid-column: 2; text-align: left; display: flex; gap: 10px; }
+    .match-meta { grid-column: 2; text-align: left; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
     .match-team .sets { display: none; }
     .scoreline .big { font-size: 34px; }
     .score-box > span { min-width: 58px; padding: 10px; }

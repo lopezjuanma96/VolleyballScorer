@@ -44,14 +44,14 @@
             const when = withDate ? `${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}` : App.time(m.scheduledAt)
             return `<div class="list-row">
                 <div class="grow">
-                    <div class="${quiet ? 'muted' : ''}"><span class="muted num small">${when}</span> &nbsp;<strong>${esc(m.teamHome.name)}</strong> vs <strong>${esc(m.teamAway.name)}</strong></div>
-                    <div class="small muted">${esc(m.categoryName)} · ${App.court(m.court)} · ${statusText(m)}${holder(m)}</div>
+                    <div class="${quiet ? 'muted' : ''}"><span class="muted num small">${when}</span> &nbsp;<strong>${App.teamName(m.teamHome)}</strong> vs <strong>${App.teamName(m.teamAway)}</strong></div>
+                    <div class="small muted">${App.matchTag(m) ? `${esc(App.matchTag(m))} · ` : ''}${esc(m.categoryName)} · ${App.court(m.court)} · ${statusText(m)}${holder(m)}</div>
                 </div>
                 <div class="row">
                     <a class="btn btn-sm ${quiet ? '' : 'btn-primary'}" href="/manager/game.html?id=${m.id}">Anotar</a>
                     <a class="btn btn-sm" href="/game.html?id=${m.id}">Ver</a>
                     ${App.isAdmin() ? `<a class="btn btn-sm" href="/manager/match-form.html?id=${m.id}">Editar</a>
-                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteMatch(${m.id})">Eliminar</button>` : ''}
+                    ${m.phase ? '' : `<button type="button" class="btn btn-sm btn-danger" onclick="deleteMatch(${m.id})">Eliminar</button>`}` : ''}
                 </div>
             </div>`
         }

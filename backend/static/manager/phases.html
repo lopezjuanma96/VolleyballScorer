@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eliminatorias · Panel</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js"></script>
+</head>
+<body>
+    <header class="bar"></header>
+    <main class="page">
+        <h1 class="title">Eliminatorias</h1>
+        <p class="small muted" data-tip="phases" style="margin-top:4px">Cada fase eliminatoria es una llave: elegís los equipos en orden de siembra (de la tabla o los que decida la organización) y se crean sus partidos. El ganador de cada partido pasa solo al siguiente. Una categoría puede tener varias fases, por ejemplo Copa de Oro y Copa de Plata. Estos partidos no suman a la tabla.</p>
+
+        <div id="phase-list" aria-busy="true" style="margin-top:8px"><p class="empty">Cargando fases…</p></div>
+
+        <form id="phase-form" class="panel stack" style="margin-top:24px" novalidate>
+            <h2 class="section" style="margin:0">Nueva fase eliminatoria</h2>
+            <div class="form-grid">
+                <div class="field"><label for="category">Categoría</label><select id="category" required><option value="">Elegí una categoría…</option></select></div>
+                <div class="field"><label for="phase-name">Nombre</label><input type="text" id="phase-name" maxlength="100" placeholder="Ej: Copa de Oro" required /></div>
+                <div class="field"><label for="team-count">Equipos</label><input type="number" id="team-count" inputmode="numeric" min="2" max="32" value="4" /></div>
+                <div class="field"><label for="from-position">Desde el puesto</label><input type="number" id="from-position" inputmode="numeric" min="1" max="99" value="1" /><span class="hint">Completa la siembra con la tabla desde ese puesto.</span></div>
+            </div>
+            <section id="seeds-section" class="hidden">
+                <h3 class="small muted" id="seeds-title" style="margin-bottom:8px">Siembra</h3>
+                <p class="small muted" data-tip="seeds">El 1.º sembrado juega contra el último, el 2.º contra el anteúltimo, y así. Si los equipos no son 2, 4, 8 o 16, los mejores sembrados pasan directo a la ronda siguiente. Podés cambiar cualquier equipo.</p>
+                <div id="seeds" class="form-grid"></div>
+            </section>
+            <label class="check"><input type="checkbox" id="third-place" /> Partido por el tercer puesto</label>
+            <div class="form-grid">
+                <div class="field"><label for="starts-at">Primer partido</label><input type="datetime-local" id="starts-at" /><span class="hint">Propone horarios: una hora por ronda. Después ajustás cada partido.</span></div>
+            </div>
+            <section class="stack-sm">
+                <label class="check"><input type="checkbox" id="custom-rules" /> Reglas propias para esta fase</label>
+                <p id="category-rules" class="small muted">Elegí una categoría para ver sus reglas.</p>
+                <div id="rules-fields" class="panel hidden"><div id="rules"></div></div>
+            </section>
+            <p id="form-error" class="error hidden" role="alert"></p>
+            <div class="row"><button type="button" class="btn" id="preview-button">Generar partidos</button></div>
+
+            <section id="plan" class="hidden">
+                <h2 class="section" style="margin-top:8px">Partidos</h2>
+                <p class="small muted" data-tip="plan">Revisá descripción, cancha y horario de cada partido. Se pueden editar después desde Partidos.</p>
+                <div id="plan-list"></div>
+                <div class="row" style="margin-top:16px">
+                    <button type="submit" class="btn btn-primary" id="save-button">Crear fase</button>
+                </div>
+            </section>
+        </form>
+    </main>
+    <script>
+        const $ = id => document.getElementById(id)
+        const esc = App.escape
+        let categories = [], teams = [], phases = [], standings = new Map(), plan = null
+        const rules = App.ruleForm($('rules'), 'phase-rule')
+        const category = () => categories.find(c => c.id === Number($('category').value))
+
+        function showError(message) { $('form-error').textContent = message; $('form-error').classList.toggle('hidden', !message) }
+        function localInputValue(date) {
+            const p = n => String(n).padStart(2, '0')
+            return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`
+        }
+
+        function renderList() {
+            const byId = new Map(categories.map(c => [c.id, c.name]))
+            $('phase-list').innerHTML = phases.map(p => `<div class="list-row">
+                <div class="grow"><strong>${esc(p.name)}</strong> <span class="muted small">· ${esc(byId.get(p.categoryId) ?? '')}</span>
+                    <div class="small muted">${p.teams.length} equipos${p.thirdPlace ? ' · con tercer puesto' : ''}: ${p.teams.map(t => `${t.seed}. ${esc(t.name)}`).join(', ')}</div></div>
+                <div class="row">
+                    <a class="btn btn-sm" href="/standings.html?c=${p.categoryId}">Ver llave</a>
+                    <button type="button" class="btn btn-sm" onclick="renamePhase(${p.id})">Renombrar</button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="deletePhase(${p.id})">Eliminar</button>
+                </div>
+            </div>`).join('') || '<p class="muted small" style="padding:12px 0">Todavía no hay fases eliminatorias.</p>'
+            $('phase-list').setAttribute('aria-busy', 'false')
+        }
+
+        // Teams of the category in table order, with their position and the phases they are already in.
+        function rankedTeams() {
+            const c = category()
+            if (!c) return []
+            const rows = standings.get(c.id) ?? []
+            const order = new Map(rows.map((r, i) => [r.id, i]))
+            const inPhase = id => phases.filter(p => p.categoryId === c.id && p.teams.some(t => t.id === id)).map(p => p.name)
+            return teams.filter(t => t.categoryId === c.id)
+                .sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.name.localeCompare(b.name, 'es'))
+                .map(t => ({ ...t, position: order.has(t.id) ? order.get(t.id) + 1 : null, points: rows[order.get(t.id)]?.points, phases: inPhase(t.id) }))
+        }
+
+        function renderSeeds() {
+            const ranked = rankedTeams()
+            const count = Math.min(Number($('team-count').value) || 0, ranked.length)
+            $('seeds-section').classList.toggle('hidden', !category())
+            if (!category()) return
+            if (ranked.length < 2) { $('seeds').innerHTML = '<p class="small muted">La categoría necesita al menos dos equipos.</p>'; return }
+            // The range always fits the table: 6 teams of 8 start at 3rd at the latest.
+            const from = Math.min(Math.max(1, Number($('from-position').value) || 1), ranked.length - count + 1)
+            $('from-position').value = from
+            const option = t => `<option value="${t.id}">${t.position ? `${t.position}. ` : ''}${esc(t.name)}${t.points !== undefined ? ` (${t.points} pts)` : ''}${t.phases.length ? ` · en ${esc(t.phases.join(', '))}` : ''}</option>`
+            $('seeds-title').textContent = `Siembra (${count} equipos)`
+            $('seeds').innerHTML = Array.from({ length: count }, (_, i) => {
+                const pick = ranked[from - 1 + i]
+                return `<div class="field"><label for="seed-${i}">${i + 1}.º sembrado</label><select id="seed-${i}" data-seed>${ranked.map(option).join('')}</select></div>`.replace(`value="${pick.id}"`, `value="${pick.id}" selected`)
+            }).join('')
+            clearPlan()
+        }
+
+        function updateCategory() {
+            const c = category()
+            $('category-rules').textContent = c ? `Reglas de la categoría: ${App.rulesText(c)}.` : 'Elegí una categoría para ver sus reglas.'
+            if (c) rules.fill(c)
+            $('from-position').value = 1
+            const count = teams.filter(t => t.categoryId === c?.id).length
+            $('team-count').max = Math.max(2, Math.min(32, count))
+            if (count && Number($('team-count').value) > count) $('team-count').value = count
+            renderSeeds()
+        }
+
+        const seedIds = () => [...document.querySelectorAll('[data-seed]')].map(select => Number(select.value))
+        function clearPlan() { plan = null; $('plan').classList.add('hidden') }
+
+        async function preview() {
+            showError('')
+            if (!category()) return showError('Elegí una categoría.')
+            const teamIds = seedIds()
+            if (teamIds.length < 2) return showError('Elegí al menos dos equipos.')
+            if (new Set(teamIds).size !== teamIds.length) return showError('Hay un equipo repetido en la siembra.')
+            const res = await App.send('/api/phases/preview', 'POST', { teamIds, thirdPlace: $('third-place').checked })
+            if (!res.ok) return showError((await res.json().catch(() => ({}))).error ?? 'No se pudo armar la llave.')
+            plan = { ...(await res.json()), teamIds }
+            if ($('third-place').checked && !plan.thirdPlaceAvailable) App.toast('Sin tercer puesto: con estos equipos alguien llega a la final sin jugar semifinal.')
+            const start = $('starts-at').value ? new Date($('starts-at').value) : null
+            const courts = App.config.courts ?? 4
+            let index = 0, round = 0
+            $('plan-list').innerHTML = plan.matches.map((m, i) => {
+                if (m.round !== round) { round = m.round; index = 0 }
+                const when = start ? localInputValue(new Date(start.getTime() + (m.round - 1) * 3600000)) : ''
+                const court = (index++ % courts) + 1
+                return `<div class="list-row" style="display:block">
+                    <div class="small"><strong>${esc(m.roundName)}</strong> · ${esc(m.home)} <span class="muted">vs</span> ${esc(m.away)}</div>
+                    <div class="form-grid" style="margin-top:8px">
+                        <div class="field"><label for="plan-label-${i}">Descripción</label><input type="text" id="plan-label-${i}" maxlength="100" value="${esc(m.label)}" /></div>
+                        <div class="field"><label for="plan-court-${i}">Cancha</label><select id="plan-court-${i}">${App.courtOptions(court)}</select></div>
+                        <div class="field"><label for="plan-at-${i}">Fecha y hora</label><input type="datetime-local" id="plan-at-${i}" value="${when}" /></div>
+                    </div>
+                </div>`
+            }).join('')
+            $('plan').classList.remove('hidden')
+            $('plan').scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+
+        $('phase-form').addEventListener('submit', async event => {
+            event.preventDefault()
+            showError('')
+            const name = $('phase-name').value.trim()
+            if (!name) return showError('Poné un nombre a la fase.')
+            if (!plan || plan.teamIds.join() !== seedIds().join()) { clearPlan(); return showError('La siembra cambió. Generá los partidos de nuevo.') }
+            const matches = plan.matches.map((m, i) => ({ round: m.round, slot: m.slot, label: $(`plan-label-${i}`).value.trim() || null, court: Number($(`plan-court-${i}`).value), at: $(`plan-at-${i}`).value }))
+            if (matches.some(m => !m.at)) return showError('Completá la fecha y hora de cada partido.')
+            const body = {
+                categoryId: category().id, name, teamIds: plan.teamIds, thirdPlace: $('third-place').checked && plan.thirdPlaceAvailable,
+                matches: matches.map(({ at, ...m }) => ({ ...m, scheduledAt: new Date(at).toISOString() })),
+            }
+            if ($('custom-rules').checked) body.rules = rules.read()
+            const button = $('save-button')
+            button.disabled = true
+            try {
+                const res = await App.send('/api/phases', 'POST', body)
+                if (!res.ok) return showError((await res.json().catch(() => ({}))).error ?? 'No se pudo crear la fase.')
+                App.toast(`Fase «${name}» creada con ${matches.length} partidos.`)
+                $('phase-name').value = ''
+                clearPlan()
+                await load()
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            } finally { button.disabled = false }
+        })
+
+        async function renamePhase(id) {
+            const phase = phases.find(p => p.id === id)
+            const name = prompt('Nuevo nombre de la fase', phase?.name ?? '')?.trim()
+            if (!name || name === phase?.name) return
+            if ((await App.send(`/api/phases/${id}`, 'PUT', { name })).ok) { App.toast('Fase renombrada.'); await load() }
+        }
+
+        async function deletePhase(id) {
+            const phase = phases.find(p => p.id === id)
+            if (!confirm(`¿Eliminar «${phase?.name}» con todos sus partidos y resultados?`)) return
+            if ((await App.send(`/api/phases/${id}`, 'DELETE')).ok) { App.toast('Fase eliminada.'); await load() }
+        }
+
+        async function load() {
+            const [cats, allTeams, list, tables] = await Promise.all([App.json('/api/categories'), App.json('/api/teams'), App.json('/api/phases'), App.json('/api/standings')])
+            categories = cats; teams = allTeams; phases = list
+            standings = new Map(tables.map(t => [t.categoryId, t.rows]))
+            const selected = $('category').value
+            $('category').innerHTML = '<option value="">Elegí una categoría…</option>' + categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+            $('category').value = selected
+            renderList()
+            renderSeeds()
+        }
+
+        $('category').addEventListener('change', updateCategory)
+        $('team-count').addEventListener('change', renderSeeds)
+        $('from-position').addEventListener('change', renderSeeds)
+        $('seeds').addEventListener('change', clearPlan)
+        $('third-place').addEventListener('change', clearPlan)
+        $('preview-button').addEventListener('click', () => preview().catch(() => showError('No se pudo armar la llave.')))
+        $('custom-rules').addEventListener('change', () => $('rules-fields').classList.toggle('hidden', !$('custom-rules').checked))
+
+        App.ready.then(() => {
+            if (!App.isAdmin()) { document.querySelector('main').innerHTML = '<p class="empty">Solo la organización puede armar las eliminatorias. <a href="/manager/">Volver a Partidos</a></p>'; return }
+            return load()
+        }).catch(() => { $('phase-list').innerHTML = '<p class="empty">No pudimos cargar las fases. <button type="button" class="btn-link" onclick="location.reload()">Reintentar</button></p>' })
+    </script>
+</body>
+</html>

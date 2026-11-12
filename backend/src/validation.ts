@@ -14,26 +14,30 @@ export const teamInput = z.object({ name, clubId: positiveId, categoryId: positi
 const ruleFields = {
     bestOf: z.number().int().min(1).max(7).refine(n => n % 2 === 1, 'Usá una cantidad impar de sets.'),
     setPoints: z.number().int().min(3).max(99),
-    tiebreakPoints: z.number().int().min(3).max(99),
     minLead: z.number().int().min(1).max(5),
     pointCap: z.number().int().min(4).max(199).nullable(),
+    tiebreakPoints: z.number().int().min(3).max(99),
+    tiebreakMinLead: z.number().int().min(1).max(5),
+    tiebreakPointCap: z.number().int().min(4).max(199).nullable(),
 }
-type RuleShape = { setPoints?: number; tiebreakPoints?: number; pointCap?: number | null }
-const capAboveTargets = (r: RuleShape) => r.pointCap == null || r.setPoints === undefined || r.tiebreakPoints === undefined || r.pointCap > Math.max(r.setPoints, r.tiebreakPoints)
-const capMessage = { message: 'El tope de puntos debe superar los puntos del set y del desempate.', path: ['pointCap'] }
-export const rulesInput = z.object(ruleFields).refine(capAboveTargets, capMessage)
-export const categoryInput = z.object({
-    name,
-    bestOf: ruleFields.bestOf.default(3), setPoints: ruleFields.setPoints.default(25),
-    tiebreakPoints: ruleFields.tiebreakPoints.default(15), minLead: ruleFields.minLead.default(2),
-    pointCap: ruleFields.pointCap.default(null),
-}).refine(capAboveTargets, capMessage)
-export const categoryUpdate = z.object({ name, ...ruleFields }).partial().refine(capAboveTargets, capMessage)
+// Clients written before the deciding set had its own lead and cap may omit them.
+const ruleDefaults = { bestOf: 3, setPoints: 25, minLead: 2, pointCap: null, tiebreakPoints: 15, tiebreakMinLead: 2, tiebreakPointCap: null }
+type RuleShape = { setPoints?: number; pointCap?: number | null; tiebreakPoints?: number; tiebreakPointCap?: number | null }
+const capAbove = (cap: 'pointCap' | 'tiebreakPointCap', target: 'setPoints' | 'tiebreakPoints') => (r: RuleShape) => r[cap] == null || r[target] === undefined || r[cap]! > r[target]!
+const withCaps = <T extends z.ZodType<RuleShape>>(schema: T) => schema
+    .refine(capAbove('pointCap', 'setPoints'), { message: 'El tope de puntos debe superar los puntos del set.', path: ['pointCap'] })
+    .refine(capAbove('tiebreakPointCap', 'tiebreakPoints'), { message: 'El tope del desempate debe superar sus puntos.', path: ['tiebreakPointCap'] })
+const defaulted = Object.fromEntries(Object.entries(ruleFields).map(([key, field]) => [key, field.default(ruleDefaults[key as keyof typeof ruleDefaults] as never)])) as { [K in keyof typeof ruleFields]: z.ZodDefault<(typeof ruleFields)[K]> }
+export const rulesInput = withCaps(z.object({ ...ruleFields, tiebreakMinLead: defaulted.tiebreakMinLead, tiebreakPointCap: defaulted.tiebreakPointCap }))
+export const categoryInput = withCaps(z.object({ name, ...defaulted }))
+export const categoryUpdate = withCaps(z.object({ name, ...ruleFields }).partial())
     .refine(value => Object.keys(value).length > 0, 'Indicá algún cambio.')
 
+export const court = z.number().int().min(1).max(20)
+const label = z.string().trim().max(100).transform(value => value || null).nullable()
 const matchBase = z.object({
     teamHomeId: positiveId, teamAwayId: positiveId, categoryId: positiveId,
-    court: z.enum(['court1', 'court2']), scheduledAt: z.iso.datetime({ offset: true }),
+    court, scheduledAt: z.iso.datetime({ offset: true }), label: label.optional(),
 })
 // Rules are copied from the category unless the admin overrides them for this match.
 export const matchInput = matchBase.extend({ rules: rulesInput.optional() })
@@ -43,7 +47,18 @@ export const matchUpdate = matchBase.omit({ categoryId: true }).partial().extend
     expectedStatus: matchStatus.optional(),
     expectedActiveSet: z.object({ id: positiveId, lastPointId: positiveId.nullable() }).nullable().optional(),
     startNewSet: z.boolean().optional(),
-}).refine(value => ['status', 'court', 'scheduledAt', 'teamHomeId', 'teamAwayId', 'rules'].some(key => key in value), 'Indicá algún cambio.')
+}).refine(value => ['status', 'court', 'scheduledAt', 'teamHomeId', 'teamAwayId', 'rules', 'label'].some(key => key in value), 'Indicá algún cambio.')
+
+// Knockout phase: teams in seed order; each bracket match (round, slot) gets its
+// label, court and time. The server rebuilds the bracket and requires every match.
+const bracketPlan = { teamIds: z.array(positiveId).min(2).max(32).refine(ids => new Set(ids).size === ids.length, 'Cada equipo puede aparecer una sola vez.'), thirdPlace: z.boolean().default(false) }
+export const phasePreview = z.object(bracketPlan)
+export const phaseInput = z.object({
+    categoryId: positiveId, name, ...bracketPlan,
+    rules: rulesInput.optional(),
+    matches: z.array(z.object({ round: z.number().int().min(1).max(6), slot: z.number().int().min(0).max(31), label, court, scheduledAt: z.iso.datetime({ offset: true }) })).min(1).max(40),
+})
+export const phaseUpdate = z.object({ name })
 
 const email = z.string().trim().toLowerCase().max(254).pipe(z.email('Ingresá un email válido.'))
 const role = z.enum(['admin', 'scorer'])
@@ -70,12 +85,14 @@ const schemas: Record<string, z.ZodType> = {
     categories: categoryInput, teams: teamInput, matches: matchInput, users: userInput,
     points: z.object({ setId: positiveId, homeScored: z.boolean(), expectedLastPointId: positiveId.nullable() }),
     claims: z.object({ expectedHolder: z.string().max(254).nullable().optional() }),
+    phases: phaseInput,
 }
 
 export async function validateRequest(c: Context, next: Next) {
     const parts = c.req.path.split('/').filter(Boolean)
-    if (parts[2] && parts[1] !== 'auth' && !/^\d+$/.test(parts[2])) throw new HTTPException(400, { message: 'ID inválido.' })
-    if (parts[2] && parts[1] !== 'auth') positiveId.parse(Number(parts[2]))
+    const named = parts[1] === 'auth' || (parts[1] === 'phases' && parts[2] === 'preview')
+    if (parts[2] && !named && !/^\d+$/.test(parts[2])) throw new HTTPException(400, { message: 'ID inválido.' })
+    if (parts[2] && !named) positiveId.parse(Number(parts[2]))
     if (parts[4] !== undefined) positiveId.parse(Number(parts[4]))
     for (const key of ['categoryId', 'clubId']) {
         const value = c.req.query(key)
@@ -87,6 +104,7 @@ export async function validateRequest(c: Context, next: Next) {
         if (parts[1] === 'matches' && c.req.method === 'PUT') schema = matchUpdate
         if (parts[1] === 'users' && c.req.method === 'PUT') schema = userUpdate
         if (parts[1] === 'categories' && c.req.method === 'PUT') schema = categoryUpdate
+        if (parts[1] === 'phases') schema = c.req.method === 'PUT' ? phaseUpdate : parts[2] === 'preview' ? phasePreview : phaseInput
         if (parts[1] === 'sets') schema = setSchemas[parts[3]] ?? z.object({ status: setStatus, expectedLastPointId: positiveId.nullable() })
         if (schema) {
             const parsed = schema.parse(await c.req.json())
