@@ -349,7 +349,7 @@ window.App = {
             ? [['/manager/', 'Partidos'], ...(App.isAdmin() ? [['/manager/phases.html', 'Eliminatorias'], ['/manager/categories.html', 'Categorías'], ['/manager/clubs.html', 'Clubes'], ['/manager/teams.html', 'Equipos']] : []), ...(App.session?.manager ? [['/manager/users.html', 'Usuarios']] : [])]
             : [['/', 'Partidos'], ['/standings.html', 'Posiciones']]
         const end = manager
-            ? `<a href="/">Ver sitio</a><button type="button" onclick="App.logout()" title="${App.escape(App.session?.displayName ?? '')}">Salir</button>`
+            ? `${App.isAdmin() ? link(['/manager/token.html', 'Token']) : ''}<a href="/">Ver sitio</a><button type="button" onclick="App.logout()" title="${App.escape(App.session?.displayName ?? '')}">Salir</button>`
             : `<span class="connection" data-connection role="status"></span><a href="/manager/">Ingresar</a>`
         if (!manager && !document.querySelector('footer.footer')) document.body.insertAdjacentHTML('beforeend', `<footer class="footer"><span>${App.escape(App.config.name)}</span><a href="/privacy_policy">Política de privacidad</a></footer>`)
         bar.innerHTML = `<div class="bar-inner"><a class="brand" href="${manager ? '/manager/' : '/'}">${App.escape(App.config.name)}</a><nav class="nav" aria-label="Principal">${links.map(link).join('')}</nav><div class="bar-end">${end}</div></div>`

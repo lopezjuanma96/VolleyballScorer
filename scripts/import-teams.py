@@ -36,9 +36,11 @@ def main():
     if not args.apply:
         print('CSV válido. Para importar, agregá --apply. No se modificó nada.')
         return
+    # API_TOKEN (generated in the panel under «Token») is preferred over the manager password.
+    token = os.environ.get('API_TOKEN', '').strip()
     username, password = os.environ.get('MANAGER_USER', 'manager'), os.environ.get('MANAGER_PASSWORD')
-    if not password:
-        raise ValueError('Definí MANAGER_PASSWORD en el entorno (sin ponerla en argumentos).')
+    if not token and not password:
+        raise ValueError('Definí API_TOKEN o MANAGER_PASSWORD en el entorno (sin ponerlos en argumentos).')
     if not args.url.startswith('https://') and not args.url.startswith(('http://localhost:', 'http://127.0.0.1:')):
         raise ValueError('Usá HTTPS para servidores remotos.')
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -50,11 +52,14 @@ def main():
             boundary = 'volleyball-import-boundary'
             data = f'--{boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n{body["name"]}\r\n--{boundary}--\r\n'.encode()
             headers = {'Content-Type': f'multipart/form-data; boundary={boundary}'}
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
         req = urllib.request.Request(args.url.rstrip('/') + path, data=data, headers=headers)
         with opener.open(req, timeout=20) as response:
             return json.load(response)
 
-    request('/api/auth/login', {'username': username, 'password': password})
+    if not token:
+        request('/api/auth/login', {'username': username, 'password': password})
     categories = {r['name']: r['id'] for r in request('/api/categories')}
     clubs = {r['name']: r['id'] for r in request('/api/clubs')}
     teams = {(r['categoryId'], r['clubId'], r['name']) for r in request('/api/teams')}
@@ -73,7 +78,8 @@ def main():
             created += 1
         print(f'Importación completa: {created} creados, {len(rows) - created} existentes.')
     finally:
-        request('/api/auth/logout', {})
+        if not token:
+            request('/api/auth/logout', {})
 
 
 if __name__ == '__main__':

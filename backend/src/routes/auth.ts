@@ -4,7 +4,7 @@ import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 import { timingSafeEqual } from 'node:crypto'
 import { eq } from 'drizzle-orm'
-import { envAdmin, getSession, isManager, issueToken, memberSession, scorerOnly, SESSION_SECONDS, type Session } from '../middleware/auth'
+import { adminOnly, API_TOKEN_MAX_HOURS, envAdmin, getSession, isManager, issueApiToken, issueToken, memberSession, scorerOnly, SESSION_SECONDS, type Session } from '../middleware/auth'
 import { config } from '../config'
 import { db } from '../db'
 import { users } from '../db/schema'
@@ -37,6 +37,23 @@ auth.post('/login', async c => {
     const session = envAdmin()
     await startSession(c, session)
     return c.json({ username: session.username, displayName: session.displayName, role: session.role, manager: true })
+})
+// Short-lived token for scripts (bulk imports, fixture generation), sent as
+// Authorization: Bearer. Only from a browser session: a token cannot extend itself.
+auth.post('/token', adminOnly, async c => {
+    const session = (await getSession(c))!
+    if (session.viaToken) return c.json({ error: 'Generá el token desde una sesión del navegador.' }, 403)
+    const { hours } = z.object({ hours: z.number().int().min(1).max(API_TOKEN_MAX_HOURS).default(2) }).parse(await c.req.json().catch(() => ({})))
+    let version = 0
+    if (session.userId !== null) {
+        const [user] = await db.select({ sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, session.userId))
+        if (!user) return c.json({ error: 'Usuario no encontrado.' }, 404)
+        version = user.sessionVersion
+    }
+    const issued = await issueApiToken(session, version, hours)
+    console.log(`API token issued to ${session.username} until ${issued.expiresAt}`)
+    c.header('Cache-Control', 'no-store')
+    return c.json(issued, 201)
 })
 auth.post('/logout', c => {
     deleteCookie(c, 'session', { path: '/', secure: config.secureCookie })

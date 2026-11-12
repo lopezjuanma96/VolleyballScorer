@@ -63,7 +63,15 @@ bun scripts/import-teams.ts docs/teams.example.csv
 bun scripts/import-teams.ts equipos.csv --apply
 ```
 
-Columnas: `Categoria,Club,Nombre del Equipo`. La contraseña se toma del entorno cargado por Bun desde `.env`; no se pasa en argumentos. `--url https://...` permite apuntar a otro despliegue con las credenciales correspondientes. La importación es secuencial: si se interrumpe, puede repetirse sin duplicar los equipos ya importados. No convierte automáticamente datos de Firestore.
+Columnas: `Categoria,Club,Nombre del Equipo`. Las credenciales se toman del entorno, nunca de argumentos: `API_TOKEN` si está definido y, si no, `MANAGER_PASSWORD` del `.env` que carga Bun. `--url https://...` permite apuntar a otro despliegue con las credenciales correspondientes. La importación es secuencial: si se interrumpe, puede repetirse sin duplicar los equipos ya importados. No convierte automáticamente datos de Firestore.
+
+### Token para scripts
+
+Para cargar datos en producción sin compartir la contraseña del administrador, un usuario de organización entra al panel, abre **Token** y genera uno de 1 a 12 horas. Se envía como `Authorization: Bearer <token>` a la misma API, con permisos de organización y sin gestión de usuarios; no puede generar otro token. Queda anulado al vencer, al cambiar el acceso de esa persona en **Usuarios** o, si lo generó el administrador principal, al cambiar `MANAGER_PASSWORD`. Para un asistente de IA, pegalo sólo en su campo de secreto, nunca en el chat.
+
+```bash
+API_TOKEN="$(cat token.txt)" bun scripts/import-teams.ts equipos.csv --url https://voley.zagador123.cloud --apply
+```
 
 ## Desarrollo y verificación
 
