@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { defaultRules, finalScoreWinner, matchWinner, setTarget, setWinner, tablePoints } from '../src/rules'
+import { defaultRules, finalScoreWinner, matchWinner, setRule, setWinner, tablePoints } from '../src/rules'
+import { planBracket, seedOrder } from '../src/bracket'
 import { rotate, rotationState, substitutionsFit } from '../src/rotation'
 import { standings } from '../src/standings'
 
@@ -14,11 +15,23 @@ describe('set rules', () => {
         expect(setWinner(defaultRules, zero, 30, 32)).toBe('away')
     })
     test('the deciding set uses tiebreak points', () => {
-        expect(setTarget(defaultRules, { home: 1, away: 1 })).toBe(15)
-        expect(setTarget(defaultRules, { home: 1, away: 0 })).toBe(25)
-        expect(setTarget(bo5, { home: 2, away: 2 })).toBe(15)
-        expect(setTarget({ ...defaultRules, bestOf: 1 }, zero)).toBe(25)
+        expect(setRule(defaultRules, { home: 1, away: 1 }).target).toBe(15)
+        expect(setRule(defaultRules, { home: 1, away: 0 }).target).toBe(25)
+        expect(setRule(bo5, { home: 2, away: 2 }).target).toBe(15)
+        expect(setRule({ ...defaultRules, bestOf: 1 }, zero).target).toBe(25)
         expect(setWinner(defaultRules, { home: 1, away: 1 }, 15, 13)).toBe('home')
+    })
+    test('the deciding set has its own lead and cap', () => {
+        const rules = { ...defaultRules, pointCap: 27, tiebreakPoints: 15, tiebreakMinLead: 2, tiebreakPointCap: 17 }
+        const decider = { home: 1, away: 1 }
+        expect(setWinner(rules, zero, 17, 16)).toBeNull()
+        expect(setWinner(rules, zero, 27, 26)).toBe('home')
+        expect(setWinner(rules, decider, 16, 16)).toBeNull()
+        expect(setWinner(rules, decider, 17, 16)).toBe('home')
+        expect(finalScoreWinner(rules, decider, 18, 16)).toBeNull()
+        const golden = { ...defaultRules, tiebreakMinLead: 1 }
+        expect(setWinner(golden, decider, 15, 14)).toBe('home')
+        expect(setWinner(golden, zero, 25, 24)).toBeNull()
     })
     test('a point cap ends the set without the lead', () => {
         const capped = { ...defaultRules, pointCap: 27 }
@@ -108,5 +121,31 @@ describe('standings', () => {
         const rows = standings(teams.slice(0, 2), [{ ...defaultRules, status: 'finished_away', teamHomeId: 1, teamAwayId: 2, sets: [set('finished_home', 25, 20), set('finished_home', 25, 20)] }])
         expect(rows[0]).toMatchObject({ id: 2, points: 3, won: 1, setsWon: 0, setsLost: 2 })
         expect(rows[1]).toMatchObject({ id: 1, points: 0, lost: 1 })
+    })
+})
+
+describe('knockout bracket', () => {
+    test('seeds meet as in a standard draw', () => {
+        expect(seedOrder(8)).toEqual([1, 8, 4, 5, 2, 7, 3, 6])
+    })
+    test('a full bracket of eight', () => {
+        const { rounds, matches } = planBracket(8, true)
+        expect(rounds).toBe(3)
+        expect(matches.map(m => m.label)).toEqual(['Cuartos 1', 'Cuartos 2', 'Cuartos 3', 'Cuartos 4', 'Semifinal 1', 'Semifinal 2', 'Final', 'Tercer puesto'])
+        expect(matches[0]).toMatchObject({ home: { seed: 1 }, away: { seed: 8 } })
+        expect(matches[4]).toMatchObject({ home: { from: '1-0', loser: false }, away: { from: '1-1', loser: false } })
+        expect(matches[7]).toMatchObject({ round: 3, slot: 1, home: { from: '2-0', loser: true }, away: { from: '2-1', loser: true } })
+    })
+    test('the best seeds get the byes', () => {
+        const { matches, thirdPlaceAvailable } = planBracket(6, false)
+        expect(matches.filter(m => m.round === 1).map(m => [m.home, m.away])).toEqual([[{ seed: 4 }, { seed: 5 }], [{ seed: 3 }, { seed: 6 }]])
+        expect(matches.find(m => m.label === 'Semifinal 1')).toMatchObject({ home: { seed: 1 }, away: { from: '1-1' } })
+        expect(thirdPlaceAvailable).toBe(true)
+    })
+    test('no third place when a finalist skipped the semifinal', () => {
+        const { matches, thirdPlaceAvailable } = planBracket(3, true)
+        expect(thirdPlaceAvailable).toBe(false)
+        expect(matches.map(m => m.label)).toEqual(['Semifinal', 'Final'])
+        expect(planBracket(2, true).matches.map(m => m.label)).toEqual(['Final'])
     })
 })

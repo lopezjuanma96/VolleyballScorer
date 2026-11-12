@@ -146,7 +146,7 @@
             const winner = App.winner(m)
             const last = lastEntry()
             const header = `<p class="small"><a href="/manager/" class="muted">← Partidos</a></p>
-                <div class="spread small muted" style="margin-top:12px"><span>${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`}</div>`
+                <div class="spread small muted" style="margin-top:12px"><span>${App.matchTag(m) ? `${esc(App.matchTag(m))} · ` : ''}${esc(m.categoryName)} · ${App.court(m.court)} · ${App.date(m.scheduledAt)} ${App.time(m.scheduledAt)}</span>${live ? '<span class="badge badge-live"><span class="live-dot"></span>En juego</span>' : `<span class="badge">${App.statusLabel(m.status)}</span>`}</div>`
             const [left, right] = order()
             const dot = side => serving === side ? '<span class="serve" title="Saca"></span>' : ''
             const scoreline = `<div class="scoreline">
@@ -156,7 +156,8 @@
                 </div>`
             let body = ''
             if (m.status === 'upcoming') {
-                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${!claim || mine() ? '<button class="btn btn-accent btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
+                const waiting = [m.teamHome, m.teamAway].filter(t => t.pending)
+                body = `<div class="stack" style="margin-top:20px"><p class="small muted">${App.rulesText(m.rules)}</p>${waiting.length ? `<p class="small">Se inicia cuando se conozcan los dos equipos (${waiting.map(t => esc(t.name)).join(' y ')}).</p>` : !claim || mine() ? '<button class="btn btn-accent btn-point" onclick="act(startMatch)">Iniciar partido</button>' : ''}</div>`
             } else if (live && active && !mine()) {
                 body = `${rotationBlock(active, false)}`
             } else if (live && active && !ready(active)) {

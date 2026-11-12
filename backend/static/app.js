@@ -1,5 +1,5 @@
 window.App = {
-    config: { name: 'Torneo de vóley', subtitle: '', timeZone: 'America/Argentina/Cordoba' },
+    config: { name: 'Torneo de vóley', subtitle: '', timeZone: 'America/Argentina/Cordoba', courts: 4 },
     session: null,
     escape(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]) },
     async fetch(url, options = {}) {
@@ -40,7 +40,49 @@ window.App = {
         }
         return canonical(a) === canonical(b)
     },
-    court(value) { return { court1: 'Cancha 1', court2: 'Cancha 2' }[value] ?? value },
+    court(value) { return `Cancha ${value}` },
+    // Courts from TOURNAMENT_COURTS; a match already on a higher court keeps it listed.
+    courtOptions(selected) {
+        const count = Math.max(App.config.courts ?? 4, Number(selected) || 0)
+        return Array.from({ length: count }, (_, i) => `<option value="${i + 1}"${i + 1 === Number(selected) ? ' selected' : ''}>Cancha ${i + 1}</option>`).join('')
+    },
+    // Knockout phase and description, e.g. "Copa de Oro · Semifinal 1".
+    matchTag(match) { return [match.phase?.name, match.label].filter(Boolean).join(' · ') },
+    // A knockout side still waiting for an earlier result reads "Ganador de Semifinal 1", in italics.
+    teamName(team) { return team.pending ? `<span class="pending">${App.escape(team.name)}</span>` : App.escape(team.name) },
+    // Public match line (fixture and knockout brackets): time, both teams with sets, tag, category, court, status.
+    matchRow(m, { showDate = false } = {}) {
+        const esc = App.escape
+        const winner = App.winner(m)
+        const live = m.status === 'in_progress', upcoming = m.status === 'upcoming'
+        const active = live && m.sets.find(s => s.status === 'in_progress')
+        const score = side => upcoming || m.status === 'cancelled' ? '' : active ? (side === 'home' ? active.scoreHome : active.scoreAway) : App.setsWon(m, side)
+        const line = side => {
+            const team = side === 'home' ? m.teamHome : m.teamAway
+            const sets = m.sets.filter(s => s.status === 'finished_home' || s.status === 'finished_away').map(s => side === 'home' ? s.scoreHome : s.scoreAway).join(' ')
+            return `<div class="match-team ${winner === team ? 'won' : ''}"><span class="name">${App.teamName(team)}</span><span class="sets">${sets}</span><span class="score" data-bump="m${m.id}-${side}">${score(side)}</span></div>`
+        }
+        const status = live ? `<span class="badge badge-live"><span class="live-dot"></span>${active ? `Set ${active.setNumber}` : 'En juego'}</span>` : upcoming ? '' : `<span class="badge">${App.statusLabel(m.status)}</span>`
+        const label = `${App.matchTag(m) ? `${App.matchTag(m)}: ` : ''}${m.teamHome.name} contra ${m.teamAway.name}${winner ? `. Ganó ${winner.name}` : live ? '. En juego' : ''}`
+        const tag = App.matchTag(m)
+        return `<a class="match-row ${live ? 'is-live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(label)}">
+            <span class="match-time">${showDate ? `${App.date(m.scheduledAt)}<br>` : ''}${App.time(m.scheduledAt)}</span>
+            <span class="match-teams">${line('home')}${line('away')}</span>
+            <span class="match-meta">${tag ? `<span class="match-tag">${esc(tag)}</span>` : ''}<span>${esc(m.categoryName)} · ${App.court(m.court)}</span>${status}</span>
+        </a>`
+    },
+    roundName(round, rounds) { return ['Final', 'Semifinal', 'Cuartos de final', 'Octavos de final', 'Dieciseisavos de final'][rounds - round] ?? `Ronda ${round}` },
+    // Knockout bracket as rounds of match rows; the third-place match follows the final.
+    bracket(phase, matches) {
+        const rows = matches.filter(m => m.phase?.id === phase.id).sort((a, b) => a.round - b.round || a.slot - b.slot)
+        const groups = new Map()
+        for (const m of rows) {
+            const name = m.round === phase.rounds && m.slot === 1 ? 'Tercer puesto' : App.roundName(m.round, phase.rounds)
+            if (!groups.has(name)) groups.set(name, [])
+            groups.get(name).push(m)
+        }
+        return [...groups].map(([name, list]) => `<h3 class="day">${App.escape(name)}</h3>${list.map(m => App.matchRow(m, { showDate: true })).join('')}`).join('')
+    },
     // Rotation grid seen from the team's own side: net on top (4 3 2), baseline below (5 6 1).
     // positions[0] is position 1, the server. `content(i)` renders the cell for positions[i].
     COURT_ORDER: [3, 2, 1, 4, 5, 0],
@@ -75,8 +117,60 @@ window.App = {
     winner(match) { return match.status === 'finished_home' ? match.teamHome : match.status === 'finished_away' ? match.teamAway : null },
     setsWon(match, side) { return match.sets.filter(s => s.status === `finished_${side}`).length },
     rulesText(r) {
-        const cap = r.pointCap ? `, tope ${r.pointCap}` : ''
-        return r.bestOf === 1 ? `Un set a ${r.setPoints}${cap}` : `Mejor de ${r.bestOf} · sets a ${r.setPoints}, desempate a ${r.tiebreakPoints} · diferencia ${r.minLead}${cap}`
+        const rule = (points, lead, cap) => `a ${points}, diferencia ${lead}${cap ? `, tope ${cap}` : ''}`
+        const regular = rule(r.setPoints, r.minLead, r.pointCap)
+        if (r.bestOf === 1) return `Un set ${regular}`
+        // Rules saved before the tie-break had its own lead and cap share them with the other sets.
+        const tiebreak = rule(r.tiebreakPoints, r.tiebreakMinLead ?? r.minLead, r.tiebreakPointCap === undefined ? r.pointCap : r.tiebreakPointCap)
+        return tiebreak === regular ? `Mejor de ${r.bestOf} · todos los sets ${regular}` : `Mejor de ${r.bestOf} · sets ${regular} · desempate ${tiebreak}`
+    },
+    RULE_DEFAULTS: { bestOf: 3, setPoints: 25, minLead: 2, pointCap: null, tiebreakPoints: 15, tiebreakMinLead: 2, tiebreakPointCap: null },
+    RULE_KEYS: ['bestOf', 'setPoints', 'minLead', 'pointCap', 'tiebreakPoints', 'tiebreakMinLead', 'tiebreakPointCap'],
+    sameRules(a, b) { return App.RULE_KEYS.every(k => (a?.[k] ?? null) === (b?.[k] ?? null)) },
+    // Set rules fields for categories, matches and phases, rendered into `root`. The deciding set
+    // plays like the others unless "Desempate con reglas propias" is checked; then it has its own
+    // target, lead and cap. Returns { fill(rules), read() }.
+    ruleForm(root, prefix = 'rule') {
+        const id = key => `${prefix}-${key}`
+        const number = (key, label, min, max, cap) => `<div class="field"><label for="${id(key)}">${label}</label><input type="number" inputmode="numeric" id="${id(key)}" min="${min}" max="${max}"${cap ? ' placeholder="Sin tope"' : ''} />${cap ? '<span class="hint">Vacío = sin tope. Al llegar al tope gana quien va adelante.</span>' : ''}</div>`
+        root.innerHTML = `<div class="form-grid">
+                <div class="field"><label for="${id('bestOf')}">Formato</label><select id="${id('bestOf')}"><option value="1">Un set</option><option value="3">Mejor de 3</option><option value="5">Mejor de 5</option><option value="7">Mejor de 7</option></select></div>
+                ${number('setPoints', 'Puntos por set', 3, 99)}${number('minLead', 'Diferencia mínima', 1, 5)}${number('pointCap', 'Tope de puntos', 4, 199, true)}
+            </div>
+            <div id="${id('tiebreak')}" class="stack-sm" style="margin-top:16px">
+                <label class="check"><input type="checkbox" id="${id('tiebreakOwn')}" /> Desempate con reglas propias</label>
+                <p class="small muted" data-tip="tiebreak-own">El desempate es el set decisivo: el 3.º en mejor de 3, el 5.º en mejor de 5. Sin marcar se juega igual que los demás sets.</p>
+                <div id="${id('tiebreakFields')}" class="form-grid">${number('tiebreakPoints', 'Puntos del desempate', 3, 99)}${number('tiebreakMinLead', 'Diferencia del desempate', 1, 5)}${number('tiebreakPointCap', 'Tope del desempate', 4, 199, true)}</div>
+            </div>`
+        const $ = key => document.getElementById(id(key))
+        const sync = () => {
+            $('tiebreak').classList.toggle('hidden', $('bestOf').value === '1')
+            $('tiebreakFields').classList.toggle('hidden', !$('tiebreakOwn').checked)
+        }
+        const value = key => $(key).value === '' ? null : Number($(key).value)
+        $('bestOf').addEventListener('change', sync)
+        $('tiebreakOwn').addEventListener('change', () => {
+            // Checking it starts from the usual tie-break (to 15) rather than a copy of the other sets.
+            if ($('tiebreakOwn').checked && value('tiebreakPoints') === value('setPoints')) {
+                $('tiebreakPoints').value = App.RULE_DEFAULTS.tiebreakPoints
+                $('tiebreakMinLead').value = $('minLead').value
+                $('tiebreakPointCap').value = ''
+            }
+            sync()
+        })
+        return {
+            fill(rules) {
+                const r = { ...App.RULE_DEFAULTS, ...rules }
+                for (const key of App.RULE_KEYS) $(key).value = r[key] ?? ''
+                $('tiebreakOwn').checked = r.tiebreakPoints !== r.setPoints || r.tiebreakMinLead !== r.minLead || (r.tiebreakPointCap ?? null) !== (r.pointCap ?? null)
+                sync()
+            },
+            read() {
+                const r = { bestOf: value('bestOf'), setPoints: value('setPoints'), minLead: value('minLead'), pointCap: value('pointCap') }
+                const own = $('tiebreakOwn').checked && r.bestOf > 1
+                return { ...r, tiebreakPoints: own ? value('tiebreakPoints') : r.setPoints, tiebreakMinLead: own ? value('tiebreakMinLead') : r.minLead, tiebreakPointCap: own ? value('tiebreakPointCap') : r.pointCap }
+            },
+        }
     },
     statusLabel(status) { return { upcoming: 'Próximo', in_progress: 'En juego', finished_home: 'Final', finished_away: 'Final', cancelled: 'Cancelado' }[status] ?? status },
     // Milliseconds to read a text without hurry: toasts and info tips stay up about this long.
@@ -251,7 +345,7 @@ window.App = {
         const link = ([href, label]) => `<a href="${href}" ${here === href || (href !== '/' && href !== '/manager/' && here.startsWith(href)) ? 'aria-current="page"' : ''}>${label}</a>`
         const manager = here.startsWith('/manager/')
         const links = manager
-            ? [['/manager/', 'Partidos'], ...(App.isAdmin() ? [['/manager/categories.html', 'Categorías'], ['/manager/clubs.html', 'Clubes'], ['/manager/teams.html', 'Equipos']] : []), ...(App.session?.manager ? [['/manager/users.html', 'Usuarios']] : [])]
+            ? [['/manager/', 'Partidos'], ...(App.isAdmin() ? [['/manager/phases.html', 'Eliminatorias'], ['/manager/categories.html', 'Categorías'], ['/manager/clubs.html', 'Clubes'], ['/manager/teams.html', 'Equipos']] : []), ...(App.session?.manager ? [['/manager/users.html', 'Usuarios']] : [])]
             : [['/', 'Partidos'], ['/standings.html', 'Posiciones']]
         const end = manager
             ? `<a href="/">Ver sitio</a><button type="button" onclick="App.logout()" title="${App.escape(App.session?.displayName ?? '')}">Salir</button>`

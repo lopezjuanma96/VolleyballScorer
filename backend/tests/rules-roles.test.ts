@@ -35,7 +35,7 @@ integration('roles, set rules, rotation and standings', () => {
     }
     const detail = (id: number) => json(null, `/api/matches/${id}`)
     const newMatch = async (rules?: object) => {
-        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court1', scheduledAt: new Date().toISOString(), ...(rules ? { rules } : {}) })
+        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 1, scheduledAt: new Date().toISOString(), ...(rules ? { rules } : {}) })
         await json(scorer, `/api/matches/${match.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
         return match.id as number
     }
@@ -67,6 +67,7 @@ integration('roles, set rules, rotation and standings', () => {
         await db.execute(sql`delete from points where set_id in (select id from sets where match_id in (select id from matches where category_id = ${categoryId}))`)
         await db.execute(sql`delete from sets where match_id in (select id from matches where category_id = ${categoryId})`)
         await db.execute(sql`delete from matches where category_id = ${categoryId}`)
+        await db.execute(sql`delete from phases where category_id = ${categoryId}`)
         await db.execute(sql`delete from teams where category_id = ${categoryId}`)
         await db.execute(sql`delete from clubs where id = ${clubId}`)
         await db.execute(sql`delete from categories where id = ${categoryId}`)
@@ -82,10 +83,10 @@ integration('roles, set rules, rotation and standings', () => {
         expect((await call(scorer, '/api/users')).status).toBe(403)
         expect((await call(scorer, '/manager/categories.html')).status).toBe(302)
         expect((await call(scorer, '/manager/')).status).not.toBe(302)
-        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 2, scheduledAt: new Date().toISOString() })
         expect(match.bestOf).toBe(3)
         expect(match.setPoints).toBe(5)
-        expect((await call(scorer, `/api/matches/${match.id}`, 'PUT', { court: 'court1' })).status).toBe(403)
+        expect((await call(scorer, `/api/matches/${match.id}`, 'PUT', { court: 1 })).status).toBe(403)
         expect((await call(scorer, `/api/matches/${match.id}`, 'PUT', { status: 'cancelled' })).status).toBe(403)
         expect((await call(scorer, `/api/matches/${match.id}`, 'PUT', { status: 'in_progress' })).status).toBe(200)
         const set = (await detail(match.id)).sets[0]
@@ -98,7 +99,7 @@ integration('roles, set rules, rotation and standings', () => {
     test('category rules are copied to matches and validated', async () => {
         expect((await call(admin, '/api/categories', 'POST', { name: `${name}-even`, bestOf: 4 })).status).toBe(400)
         expect((await call(admin, '/api/categories', 'POST', { name: `${name}-cap`, setPoints: 25, pointCap: 20 })).status).toBe(400)
-        const custom = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court1', scheduledAt: new Date().toISOString(), rules: { bestOf: 5, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null } })
+        const custom = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 1, scheduledAt: new Date().toISOString(), rules: { bestOf: 5, setPoints: 25, tiebreakPoints: 15, minLead: 2, pointCap: null } })
         expect(custom.bestOf).toBe(5)
         await json(admin, `/api/categories/${categoryId}`, 'PUT', { name })
         // A partial update is validated together with the stored rules (targets 5 and 3).
@@ -106,6 +107,68 @@ integration('roles, set rules, rotation and standings', () => {
         const categories: any[] = await json(null, '/api/categories')
         expect(categories.find(c => c.id === categoryId).setPoints).toBe(5)
         await json(admin, `/api/matches/${custom.id}`, 'DELETE')
+    })
+
+    test('the deciding set can have its own lead and cap', async () => {
+        // A cap of 27 for 25-point sets says nothing about the 15-point tie-break.
+        const own = await json(admin, '/api/categories', 'POST', { name: `${name}-tb`, setPoints: 25, minLead: 2, pointCap: 27, tiebreakPoints: 15, tiebreakMinLead: 2, tiebreakPointCap: 17 })
+        expect(own).toMatchObject({ pointCap: 27, tiebreakPointCap: 17, tiebreakMinLead: 2 })
+        expect((await call(admin, `/api/categories/${own.id}`, 'PUT', { tiebreakPointCap: 15 })).status).toBe(400)
+        // Older clients that omit the tie-break lead and cap get the defaults.
+        expect(await json(admin, '/api/categories', 'POST', { name: `${name}-tb-old`, pointCap: 27 })).toMatchObject({ tiebreakMinLead: 2, tiebreakPointCap: null })
+        await db.execute(sql`delete from categories where name like ${name + '-tb%'}`)
+        // The deciding set of a 5/3 match with a tie-break cap of 4 ends 4–3.
+        const matchId = await newMatch({ bestOf: 3, setPoints: 5, minLead: 2, pointCap: null, tiebreakPoints: 3, tiebreakMinLead: 2, tiebreakPointCap: 4 })
+        await rally(matchId, true, 5); await rally(matchId, false, 5)
+        await rally(matchId, false, 2); await rally(matchId, true, 2)
+        await rally(matchId, false); await rally(matchId, true)
+        expect((await detail(matchId)).status).toBe('in_progress')
+        await rally(matchId, true)
+        expect((await detail(matchId)).status).toBe('finished_home')        // Keep the shared category's table for the tests that follow.
+        await json(admin, `/api/matches/${matchId}`, 'DELETE')
+    })
+
+    test('knockout phases: seeds from the organization, winners advance, the table ignores them', async () => {
+        const extra = [(await json(admin, '/api/teams', 'POST', { name: `${name}-third`, categoryId, clubId })).id, (await json(admin, '/api/teams', 'POST', { name: `${name}-fourth`, categoryId, clubId })).id]
+        const seeds = [home, extra[1], away, extra[0]]
+        expect((await call(scorer, '/api/phases/preview', 'POST', { teamIds: seeds, thirdPlace: true })).status).toBe(403)
+        const preview = await json(admin, '/api/phases/preview', 'POST', { teamIds: seeds, thirdPlace: true }, 200)
+        expect(preview.matches.map((m: any) => m.label)).toEqual(['Semifinal 1', 'Semifinal 2', 'Final', 'Tercer puesto'])
+        expect(preview.matches[2].home).toBe('Ganador de Semifinal 1')
+        const when = new Date().toISOString()
+        const plan = preview.matches.map((m: any, i: number) => ({ round: m.round, slot: m.slot, label: i === 2 ? 'Gran final' : m.label, court: i % 2 + 3, scheduledAt: when }))
+        expect((await call(admin, '/api/phases', 'POST', { categoryId, name: 'Copa de Oro', teamIds: seeds, thirdPlace: true, matches: plan.slice(1) })).status).toBe(400)
+        expect((await call(admin, '/api/phases', 'POST', { categoryId, name: 'Copa de Oro', teamIds: [home, 999999], thirdPlace: false, matches: [{ round: 1, slot: 0, label: null, court: 1, scheduledAt: when }] })).status).toBe(400)
+        const before = (await json(null, `/api/standings?categoryId=${categoryId}`))[0].rows.find((r: any) => r.id === home).played
+        const phase = await json(admin, '/api/phases', 'POST', { categoryId, name: 'Copa de Oro', teamIds: seeds, thirdPlace: true, matches: plan })
+        const phaseMatches = async () => (await json(null, `/api/matches?categoryId=${categoryId}`)).filter((m: any) => m.phase?.id === phase.id).sort((a: any, b: any) => a.round - b.round || a.slot - b.slot)
+        let [semi1, semi2, final, third] = await phaseMatches()
+        expect([semi1.teamHome.id, semi1.teamAway.id, semi2.teamHome.id, semi2.teamAway.id]).toEqual([home, extra[0], extra[1], away])
+        expect(final).toMatchObject({ label: 'Gran final', court: 3, phase: { name: 'Copa de Oro' }, teamHome: { id: null, name: 'Ganador de Semifinal 1', pending: true } })
+        expect(third.teamAway.name).toBe('Perdedor de Semifinal 2')
+        expect((await call(scorer, `/api/matches/${final.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })).status).toBe(409)
+        expect((await call(admin, `/api/matches/${semi1.id}`, 'DELETE')).status).toBe(409)
+        expect((await call(admin, `/api/matches/${semi1.id}`, 'PUT', { teamHomeId: away })).status).toBe(400)
+
+        await json(scorer, `/api/matches/${semi1.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
+        await rally(semi1.id, true, 5)
+        const last = await rally(semi1.id, true, 5)
+        expect(last.matchWinner).toBe('home')
+        ;[semi1, semi2, final, third] = await phaseMatches()
+        expect(final.teamHome).toMatchObject({ id: home })
+        expect(third.teamHome).toMatchObject({ id: extra[0] })
+        expect((await json(null, `/api/standings?categoryId=${categoryId}`))[0].rows.find((r: any) => r.id === home).played).toBe(before)
+
+        // Undoing the winning point reopens the semifinal: the final waits again.
+        await json(scorer, `/api/points/${last.id}`, 'DELETE')
+        ;[semi1, semi2, final, third] = await phaseMatches()
+        expect(final.teamHome.pending).toBe(true)
+        expect(third.teamHome.pending).toBe(true)
+
+        expect((await json(null, `/api/phases?categoryId=${categoryId}`)).find((p: any) => p.id === phase.id)).toMatchObject({ name: 'Copa de Oro', rounds: 2, teams: [{ seed: 1, id: home }, { seed: 2 }, { seed: 3 }, { seed: 4 }] })
+        await json(admin, `/api/phases/${phase.id}`, 'PUT', { name: 'Copa de Plata' })
+        await json(admin, `/api/phases/${phase.id}`, 'DELETE')
+        expect(await phaseMatches()).toEqual([])
     })
 
     test('rallies close sets and the match automatically; undo reopens them', async () => {
@@ -214,7 +277,7 @@ integration('roles, set rules, rotation and standings', () => {
     test('one holder per match: claim, release, forced release; rulings do not need the claim', async () => {
         const otherId = (await json(admin, '/api/users', 'POST', { email: `${name}-other@example.com`, displayName: 'Otro planillero', role: 'scorer' })).id
         const other = await memberCookie(otherId)
-        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 'court2', scheduledAt: new Date().toISOString() })
+        const match = await json(admin, '/api/matches', 'POST', { teamHomeId: home, teamAwayId: away, categoryId, court: 2, scheduledAt: new Date().toISOString() })
         // Starting a free match claims it; nobody else can start or take it.
         await json(scorer, `/api/matches/${match.id}`, 'PUT', { status: 'in_progress', expectedStatus: 'upcoming' })
         const claims = await json(other, '/api/claims')

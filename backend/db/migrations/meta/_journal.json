@@ -50,6 +50,13 @@
       "when": 1793739245380,
       "tag": "0006_match_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794515632580,
+      "tag": "0007_knockout_courts_tiebreak",
+      "breakpoints": true
     }
   ]
 }

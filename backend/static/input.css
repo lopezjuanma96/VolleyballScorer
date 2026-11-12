@@ -74,7 +74,9 @@ a.match-row:hover { background: var(--soft); }
 .match-team.won .name { font-weight: 650; }
 .match-team .score { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
 .match-team .sets { color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: auto; padding-right: 8px; white-space: nowrap; }
-.match-meta { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.match-meta { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.match-tag { color: var(--ink); }
+.pending { color: var(--muted); font-style: italic; font-weight: 400; }
 .match-row.is-live .score { color: var(--ink); }
 .match-row.is-live { box-shadow: inset 2px 0 0 var(--accent); }
 
@@ -199,7 +201,7 @@ dialog[open]::backdrop { animation: fade-in .18s ease-out; }
     .btn-sm { min-height: 40px; }
     .page { padding: 20px 16px 48px; }
     .match-row { grid-template-columns: 44px minmax(0, 1fr); }
-    .match-meta { grid-column: 2; text-align: left; display: flex; gap: 10px; }
+    .match-meta { grid-column: 2; text-align: left; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
     .match-team .sets { display: none; }
     .scoreline .big { font-size: 34px; }
     .score-box > span { min-width: 58px; padding: 10px; }

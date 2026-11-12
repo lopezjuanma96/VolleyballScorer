@@ -1,5 +1,5 @@
 import { HTTPException } from 'hono/http-exception'
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, or } from 'drizzle-orm'
 import { db } from './db'
 import { matches, points, scoringAudit, sets, setLineups, substitutions } from './db/schema'
 import { matchWinner, rulesOf, setWinner, type SetsWon, type Side } from './rules'
@@ -58,6 +58,7 @@ export async function closeSet(tx: Transaction, match: Match, set: Set, winner: 
     const decided = matchWinner(rulesOf(match), won)
     if (decided) {
         await tx.update(matches).set({ status: `finished_${decided}` }).where(eq(matches.id, match.id))
+        await advanceFrom(tx, match.id)
         return { setWinner: winner, matchWinner: decided }
     }
     const all = await tx.select({ setNumber: sets.setNumber }).from(sets).where(eq(sets.matchId, match.id))
@@ -117,7 +118,10 @@ export async function undoPoint(tx: Transaction, pointId: number, username: stri
     }
     if (!open) {
         await tx.update(sets).set({ status: 'in_progress', revision: set.revision + 1 }).where(eq(sets.id, set.id))
-        if (match.status !== 'in_progress') await tx.update(matches).set({ status: 'in_progress' }).where(eq(matches.id, match.id))
+        if (match.status !== 'in_progress') {
+            await tx.update(matches).set({ status: 'in_progress' }).where(eq(matches.id, match.id))
+            await advanceFrom(tx, match.id)
+        }
     }
     await tx.delete(points).where(eq(points.id, pointId))
     return { reopenedSet: !open, reopenedMatch: match.status !== 'in_progress' }
@@ -138,5 +142,28 @@ export async function setRotation(tx: Transaction, set: Set) {
             rallies: rallies.map(r => r.homeScored),
             substitutions: changes,
         }),
+    }
+}
+
+// Knockout phases: after a match's status changes (within the transaction that holds
+// its lock), the matches it feeds take its winner, or its loser for the third place,
+// or wait again if it is no longer finished. Only matches that have not started
+// change; a started match keeps its teams and the organization rules on it. Locks go
+// to later rounds only, in id order, so two matches finishing at once cannot deadlock.
+export async function advanceFrom(tx: Transaction, matchId: number) {
+    const [source] = await tx.select().from(matches).where(eq(matches.id, matchId))
+    if (!source?.phaseId) return
+    const fed = await tx.select().from(matches)
+        .where(or(eq(matches.homeFromMatchId, matchId), eq(matches.awayFromMatchId, matchId)))
+        .orderBy(asc(matches.id)).for('update')
+    const winner = source.status === 'finished_home' ? source.teamHomeId : source.status === 'finished_away' ? source.teamAwayId : null
+    const loser = winner === null ? null : winner === source.teamHomeId ? source.teamAwayId : source.teamHomeId
+    for (const next of fed) {
+        if (next.status !== 'upcoming') continue
+        const team = next.fromLosers ? loser : winner
+        const update: Partial<Match> = {}
+        if (next.homeFromMatchId === matchId && next.teamHomeId !== team) update.teamHomeId = team
+        if (next.awayFromMatchId === matchId && next.teamAwayId !== team) update.teamAwayId = team
+        if (Object.keys(update).length) await tx.update(matches).set(update).where(eq(matches.id, next.id))
     }
 }

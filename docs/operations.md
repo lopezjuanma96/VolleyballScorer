@@ -27,6 +27,7 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 | `UPLOAD_DIR` | Carpeta persistente para logos; default `./static/uploads` |
 | `NGROK_AUTHTOKEN` | Token del túnel, sólo onprem |
 | `TOURNAMENT_NAME/SUBTITLE/ACCENT/TIMEZONE` | Identidad pública y zona horaria |
+| `TOURNAMENT_COURTS` | Canchas que se ofrecen al programar partidos; default 4, máximo 20 |
 
 No copies los defaults de `PSQL_*` a `DATABASE_URL`: usá una forma u otra. El Compose base siempre incluye PostgreSQL local. Para cloud administrado se usa directamente el Dockerfile, no todo el Compose.
 
@@ -95,7 +96,7 @@ API autenticada:
 - `GET /api/matches/:id/history`: historial de decisiones; no es público.
 - Al cerrar un partido con puntos pendientes, `PUT /api/matches/:id` exige `expectedActiveSet: { id, lastPointId }`. La interfaz envía también `expectedStatus`. Una pantalla desactualizada recibe 409 y debe volver a revisar. Para iniciar un nuevo set en lugar de recuperar el último cancelado con puntos, hace falta `startNewSet: true`.
 
-La migración `0003_chubby_scorpion` añade la revisión del set y el historial; `0004_roles_rules_rotation` añade usuarios, reglas (3/25/15/2 sin tope para lo existente), tipo de punto, saque inicial, formaciones y cambios, y marca como corrección los registros de correcciones anteriores; `0005_google_members` reemplaza usuario y contraseña por email: las cuentas existentes quedan desactivadas como `usuario@sin-email.invalid` hasta que el administrador principal les cargue el email de Google (o las elimine). Se aplican al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
+La migración `0003_chubby_scorpion` añade la revisión del set y el historial; `0004_roles_rules_rotation` añade usuarios, reglas (3/25/15/2 sin tope para lo existente), tipo de punto, saque inicial, formaciones y cambios, y marca como corrección los registros de correcciones anteriores; `0005_google_members` reemplaza usuario y contraseña por email: las cuentas existentes quedan desactivadas como `usuario@sin-email.invalid` hasta que el administrador principal les cargue el email de Google (o las elimine). `0007_knockout_courts_tiebreak` pasa la cancha a número (`court1` → 1), da al set decisivo diferencia y tope propios (copiando los actuales, así nada cambia de comportamiento) y crea las fases eliminatorias. Se aplican al iniciar. Conservá un backup antes de actualizar. El historial se conserva mientras exista el partido; eliminar el partido elimina también su historial.
 
 ## Lecturas bajo carga
 

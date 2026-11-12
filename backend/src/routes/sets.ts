@@ -4,7 +4,7 @@ import { sets, points, matches, scoringAudit, setLineups, substitutions } from '
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { HTTPException } from 'hono/http-exception'
 import { actor, adminOnly, getSession, scorerOnly } from '../middleware/auth'
-import { closeSet, lastPoint, lockActiveSet, lockSet, requireHolder, setRotation, setsWon } from '../scoring'
+import { advanceFrom, closeSet, lastPoint, lockActiveSet, lockSet, requireHolder, setRotation, setsWon } from '../scoring'
 import { finalScoreWinner, rulesOf } from '../rules'
 import { lineupInput, substitutionInput } from '../validation'
 import { substitutionsFit } from '../rotation'
@@ -86,6 +86,7 @@ setRoutes.post('/:id/recover', adminOnly, async c => {
         }
         const [updated] = await tx.update(sets).set({ status: 'in_progress', revision: set.revision + 1 }).where(eq(sets.id, id)).returning()
         await tx.update(matches).set({ status: 'in_progress' }).where(eq(matches.id, match.id))
+        await advanceFrom(tx, match.id)
         await tx.insert(scoringAudit).values({ matchId: match.id, setId: id, action: 'set_recovery', actor: await actor(c), reason: body.reason.trim(), before: { ...before, matchStatus: match.status }, after: { ...snapshot(updated, await lastPoint(tx, id)), matchStatus: 'in_progress' } })
         return updated
     })

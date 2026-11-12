@@ -15,12 +15,13 @@
         <form id="match-form" class="stack" style="margin-top:16px" novalidate>
             <div class="form-grid">
                 <div class="field"><label for="category">Categoría</label><select id="category" required><option value="">Elegí una categoría…</option></select></div>
-                <div class="field"><label for="court">Cancha</label><select id="court"><option value="court1">Cancha 1</option><option value="court2">Cancha 2</option></select></div>
+                <div class="field"><label for="court">Cancha</label><select id="court"></select></div>
             </div>
             <div class="form-grid">
                 <div class="field"><label for="team-home">Equipo local</label><select id="team-home" required><option value="">Elegí una categoría primero</option></select></div>
                 <div class="field"><label for="team-away">Equipo visitante</label><select id="team-away" required><option value="">Elegí una categoría primero</option></select></div>
             </div>
+            <div class="field"><label for="label">Descripción <span class="muted">(opcional)</span></label><input type="text" id="label" maxlength="100" placeholder="Ej: Fecha 3, Semifinal 1" /></div>
             <div class="field">
                 <label for="scheduled-at">Fecha y hora</label>
                 <input type="datetime-local" id="scheduled-at" required />
@@ -33,13 +34,7 @@
                 <p id="category-rules" class="small muted">Elegí una categoría para ver sus reglas.</p>
                 <label class="check"><input type="checkbox" id="custom-rules" /> Usar reglas propias para este partido</label>
                 <div id="rules-fields" class="panel hidden">
-                    <div class="form-grid">
-                        <div class="field"><label for="rule-bestOf">Formato</label><select id="rule-bestOf"><option value="1">Un set</option><option value="3">Mejor de 3</option><option value="5">Mejor de 5</option><option value="7">Mejor de 7</option></select></div>
-                        <div class="field"><label for="rule-setPoints">Puntos por set</label><input type="number" id="rule-setPoints" min="3" max="99" /></div>
-                        <div class="field"><label for="rule-tiebreakPoints">Puntos del desempate</label><input type="number" id="rule-tiebreakPoints" min="3" max="99" /></div>
-                        <div class="field"><label for="rule-minLead">Diferencia mínima</label><input type="number" id="rule-minLead" min="1" max="5" /></div>
-                        <div class="field"><label for="rule-pointCap">Tope de puntos</label><input type="number" id="rule-pointCap" min="4" max="199" placeholder="Sin tope" /><span class="hint">Vacío = sin tope.</span></div>
-                    </div>
+                    <div id="rules"></div>
                     <p id="rules-edit-note" class="tiny muted hidden" style="margin-top:10px">Cambiar las reglas con el partido en juego no reevalúa los sets ya cerrados.</p>
                 </div>
             </section>
@@ -55,17 +50,10 @@
         let allTeams = [], allCategories = [], editingMatch = null
         const editingId = Number(new URLSearchParams(location.search).get('id')) || null
         const $ = id => document.getElementById(id)
-        const ruleKeys = ['bestOf', 'setPoints', 'tiebreakPoints', 'minLead', 'pointCap']
-        const sameRules = (a, b) => ruleKeys.every(k => (a[k] ?? null) === (b[k] ?? null))
         const currentCategory = () => allCategories.find(c => c.id === Number($('category').value))
-
-        function fillRules(r) {
-            for (const k of ruleKeys) $(`rule-${k}`).value = r[k] ?? ''
-        }
-        function readRules() {
-            const n = k => Number($(`rule-${k}`).value)
-            return { bestOf: n('bestOf'), setPoints: n('setPoints'), tiebreakPoints: n('tiebreakPoints'), minLead: n('minLead'), pointCap: $('rule-pointCap').value === '' ? null : n('pointCap') }
-        }
+        const rules = App.ruleForm($('rules'))
+        let rulesFilled = false
+        const fillRules = r => { rules.fill(r); rulesFilled = true }
         function showError(message) { $('form-error').textContent = message; $('form-error').classList.toggle('hidden', !message) }
 
         function updateTimezonePreview() {
@@ -89,7 +77,7 @@
         $('custom-rules').addEventListener('change', () => {
             $('rules-fields').classList.toggle('hidden', !$('custom-rules').checked)
             const category = currentCategory()
-            if ($('custom-rules').checked && category && !$('rule-setPoints').value) fillRules(category)
+            if ($('custom-rules').checked && category && !rulesFilled) fillRules(category)
         })
         $('category').addEventListener('change', updateCategory)
         $('scheduled-at').addEventListener('input', updateTimezonePreview)
@@ -104,6 +92,7 @@
                 document.querySelector('main').innerHTML = '<p class="empty">Solo la organización puede crear o editar partidos. <a href="/manager/">Volver a Partidos</a></p>'
                 return
             }
+            $('court').innerHTML = App.courtOptions(1)
             ;[allCategories, allTeams] = await Promise.all([App.json('/api/categories'), App.json('/api/teams')])
             $('category').innerHTML = '<option value="">Elegí una categoría…</option>' + allCategories.map(c => `<option value="${c.id}">${App.escape(c.name)}</option>`).join('')
             if (editingId) {
@@ -115,13 +104,18 @@
                 $('rules-edit-note').classList.remove('hidden')
                 $('category').value = editingMatch.categoryId
                 updateCategory()
-                $('team-home').value = editingMatch.teamHome.id
-                $('team-away').value = editingMatch.teamAway.id
+                // Knockout sides may still wait for an earlier result: show who they wait for.
+                for (const [id, team] of [['team-home', editingMatch.teamHome], ['team-away', editingMatch.teamAway]]) {
+                    if (team.pending) $(id).innerHTML = `<option value="">${App.escape(team.name)}</option>`
+                    else $(id).value = team.id
+                }
                 for (const id of ['category', 'team-home', 'team-away']) $(id).disabled = true
-                $('court').value = editingMatch.court
+                if (editingMatch.phase) $('form-title').insertAdjacentHTML('afterend', `<p class="small muted" style="margin-top:4px">Partido de la fase eliminatoria «${App.escape(editingMatch.phase.name)}». Los equipos salen de la llave.</p>`)
+                $('court').innerHTML = App.courtOptions(editingMatch.court)
+                $('label').value = editingMatch.label ?? ''
                 $('scheduled-at').value = localInputValue(editingMatch.scheduledAt)
                 fillRules(editingMatch.rules)
-                const custom = !sameRules(editingMatch.rules, currentCategory())
+                const custom = !App.sameRules(editingMatch.rules, currentCategory())
                 $('custom-rules').checked = custom
                 $('rules-fields').classList.toggle('hidden', !custom)
             }
@@ -132,13 +126,14 @@
             event.preventDefault()
             const categoryId = Number($('category').value), teamHomeId = Number($('team-home').value), teamAwayId = Number($('team-away').value)
             const court = $('court').value, scheduledAt = $('scheduled-at').value
-            if (!categoryId || !teamHomeId || !teamAwayId || !court || !scheduledAt) return showError('Completá todos los campos.')
-            if (teamHomeId === teamAwayId) return showError('El equipo local y el visitante deben ser distintos.')
-            const body = { court, scheduledAt: new Date(scheduledAt).toISOString() }
+            // On edit the category and teams are fixed (a knockout side may still be unknown).
+            if (!court || !scheduledAt || (!editingId && (!categoryId || !teamHomeId || !teamAwayId))) return showError('Completá todos los campos.')
+            if (!editingId && teamHomeId === teamAwayId) return showError('El equipo local y el visitante deben ser distintos.')
+            const body = { court: Number(court), scheduledAt: new Date(scheduledAt).toISOString(), label: $('label').value.trim() || null }
             if (!editingId) Object.assign(body, { teamHomeId, teamAwayId, categoryId })
-            if ($('custom-rules').checked) body.rules = readRules()
+            if ($('custom-rules').checked) body.rules = rules.read()
             // Unchecking on edit goes back to the category's rules.
-            else if (editingId && !sameRules(editingMatch.rules, currentCategory())) body.rules = ruleKeys.reduce((r, k) => ({ ...r, [k]: currentCategory()[k] ?? null }), {})
+            else if (editingId && !App.sameRules(editingMatch.rules, currentCategory())) body.rules = App.RULE_KEYS.reduce((r, k) => ({ ...r, [k]: currentCategory()[k] ?? null }), {})
             showError('')
             const button = $('save-button')
             button.disabled = true
