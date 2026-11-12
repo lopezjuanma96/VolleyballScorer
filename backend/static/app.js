@@ -51,7 +51,7 @@ window.App = {
     // A knockout side still waiting for an earlier result reads "Ganador de Semifinal 1", in italics.
     teamName(team) { return team.pending ? `<span class="pending">${App.escape(team.name)}</span>` : App.escape(team.name) },
     // Public match line (fixture and knockout brackets): time, both teams with sets, tag, category, court, status.
-    matchRow(m, { showDate = false } = {}) {
+    matchRow(m, { showDate = false, inBracket = false } = {}) {
         const esc = App.escape
         const winner = App.winner(m)
         const live = m.status === 'in_progress', upcoming = m.status === 'upcoming'
@@ -64,11 +64,12 @@ window.App = {
         }
         const status = live ? `<span class="badge badge-live"><span class="live-dot"></span>${active ? `Set ${active.setNumber}` : 'En juego'}</span>` : upcoming ? '' : `<span class="badge">${App.statusLabel(m.status)}</span>`
         const label = `${App.matchTag(m) ? `${App.matchTag(m)}: ` : ''}${m.teamHome.name} contra ${m.teamAway.name}${winner ? `. Ganó ${winner.name}` : live ? '. En juego' : ''}`
-        const tag = App.matchTag(m)
+        // Inside a bracket the phase and category are already its heading.
+        const tag = inBracket ? m.label : App.matchTag(m)
         return `<a class="match-row ${live ? 'is-live' : ''}" href="/game.html?id=${m.id}" aria-label="${esc(label)}">
             <span class="match-time">${showDate ? `${App.date(m.scheduledAt)}<br>` : ''}${App.time(m.scheduledAt)}</span>
             <span class="match-teams">${line('home')}${line('away')}</span>
-            <span class="match-meta">${tag ? `<span class="match-tag">${esc(tag)}</span>` : ''}<span>${esc(m.categoryName)} · ${App.court(m.court)}</span>${status}</span>
+            <span class="match-meta">${tag ? `<span class="match-tag">${esc(tag)}</span>` : ''}<span>${inBracket ? '' : `${esc(m.categoryName)} · `}${App.court(m.court)}</span>${status}</span>
         </a>`
     },
     roundName(round, rounds) { return ['Final', 'Semifinal', 'Cuartos de final', 'Octavos de final', 'Dieciseisavos de final'][rounds - round] ?? `Ronda ${round}` },
@@ -81,7 +82,7 @@ window.App = {
             if (!groups.has(name)) groups.set(name, [])
             groups.get(name).push(m)
         }
-        return [...groups].map(([name, list]) => `<h3 class="day">${App.escape(name)}</h3>${list.map(m => App.matchRow(m, { showDate: true })).join('')}`).join('')
+        return [...groups].map(([name, list]) => `<h3 class="day">${App.escape(name)}</h3>${list.map(m => App.matchRow(m, { showDate: true, inBracket: true })).join('')}`).join('')
     },
     // Rotation grid seen from the team's own side: net on top (4 3 2), baseline below (5 6 1).
     // positions[0] is position 1, the server. `content(i)` renders the cell for positions[i].

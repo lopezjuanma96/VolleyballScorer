@@ -317,7 +317,9 @@
             if (document.querySelector('#admin :focus')) return
             const active = activeSet()
             const latest = m.sets.at(-1)
-            const statuses = [['upcoming', 'Próximo'], ['in_progress', 'En juego'], ['finished_home', `Ganó ${teamName('home')}`], ['finished_away', `Ganó ${teamName('away')}`], ['cancelled', 'Cancelado']]
+            // A knockout match waiting for a team can only stay upcoming or be cancelled.
+            const known = !m.teamHome.pending && !m.teamAway.pending
+            const statuses = [['upcoming', 'Próximo'], ...(known ? [['in_progress', 'En juego'], ['finished_home', `Ganó ${teamName('home')}`], ['finished_away', `Ganó ${teamName('away')}`]] : []), ['cancelled', 'Cancelado']]
             document.getElementById('admin').innerHTML = `<h2 class="section">Organización</h2>
                 <p class="small muted" data-tip="admin-rulings">Decisiones administrativas: quedan en el historial con su motivo. Usalas para walkover, abandono o errores de planilla.</p>
                 <div class="stack">

@@ -93,14 +93,16 @@
         function renderSeeds() {
             const ranked = rankedTeams()
             const count = Math.min(Number($('team-count').value) || 0, ranked.length)
-            const from = Math.max(1, Number($('from-position').value) || 1)
             $('seeds-section').classList.toggle('hidden', !category())
             if (!category()) return
             if (ranked.length < 2) { $('seeds').innerHTML = '<p class="small muted">La categoría necesita al menos dos equipos.</p>'; return }
+            // The range always fits the table: 6 teams of 8 start at 3rd at the latest.
+            const from = Math.min(Math.max(1, Number($('from-position').value) || 1), ranked.length - count + 1)
+            $('from-position').value = from
             const option = t => `<option value="${t.id}">${t.position ? `${t.position}. ` : ''}${esc(t.name)}${t.points !== undefined ? ` (${t.points} pts)` : ''}${t.phases.length ? ` · en ${esc(t.phases.join(', '))}` : ''}</option>`
             $('seeds-title').textContent = `Siembra (${count} equipos)`
             $('seeds').innerHTML = Array.from({ length: count }, (_, i) => {
-                const pick = ranked[Math.min(from - 1 + i, ranked.length - 1)]
+                const pick = ranked[from - 1 + i]
                 return `<div class="field"><label for="seed-${i}">${i + 1}.º sembrado</label><select id="seed-${i}" data-seed>${ranked.map(option).join('')}</select></div>`.replace(`value="${pick.id}"`, `value="${pick.id}" selected`)
             }).join('')
             clearPlan()
@@ -110,6 +112,7 @@
             const c = category()
             $('category-rules').textContent = c ? `Reglas de la categoría: ${App.rulesText(c)}.` : 'Elegí una categoría para ver sus reglas.'
             if (c) rules.fill(c)
+            $('from-position').value = 1
             const count = teams.filter(t => t.categoryId === c?.id).length
             $('team-count').max = Math.max(2, Math.min(32, count))
             if (count && Number($('team-count').value) > count) $('team-count').value = count
