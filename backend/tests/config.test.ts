@@ -8,8 +8,8 @@ describe('deployment configuration', () => {
         expect(parseConfig(base).secureCookie).toBe(false)
         expect(parseConfig(base).TRUST_PROXY_HOPS).toBe(0)
     })
-    test('onprem and cloud require HTTPS and secure cookies', () => {
-        for (const DEPLOY_MODE of ['onprem', 'cloud']) {
+    test('onprem, cloud and edge require HTTPS, secure cookies and one trusted proxy', () => {
+        for (const DEPLOY_MODE of ['onprem', 'cloud', 'edge']) {
             expect(() => parseConfig({ ...base, DEPLOY_MODE })).toThrow('HTTPS')
             expect(() => parseConfig({ ...base, DEPLOY_MODE, PUBLIC_URL: 'http://example.com' })).toThrow('HTTPS')
             expect(() => parseConfig({ ...base, DEPLOY_MODE, PUBLIC_URL: 'https://example.com', COOKIE_SECURE: 'false' })).toThrow()
@@ -21,7 +21,7 @@ describe('deployment configuration', () => {
     test('the local dev login is refused outside local mode', () => {
         expect(parseConfig(base).devLogin).toBe(false)
         expect(parseConfig({ ...base, DEV_LOGIN: 'true' }).devLogin).toBe(true)
-        for (const DEPLOY_MODE of ['onprem', 'cloud']) expect(() => parseConfig({ ...base, DEPLOY_MODE, PUBLIC_URL: 'https://example.com', DEV_LOGIN: 'true' })).toThrow('DEV_LOGIN')
+        for (const DEPLOY_MODE of ['onprem', 'cloud', 'edge']) expect(() => parseConfig({ ...base, DEPLOY_MODE, PUBLIC_URL: 'https://example.com', DEV_LOGIN: 'true' })).toThrow('DEV_LOGIN')
     })
     test('validates the forwarding policy', () => {
         expect(parseConfig({ ...base, TRUST_PROXY_HOPS: '2', CLIENT_IP_HEADER: 'x-real-ip' }).CLIENT_IP_HEADER).toBe('x-real-ip')

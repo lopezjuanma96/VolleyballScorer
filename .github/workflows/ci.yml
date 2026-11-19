@@ -33,3 +33,12 @@ jobs:
       - run: bun run check && bun run css && bun run db:migrate && bun test
         working-directory: backend
       - run: docker build -t volleyball-scorer ./backend
+      - name: Compose config for every DEPLOY_MODE
+        env:
+          PSQL_PASSWORD: ci-only
+        run: |
+          cp .env.example .env
+          for mode in local onprem cloud edge; do DEPLOY_MODE=$mode scripts/stack.sh config --quiet; done
+          test "$(DEPLOY_MODE=cloud scripts/stack.sh config --services | sort | xargs)" = "app caddy db"
+          test "$(DEPLOY_MODE=edge scripts/stack.sh config --services | sort | xargs)" = "app db"
+          DEPLOY_MODE=edge scripts/stack.sh config | grep -qE -- '^ +- voley$'
