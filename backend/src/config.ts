@@ -4,7 +4,7 @@ import { z } from 'zod'
 const optionalText = z.preprocess(value => typeof value === 'string' && value.trim() === '' ? undefined : value, z.string().trim().optional())
 
 const envSchema = z.object({
-    DEPLOY_MODE: z.enum(['local', 'onprem', 'cloud']).default('local'),
+    DEPLOY_MODE: z.enum(['local', 'onprem', 'cloud', 'edge']).default('local'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     MANAGER_USER: z.string().trim().min(1).default('manager'),
     MANAGER_PASSWORD: z.string().min(12, 'Use at least 12 characters'),
@@ -38,7 +38,7 @@ export function parseConfig(env: Record<string, string | undefined>) {
     }
     const config = result.data
     if (config.DEPLOY_MODE !== 'local' && (!config.PUBLIC_URL?.startsWith('https://') || config.COOKIE_SECURE === 'false')) {
-        throw new Error('onprem/cloud require an HTTPS PUBLIC_URL and secure cookies')
+        throw new Error('onprem/cloud/edge require an HTTPS PUBLIC_URL and secure cookies')
     }
     if (config.DEV_LOGIN === 'true' && config.DEPLOY_MODE !== 'local') throw new Error('DEV_LOGIN is only allowed with DEPLOY_MODE=local')
     if (!config.GOOGLE_CLIENT_ID !== !config.GOOGLE_CLIENT_SECRET) throw new Error('Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither')

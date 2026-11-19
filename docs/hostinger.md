@@ -2,7 +2,7 @@
 
 Guía para hacer una sola vez. Resultado: VPS con Docker, app + PostgreSQL + Caddy (HTTPS automático), despliegue automático desde GitHub después de que pasa CI, y backups fuera del servidor. Escrita el 29/10/2026; verificá precios y pantallas de hPanel al momento de comprar.
 
-**Estado actual (02/11/2026):** hecho. La app está en <https://voley.zagador123.cloud> (registro A apuntando a la VPS de Hostinger) y el despliegue automático está activo (`DEPLOY_ENABLED=true`): cada merge a `main` que pasa **Check** se publica solo. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`. Pendiente: [ingreso con Google](#google).
+**Estado actual (02/11/2026):** hecho. La app está en <https://voley.zagador123.cloud> (registro A apuntando a la VPS de Hostinger) y el despliegue automático está activo (`DEPLOY_ENABLED=true`): cada merge a `main` que pasa **Check** se publica solo. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`. Pendiente: [ingreso con Google](#google). Producción sigue en `DEPLOY_MODE=cloud` hasta que se haga la [migración a edge](#edge) para sumar una segunda app.
 
 Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude con el conector de Hostinger: revisar el estado de la VPS, firewall, snapshots y métricas, y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
 
@@ -97,7 +97,7 @@ sshd -t && systemctl reload ssh
 sshd -T | grep -Ei '^(passwordauthentication|permitrootlogin)'   # tiene que decir "no" en ambas
 ```
 
-En hPanel → VPS → Firewall, replicá las mismas reglas (22, 80, 443). Docker publica puertos por fuera de UFW: el Compose sólo expone 80/443 (Caddy) y la app queda en `127.0.0.1:3000`; no cambies `APP_BIND`.
+En hPanel → VPS → Firewall, replicá las mismas reglas (22, 80, 443). Docker publica puertos por fuera de UFW: el Compose sólo expone 80/443 (Caddy; en [edge](#edge), el Caddy compartido) y la app queda en `127.0.0.1:3000`; no cambies `APP_BIND`.
 
 ## 4. Dominio
 
@@ -229,3 +229,14 @@ Orden al desplegar este cambio: cargá primero las variables en el `.env` de la 
 
 Si Google no está configurado, el botón muestra «El ingreso con Google todavía no está configurado» y sólo entra `manager`.
 
+<a id="edge"></a>
+## 10. Otra app en la misma VPS (modo edge)
+
+En `cloud` el Caddy que publica 80/443 está dentro de este stack, así que ninguna otra app de la VPS puede usar HTTPS. Para alojar más de una (por ejemplo `metamorfosis.zagador123.cloud`), el proxy sale a un stack aparte y compartido: el repositorio [vps-edge](https://github.com/lopezjuanma96/vps-edge), clonado en `~/edge` como `deploy`. Ese Caddy reparte cada dominio por la red Docker `edge`, y el vóley pasa a `DEPLOY_MODE=edge`: app + PostgreSQL sin Caddy propio, unidos a esa red con el nombre `voley` ([detalles](operations.md#edge-caddy-compartido-en-vps)).
+
+```bash
+# Una sola vez por VPS: la red por la que el Caddy compartido llega a cada app.
+docker network create edge
+```
+
+El orden completo (red, clonar vps-edge, copiar los certificados actuales, corte de segundos y vuelta atrás) está en la [migración del README de vps-edge](https://github.com/lopezjuanma96/vps-edge#migración-sacar-caddy-de-volleyballscorer). Hacelo fuera de días de torneo. Mergear este modo no cambia nada mientras el `.env` de la VPS siga en `cloud`; el despliegue automático sigue igual después del corte, porque `scripts/deploy.sh` lee el modo del `.env`. Agregar un dominio nuevo se hace en vps-edge, no acá.

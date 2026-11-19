@@ -8,11 +8,12 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 
 | Variable | Función |
 | --- | --- |
-| `DEPLOY_MODE` | `local`, `onprem`, `cloud`; `scripts/stack.sh` selecciona el perfil Compose |
+| `DEPLOY_MODE` | `local`, `onprem`, `cloud`, `edge`; `scripts/stack.sh` selecciona archivos y perfil Compose |
 | `APP_PORT`, `APP_BIND` | Puerto y dirección publicados por Docker; defaults `3000`, `127.0.0.1` |
 | `PORT` | Puerto interno para plataformas; Compose lo fija en 3000 |
 | `PUBLIC_URL` | Origen que se permite para escrituras del navegador; HTTPS obligatorio fuera de local |
-| `DOMAIN` | Host de Caddy en cloud; debe coincidir con `PUBLIC_URL` |
+| `DOMAIN` | Host de Caddy en cloud; debe coincidir con `PUBLIC_URL`. Edge no lo usa |
+| `EDGE_NETWORK`, `EDGE_ALIAS` | Sólo edge: red Docker externa del Caddy compartido y nombre único de la app en ella; defaults `edge`, `voley` |
 | `DATABASE_URL` | PostgreSQL administrado; tiene prioridad sobre `PSQL_*` en el backend |
 | `PSQL_HOST/PORT/DATABASE/USER/PASSWORD` | Conexión PostgreSQL tradicional; Compose fija host `db` y puerto 5432 |
 | `PSQL_ADMIN_USER/PASSWORD` | Opcional, sólo migraciones sobre instalaciones anteriores con roles separados |
@@ -21,9 +22,9 @@ Todos los comandos se ejecutan desde la raíz, salvo que se indique otra cosa. R
 | `CONTACT_EMAIL` | Opcional: contacto para pedidos sobre datos personales en `/privacy_policy` |
 | `GOOGLE_CLIENT_ID/SECRET` | Ingreso con Google de organización y planilleros; ambos o ninguno. Sin ellos sólo entra el administrador principal ([cómo crearlos](hostinger.md#google)) |
 | `SESSION_SECRET` | Firma de sesión; mínimo 32 caracteres; cambiarlo invalida sesiones anteriores |
-| `COOKIE_SECURE` | Automático: false en local, true en onprem/cloud. No puede desactivarse en público |
-| `TRUST_PROXY_HOPS` | Cantidad de proxies confiables: default 0 en local, 1 en onprem/cloud; origen inaccesible desde internet por otra ruta |
-| `CLIENT_IP_HEADER` | `x-forwarded-for` para Caddy/ngrok; configurar `x-real-ip` en Railway |
+| `COOKIE_SECURE` | Automático: false en local, true en onprem/cloud/edge. No puede desactivarse en público |
+| `TRUST_PROXY_HOPS` | Cantidad de proxies confiables: default 0 en local, 1 en onprem/cloud/edge; origen inaccesible desde internet por otra ruta |
+| `CLIENT_IP_HEADER` | `x-forwarded-for` para Caddy (propio o compartido)/ngrok; configurar `x-real-ip` en Railway |
 | `UPLOAD_DIR` | Carpeta persistente para logos; default `./static/uploads` |
 | `NGROK_AUTHTOKEN` | Token del túnel, sólo onprem |
 | `TOURNAMENT_NAME/SUBTITLE/ACCENT/TIMEZONE` | Identidad pública y zona horaria |
@@ -49,6 +50,23 @@ Accedé a organización por la URL pública HTTPS; sus cookies Secure no se env�
 4. `scripts/stack.sh up -d --build`. Caddy gestiona TLS. La DB no publica un puerto; la app queda en loopback para diagnóstico.
 5. Configurar backups fuera del servidor y ensayar una restauración antes del torneo.
 
+Cloud trae su propio Caddy: es la opción para un VPS que sólo aloja esta app.
+
+### Edge: Caddy compartido en VPS
+
+Para un VPS que aloja varias apps (por ejemplo vóley y Metamorfosis en el de Hostinger). Un solo Caddy publica 80/443, emite los certificados y reparte cada dominio por la red Docker externa `edge`. Ese Caddy vive en su propio repositorio, [vps-edge](https://github.com/lopezjuanma96/vps-edge), clonado en `~/edge` del VPS. Este stack no trae Caddy: `scripts/stack.sh` agrega `deploy/compose.edge.yml`, que suma la app a la red `edge` con el alias `voley`, y el sitio de vps-edge apunta a `voley:3000`. Nunca a `app`: otro stack de la misma red puede tener un servicio llamado así y Docker repartiría el tráfico entre los dos.
+
+1. Una vez por VPS: `docker network create edge`. Sin la red, `scripts/stack.sh up` se niega y muestra este comando.
+2. `.env`: `DEPLOY_MODE=edge` y `PUBLIC_URL` HTTPS. `DOMAIN` no se usa; el dominio está en el sitio de vps-edge. `EDGE_NETWORK` y `EDGE_ALIAS` sólo cambian si cambian allá.
+3. `scripts/stack.sh up -d --build --remove-orphans`. La app sigue publicada en `127.0.0.1:3000` para diagnóstico; la DB no se publica.
+4. El Caddy compartido se levanta y se recarga desde `~/edge`, según su README.
+
+Cookies seguras, `TRUST_PROXY_HOPS=1`, rechazo de `DEV_LOGIN` y backups funcionan igual que en cloud. Usá siempre `scripts/stack.sh`: un `docker compose up` directo no incluye `deploy/compose.edge.yml`, saca la app de la red `edge` y el sitio deja de responder hasta el próximo `scripts/stack.sh up`. Deploy, backup y restauración ya pasan por `scripts/stack.sh`.
+
+Al cambiar de modo con `--remove-orphans`, `scripts/stack.sh` también borra el Caddy o ngrok del modo anterior: Compose no considera huérfanos a los servicios de un perfil inactivo y, sin ese paso, el Caddy de cloud seguiría ocupando 80/443. El volumen `caddy_data` con los certificados se conserva.
+
+Pasar el VPS de cloud a edge, con orden, corte de segundos y vuelta atrás: [migración en el README de vps-edge](https://github.com/lopezjuanma96/vps-edge#migración-sacar-caddy-de-volleyballscorer). Hacelo fuera de días de torneo.
+
 ### Cloud con plataforma administrada
 
 Railway: un servicio app y un servicio PostgreSQL. Misma aplicación y misma rama.
@@ -67,9 +85,9 @@ Render: mismo Dockerfile, `DATABASE_URL`, variables, una réplica y disco persis
 
 El límite es de 30 intentos por cliente por minuto, con almacenamiento acotado en memoria; no hay una cuota de intentos compartida por todos los visitantes. El login limita además su cuerpo a 4 KB. Clientes detrás de una misma IP pública comparten cuota.
 
-En local (`TRUST_PROXY_HOPS=0`) se usa la IP de la conexión que informa Bun y se ignoran los headers que envía el visitante. En onprem/cloud el default 1 corresponde a un único proxy de entrada. Con `x-forwarded-for`, la app cuenta desde la derecha y omite prefijos que el cliente pudiera falsificar. Caddy/ngrok agregan o reconstruyen ese header. Railway documenta `x-real-ip`: usá `CLIENT_IP_HEADER=x-real-ip` y un solo salto.
+En local (`TRUST_PROXY_HOPS=0`) se usa la IP de la conexión que informa Bun y se ignoran los headers que envía el visitante. En onprem/cloud/edge el default 1 corresponde a un único proxy de entrada. Con `x-forwarded-for`, la app cuenta desde la derecha y omite prefijos que el cliente pudiera falsificar. Caddy/ngrok agregan o reconstruyen ese header. Railway documenta `x-real-ip`: usá `CLIENT_IP_HEADER=x-real-ip` y un solo salto.
 
-Esta confianza exige que internet sólo pueda alcanzar la app a través del proxy elegido. El Compose mantiene la app en loopback por defecto; no cambies `APP_BIND` a `0.0.0.0` en un VPS público. Si cambiás la cadena de proxies, revisá cantidad de saltos y header antes de habilitar el login. Fuentes: [ngrok](https://ngrok.com/docs/gateway/endpoints/http#upstream-headers), [Caddy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers), [Railway](https://docs.railway.com/networking/public-networking/specs-and-limits).
+Esta confianza exige que internet sólo pueda alcanzar la app a través del proxy elegido. El Compose mantiene la app en loopback por defecto; no cambies `APP_BIND` a `0.0.0.0` en un VPS público. En edge, además, cualquier contenedor de la red `edge` llega a la app sin pasar por Caddy: sumá a esa red sólo apps propias. Si cambiás la cadena de proxies, revisá cantidad de saltos y header antes de habilitar el login. Fuentes: [ngrok](https://ngrok.com/docs/gateway/endpoints/http#upstream-headers), [Caddy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers), [Railway](https://docs.railway.com/networking/public-networking/specs-and-limits).
 
 ## Cierre seguro de sets
 

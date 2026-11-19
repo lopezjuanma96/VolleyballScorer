@@ -20,18 +20,18 @@ if [[ $sha != "$current" ]] && git merge-base --is-ancestor "$sha" "$current"; t
     exit 0
 fi
 # Backup before migrations; the app pauses a few seconds while it runs.
-if docker compose ps --status running --services | grep -qx app; then scripts/backup.sh; fi
+if scripts/stack.sh ps --status running --services | grep -qx app; then scripts/backup.sh; fi
 git checkout --quiet --detach "$sha"
 scripts/stack.sh up -d --build --remove-orphans
 
 status=starting
 for _ in $(seq 1 45); do
-    status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q app)" 2>/dev/null || echo missing)
+    status=$(docker inspect -f '{{.State.Health.Status}}' "$(scripts/stack.sh ps -q app)" 2>/dev/null || echo missing)
     [[ $status == healthy ]] && break
     sleep 4
 done
 if [[ $status != healthy ]]; then
-    docker compose logs --tail 80 app >&2
+    scripts/stack.sh logs --tail 80 app >&2
     echo "La app no quedó saludable ($status). El backup previo está en backups/." >&2
     exit 1
 fi

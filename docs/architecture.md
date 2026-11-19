@@ -8,9 +8,9 @@ La base vigente es la reescritura Bun/Hono de `main`. No se fusionó el servidor
 - PostgreSQL guarda clubes, categorías, equipos, partidos, sets y snapshots de puntos.
 - Volumen de logos junto a la aplicación: se conserva al reconstruir el contenedor.
 - SSE avisa cambios a los espectadores; cada pantalla solicita datos actualizados. La conexión se cierra cuando la pestaña queda oculta y se recupera al volver. Un fallo conserva los últimos datos visibles.
-- Compose agrega ngrok o Caddy según `DEPLOY_MODE`; las plataformas administradas pueden ejecutar el mismo Dockerfile.
+- Compose agrega ngrok o Caddy según `DEPLOY_MODE`; en `edge` no hay Caddy propio y la app se une a la red del Caddy compartido (repositorio vps-edge). Las plataformas administradas pueden ejecutar el mismo Dockerfile.
 
-El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud exige URL HTTPS y cookies seguras. `DATABASE_URL` tiene prioridad sobre `PSQL_*`, útil para bases administradas. El endpoint `/api/config` sólo publica identidad visual y zona horaria.
+El runtime valida secretos, puertos, tema y zona horaria. En onprem/cloud/edge exige URL HTTPS y cookies seguras. `DATABASE_URL` tiene prioridad sobre `PSQL_*`, útil para bases administradas. El endpoint `/api/config` sólo publica identidad visual y zona horaria.
 
 ## Roles, reglas y rotación
 

@@ -1,6 +1,6 @@
 # VolleyballScorer
 
-Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación, una rama activa (`main`) y tres despliegues elegidos por configuración.
+Fixture y marcador en vivo para torneos de vóley amateur. Una sola aplicación, una rama activa (`main`) y cuatro despliegues elegidos por configuración.
 
 - Público, sin cuenta: fixture, resultados, punto a punto, rotación en vivo y tabla de posiciones; actualización automática con SSE.
 - Planilleros: toman un partido libre (o lo toman al iniciarlo) y sólo quien lo tiene lo anota hasta liberarlo; la organización puede forzar la liberación si alguien se fue sin liberarlo. Inician partidos, anotan puntos, deshacen, cargan saque inicial, formación y cambios, o el resultado final de un set.
@@ -27,15 +27,16 @@ Las migraciones se aplican antes de aceptar tráfico. PostgreSQL y los logos usa
 
 ## Elegir despliegue
 
-Editá `.env` y usá siempre el mismo comando `scripts/stack.sh up -d --build`. El script selecciona el perfil de Compose a partir de `DEPLOY_MODE`.
+Editá `.env` y usá siempre el mismo comando `scripts/stack.sh up -d --build`. El script selecciona los archivos y el perfil de Compose a partir de `DEPLOY_MODE`; no uses `docker compose up` directo.
 
 | Modo | Configuración | Servicios |
 | --- | --- | --- |
 | `local` | `DEPLOY_MODE=local`, `PUBLIC_URL=http://localhost:3000` | app + PostgreSQL |
 | `onprem` | `DEPLOY_MODE=onprem`, `PUBLIC_URL=https://tu-dominio.ngrok-free.app`, `NGROK_AUTHTOKEN` | app + PostgreSQL + ngrok |
 | `cloud` | `DEPLOY_MODE=cloud`, `PUBLIC_URL=https://voley.tudominio.com`, `DOMAIN=voley.tudominio.com` | app + PostgreSQL + Caddy |
+| `edge` | `DEPLOY_MODE=edge`, `PUBLIC_URL=https://voley.tudominio.com`, red Docker `edge` | app + PostgreSQL, unida a la red del Caddy compartido |
 
-Onprem usa el dominio asignado en tu cuenta ngrok y no requiere abrir puertos del router. El inspector sólo se publica en `127.0.0.1:4040`. Cloud funciona en cualquier VPS con Docker: apuntá el DNS al servidor y permití TCP 80/443. Caddy emite y renueva HTTPS. Al cambiar de modo, retirás el servicio anterior con `scripts/stack.sh up -d --build --remove-orphans`.
+Onprem usa el dominio asignado en tu cuenta ngrok y no requiere abrir puertos del router. El inspector sólo se publica en `127.0.0.1:4040`. Cloud funciona en cualquier VPS con Docker: apuntá el DNS al servidor y permití TCP 80/443. Caddy emite y renueva HTTPS. Edge es para un VPS con varias apps: el HTTPS lo pone un Caddy compartido que vive en su propio repositorio ([vps-edge](https://github.com/lopezjuanma96/vps-edge)) y la app entra a su red con el nombre único `voley` ([detalles](docs/operations.md#edge-caddy-compartido-en-vps)). Al cambiar de modo, `scripts/stack.sh up -d --build --remove-orphans` retira el servicio del modo anterior (por ejemplo el Caddy propio al pasar de cloud a edge).
 
 En Railway/Render se despliega la misma imagen con `DATABASE_URL` y un volumen para logos; la plataforma provee HTTPS. [Guía completa](docs/operations.md#cloud-con-plataforma-administrada).
 
