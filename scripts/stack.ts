@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 if (!existsSync('.env')) throw new Error('Primero ejecutá bun scripts/setup.ts o creá .env desde .env.example.')
 const mode = process.env.DEPLOY_MODE ?? 'local'
 if (!['local', 'onprem', 'cloud', 'edge'].includes(mode)) throw new Error('DEPLOY_MODE debe ser local, onprem, cloud o edge.')
-// Services that exist in a single mode, as Compose profiles. edge uses the shared Caddy of the vps-edge repo.
+// Services that exist in a single mode, as Compose profiles. edge uses the shared Caddy of the vps-ops repo.
 const profiled: Record<string, string> = { onprem: 'ngrok', cloud: 'caddy' }
 const files = ['-f', 'docker-compose.yml', ...(mode === 'edge' ? ['-f', 'deploy/compose.edge.yml'] : [])]
 const args = process.argv.slice(2)

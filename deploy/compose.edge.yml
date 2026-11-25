@@ -1,5 +1,5 @@
 # DEPLOY_MODE=edge: scripts/stack.ts adds this file. No bundled Caddy; the shared
-# Caddy of the vps-edge repo reaches the app over the external "edge" network.
+# Caddy of the vps-ops repo reaches the app over the external "edge" network.
 # Caddy targets the unique alias (default "voley"), never "app": other stacks on
 # that network may also call their service "app" and Docker would round-robin.
 services:
