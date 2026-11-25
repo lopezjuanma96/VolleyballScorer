@@ -20,7 +20,9 @@ if [[ $sha != "$current" ]] && git merge-base --is-ancestor "$sha" "$current"; t
     exit 0
 fi
 # Backup before migrations; the app pauses a few seconds while it runs.
-if scripts/stack.sh ps --status running --services | grep -qx app; then scripts/backup.sh; fi
+# Capture, then grep: "… | grep -q" under pipefail can fail at random (SIGPIPE) and skip the backup.
+running=$(scripts/stack.sh ps --status running --services)
+if grep -qx app <<< "$running"; then scripts/backup.sh; fi
 git checkout --quiet --detach "$sha"
 scripts/stack.sh up -d --build --remove-orphans
 
