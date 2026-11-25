@@ -2,12 +2,13 @@
 
 Read README.md and docs/operations.md before changing deployment behavior; docs/hostinger.md describes production.
 
-## Production (as of 2026-11-02)
+## Production (hibernated since 2026-11-25)
 
-- Live at <https://voley.zagador123.cloud> on a Hostinger VPS (`DEPLOY_MODE=cloud`, Caddy HTTPS). Check health with `curl -fsS https://voley.zagador123.cloud/healthz`; the Hostinger MCP server (`.mcp.json`) can inspect the VPS.
-- CI/CD is on: a push to `main` runs **Check** (`.github/workflows/ci.yml`) and, if it passes, **Deploy** (`deploy.yml`) ships it to the VPS because the repo variable `DEPLOY_ENABLED=true`. Merging to `main` is a production deploy: never merge on tournament days, and land migrations and new required `.env` values on the server before merging code that needs them.
-- Server `.env` lives only on the VPS (`~/volleyball-scorer/.env`, user `deploy`); never copy it into the repo or print it.
-- Modes: `local`, `onprem` (ngrok), `cloud` (bundled Caddy, for a VPS that runs only this app) and `edge` (no Caddy; `deploy/compose.edge.yml` joins `app` to the external Docker network `edge` as `voley`, served by the shared Caddy of the separate vps-edge repo, `~/edge` on the VPS). Production stays on `cloud` until the user runs the migration in vps-edge's README; after it, the VPS `.env` says `edge` and that repo owns 80/443 and the domains. Always go through `scripts/stack.sh` (it adds the overlay and removes the previous mode's proxy on `--remove-orphans`); a bare `docker compose up` detaches the app from `edge`. Outside Compose, `edge` behaves like `cloud`.
+- The tournament is over. The app is **stopped** on the Hostinger VPS (`~/volleyball-scorer`, user `deploy`, `DEPLOY_MODE=edge`) with its Docker volumes, `.env` and an off-VPS backup kept; `voley.zagador123.cloud` serves a "tournament finished" page from the shared Caddy and `/healthz` answers 503. Waking it up, or deleting it: docs/operations.md#apagar-y-reactivar (`scripts/hibernate.sh` put it to sleep).
+- The server itself (setup, access, other apps, lessons learned) is documented in the private vps-edge repo (`~/Projects/vps-edge`), which owns 80/443 and the domains. Read its AGENTS.md before touching the VPS.
+- CI/CD: a push to `main` runs **Check** (`.github/workflows/ci.yml`); **Deploy** (`deploy.yml`) only ships to the VPS while the repo variable `DEPLOY_ENABLED=true`, which is `false` while hibernated. When it is on, merging to `main` is a production deploy: never merge on tournament days, and land migrations and new required `.env` values on the server before merging code that needs them.
+- Server `.env` lives only on the VPS (`~/volleyball-scorer/.env`); never copy it into the repo or print it.
+- Modes: `local`, `onprem` (ngrok), `cloud` (bundled Caddy, for a VPS that runs only this app) and `edge` (no Caddy; `deploy/compose.edge.yml` joins `app` to the external Docker network `edge` as `voley`, served by the shared Caddy of vps-edge, `~/edge` on the VPS). Production uses `edge` since 2026-11-19. Always go through `scripts/stack.sh` (it adds the overlay and removes the previous mode's proxy on `--remove-orphans`); a bare `docker compose up` detaches the app from `edge`. Outside Compose, `edge` behaves like `cloud`.
 
 - Keep one implementation and one active branch (`main`); deployment modes belong in configuration.
 - Runtime: Bun, Hono, Drizzle, PostgreSQL. The API and static pages share an origin.

@@ -88,7 +88,7 @@ Para ejecutar el backend fuera de Docker usá una base PostgreSQL accesible y `D
 
 ## Operación y decisiones
 
-- [Puesta en marcha en Hostinger y despliegue desde GitHub](docs/hostinger.md)
+- [Puesta en marcha en Hostinger y despliegue desde GitHub](docs/hostinger.md). Producción está apagada entre torneos: [apagar y reactivar](docs/operations.md#apagar-y-reactivar)
 - [TODO](TODO.md)
 - [Backup, restauración, migración y despliegues](docs/operations.md)
 - [Arquitectura, ramas y límites](docs/architecture.md)

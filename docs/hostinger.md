@@ -2,106 +2,15 @@
 
 Guía para hacer una sola vez. Resultado: VPS con Docker, app + PostgreSQL + Caddy (HTTPS automático), despliegue automático desde GitHub después de que pasa CI, y backups fuera del servidor. Escrita el 29/10/2026; verificá precios y pantallas de hPanel al momento de comprar.
 
-**Estado actual (02/11/2026):** hecho. La app está en <https://voley.zagador123.cloud> (registro A apuntando a la VPS de Hostinger) y el despliegue automático está activo (`DEPLOY_ENABLED=true`): cada merge a `main` que pasa **Check** se publica solo. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`. Pendiente: [ingreso con Google](#google). Producción sigue en `DEPLOY_MODE=cloud` hasta que se haga la [migración a edge](#edge) para sumar una segunda app.
+**Estado actual (25/11/2026):** apagada después del torneo, lista para reactivar ([cómo](operations.md#apagar-y-reactivar)). Estuvo en <https://voley.zagador123.cloud> del 02/11 al 25/11/2026 con despliegue automático, ingreso con Google y, desde el 19/11, en `DEPLOY_MODE=edge` detrás del Caddy compartido. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`.
 
-Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude con el conector de Hostinger: revisar el estado de la VPS, firewall, snapshots y métricas, y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
+Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude: revisar la VPS con el conector de Hostinger (estado, firewall, snapshots, métricas) y con el acceso restringido que describe vps-edge (`docs/access.md`), y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
 
-## 1. Comprar y elegir sistema
+## 1–4. Servidor, acceso y dominio
 
-1. Plan **KVM 1** (1 vCPU, 4 GB RAM) alcanza para el torneo según la [prueba de carga](load-testing.md); KVM 2 si vas a alojar otros proyectos. Revisá total y precio de renovación ([comparación](hosting.md)).
-2. Ubicación: la más cercana a Córdoba que ofrezca el plan (São Paulo, si está disponible).
-3. Sistema: plantilla **Ubuntu 24.04 with Docker** (en hPanel suele estar en la pestaña de aplicaciones, no en la de sistemas operativos; soporte hasta 2029). Alternativa válida: **Ubuntu 26.04** plano (soporte hasta 2031) e instalar Docker a mano, ver abajo. Todo corre en contenedores, así que la versión de Ubuntu casi no cambia nada.
-4. En el asistente cargá tu **clave SSH pública** (si no tenés: `ssh-keygen -t ed25519 -C "tu-mail"` en tu computadora y copiá `~/.ssh/id_ed25519.pub`). Poné igual una contraseña root larga; no la vas a usar para entrar.
-5. Anotá la IP pública.
+Comprar la VPS, el usuario `deploy`, el endurecimiento de SSH, los dos firewalls (UFW y hPanel), el conector de Hostinger para Claude Code, el DNS y el Caddy compartido son de la VPS, no de esta app. Por eso viven en el repositorio privado [vps-edge](https://github.com/lopezjuanma96/vps-edge) (`docs/server.md` y `docs/access.md`), junto con lo aprendido en esta VPS (`docs/lessons.md`).
 
-## 2. Conectar Hostinger con Claude Code (opcional, recomendado)
-
-Opción simple, sin tokens en archivos (OAuth en el navegador):
-
-```bash
-# Registra el servidor MCP remoto de Hostinger en Claude Code. La primera vez que se usa
-# abre el navegador para autorizar (OAuth), así que no queda ningún token guardado en archivos.
-claude mcp add --transport http hostinger https://mcp.hostinger.com
-```
-
-Alternativa: hPanel → Integraciones → «Hostinger Connector». Si preferís el servidor local, hace falta Node 24+, `npm install -g @hostinger/mcp` y un token de API de hPanel con vencimiento corto en la variable `API_TOKEN` (nunca en el repo). Después de conectarlo, pedime «revisá la VPS» y verifico estado, firewall y recursos.
-
-## 3. Preparar el servidor
-
-Entrá como root una sola vez y creá el usuario que va a operar la app:
-
-```bash
-# Conectarse a la VPS como root usando tu clave SSH (la que cargaste en el asistente).
-ssh root@IP
-
-# Sólo si elegiste Ubuntu plano (sin la plantilla de Docker): el script oficial de Docker
-# agrega su repositorio de paquetes e instala Docker Engine y el plugin de Compose.
-#   curl -fsSL https://get.docker.com | sh
-docker compose version        # comprueba que Docker y Compose estén instalados; tiene que responder
-
-# Crear el usuario "deploy", que va a operar la app. Trabajar como root todos los días es
-# riesgoso: un error o un acceso robado tiene control total del servidor.
-#   --disabled-password: el usuario no tiene contraseña; sólo puede entrar con clave SSH.
-#   --gecos "": salta las preguntas de nombre completo, teléfono, etc.
-adduser --disabled-password --gecos "" deploy
-
-# Agregarlo al grupo "docker" para que pueda manejar contenedores sin sudo.
-# (Ojo: el grupo docker equivale en la práctica a root; por eso sólo lo tiene este usuario.)
-usermod -aG docker deploy
-
-# Darle sudo para tareas de administración (instalar paquetes, reiniciar), porque después
-# del endurecimiento root ya no puede entrar por SSH. La contraseña sólo sirve para sudo:
-# SSH no acepta contraseñas. Guardala en tu gestor de contraseñas.
-passwd deploy
-usermod -aG sudo deploy
-
-# Crear /home/deploy/.ssh con permisos 700 (sólo el dueño puede entrar). SSH rechaza
-# claves guardadas en carpetas con permisos más abiertos.
-install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-
-# Copiar a deploy las claves públicas autorizadas de root (o sea, tu clave), y hacer
-# a deploy dueño del archivo. Así entrás como deploy con la misma clave.
-cp ~/.ssh/authorized_keys /home/deploy/.ssh/ && chown deploy:deploy /home/deploy/.ssh/authorized_keys
-
-# Actualizaciones de seguridad automáticas y firewall.
-#   apt update: refresca la lista de paquetes disponibles.
-#   apt -y upgrade: instala las actualizaciones pendientes (-y responde "sí" solo).
-#   unattended-upgrades: instala parches de seguridad todos los días sin intervención.
-#   ufw: firewall simple ("uncomplicated firewall"). git: para clonar el repositorio.
-#   unzip: lo necesita el instalador de Bun (paso 5).
-apt update && apt -y upgrade && apt -y install unattended-upgrades ufw git unzip
-
-# Firewall: bloquear todo lo entrante salvo SSH (22), HTTP (80) y HTTPS (443).
-# OpenSSH va primero para no cortarte el acceso al activar. --force evita la confirmación.
-ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
-```
-
-Probá en otra terminal que `ssh deploy@IP` funciona **antes** de cerrar el acceso por contraseña y de root:
-
-```bash
-# Endurecer SSH: después de esto sólo se entra con clave y nunca como root.
-#   PasswordAuthentication no: no acepta contraseñas (frena los ataques de fuerza bruta,
-#     que en una IP pública empiezan a los pocos minutos).
-#   KbdInteractiveAuthentication no: cierra la otra vía por la que se pueden pedir contraseñas.
-#   PermitRootLogin no: root no puede entrar por SSH; se entra como deploy.
-# Va en un archivo propio: las imágenes de Ubuntu traen sshd_config.d/50-cloud-init.conf
-# y SSH usa el primer valor que encuentra, así que editar sshd_config no alcanza.
-# El prefijo "00-" hace que este archivo se lea antes que "50-cloud-init.conf".
-printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n' > /etc/ssh/sshd_config.d/00-hardening.conf
-
-# sshd -t valida la configuración; sólo si está bien (&&) recarga SSH. Recargar no corta
-# la sesión abierta, así que si algo falla todavía podés corregirlo desde esta terminal.
-sshd -t && systemctl reload ssh
-
-# sshd -T muestra la configuración efectiva final, después de combinar todos los archivos.
-sshd -T | grep -Ei '^(passwordauthentication|permitrootlogin)'   # tiene que decir "no" en ambas
-```
-
-En hPanel → VPS → Firewall, replicá las mismas reglas (22, 80, 443). Docker publica puertos por fuera de UFW: el Compose sólo expone 80/443 (Caddy; en [edge](#edge), el Caddy compartido) y la app queda en `127.0.0.1:3000`; no cambies `APP_BIND`.
-
-## 4. Dominio
-
-En tu proveedor DNS creá un registro **A** `voley.tudominio.com → IP` (y AAAA si la VPS tiene IPv6). Esperá a que `dig +short voley.tudominio.com` devuelva la IP; Caddy necesita eso para emitir el certificado.
+Lo que esta app necesita del servidor: Docker con Compose, el usuario `deploy` en el grupo `docker`, 80/443 abiertos, un registro **A** (y AAAA) `voley.tudominio.com → IP` y, en una VPS con varias apps, la red `edge` con su sitio en vps-edge ([§10](#edge)). La app nunca publica más que `127.0.0.1:3000`; no cambies `APP_BIND`.
 
 ## 5. Instalar la app
 
@@ -239,4 +148,4 @@ En `cloud` el Caddy que publica 80/443 está dentro de este stack, así que ning
 docker network create edge
 ```
 
-El orden completo (red, clonar vps-edge, copiar los certificados actuales, corte de segundos y vuelta atrás) está en la [migración del README de vps-edge](https://github.com/lopezjuanma96/vps-edge#migración-sacar-caddy-de-volleyballscorer). Hacelo fuera de días de torneo. Mergear este modo no cambia nada mientras el `.env` de la VPS siga en `cloud`; el despliegue automático sigue igual después del corte, porque `scripts/deploy.sh` lee el modo del `.env`. Agregar un dominio nuevo se hace en vps-edge, no acá.
+La VPS de Hostinger pasó a edge el 19/11/2026. El orden completo (red, copiar los certificados, corte de segundos y vuelta atrás) quedó en vps-edge (`docs/caddy.md`, «Migración desde un Caddy propio»), para rehacerlo en otra VPS. Hacelo fuera de días de torneo. El despliegue automático no cambia, porque `scripts/deploy.sh` lee el modo del `.env`. Los dominios se agregan en vps-edge, no acá.
