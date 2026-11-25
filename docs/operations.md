@@ -54,10 +54,10 @@ Cloud trae su propio Caddy: es la opción para un VPS que sólo aloja esta app.
 
 ### Edge: Caddy compartido en VPS
 
-Para un VPS que aloja varias apps (por ejemplo vóley y Metamorfosis en el de Hostinger). Un solo Caddy publica 80/443, emite los certificados y reparte cada dominio por la red Docker externa `edge`. Ese Caddy vive en su propio repositorio, [vps-edge](https://github.com/lopezjuanma96/vps-edge), clonado en `~/edge` del VPS. Este stack no trae Caddy: `scripts/stack.sh` agrega `deploy/compose.edge.yml`, que suma la app a la red `edge` con el alias `voley`, y el sitio de vps-edge apunta a `voley:3000`. Nunca a `app`: otro stack de la misma red puede tener un servicio llamado así y Docker repartiría el tráfico entre los dos.
+Para un VPS que aloja varias apps (por ejemplo vóley y Metamorfosis en el de Hostinger). Un solo Caddy publica 80/443, emite los certificados y reparte cada dominio por la red Docker externa `edge`. Ese Caddy vive en su propio repositorio, [vps-ops](https://github.com/lopezjuanma96/vps-ops), clonado en `~/edge` del VPS. Este stack no trae Caddy: `scripts/stack.sh` agrega `deploy/compose.edge.yml`, que suma la app a la red `edge` con el alias `voley`, y el sitio de vps-ops apunta a `voley:3000`. Nunca a `app`: otro stack de la misma red puede tener un servicio llamado así y Docker repartiría el tráfico entre los dos.
 
 1. Una vez por VPS: `docker network create edge`. Sin la red, `scripts/stack.sh up` se niega y muestra este comando.
-2. `.env`: `DEPLOY_MODE=edge` y `PUBLIC_URL` HTTPS. `DOMAIN` no se usa; el dominio está en el sitio de vps-edge. `EDGE_NETWORK` y `EDGE_ALIAS` sólo cambian si cambian allá.
+2. `.env`: `DEPLOY_MODE=edge` y `PUBLIC_URL` HTTPS. `DOMAIN` no se usa; el dominio está en el sitio de vps-ops. `EDGE_NETWORK` y `EDGE_ALIAS` sólo cambian si cambian allá.
 3. `scripts/stack.sh up -d --build --remove-orphans`. La app sigue publicada en `127.0.0.1:3000` para diagnóstico; la DB no se publica.
 4. El Caddy compartido se levanta y se recarga desde `~/edge`, según su README.
 
@@ -65,7 +65,7 @@ Cookies seguras, `TRUST_PROXY_HOPS=1`, rechazo de `DEV_LOGIN` y backups funciona
 
 Al cambiar de modo con `--remove-orphans`, `scripts/stack.sh` también borra el Caddy o ngrok del modo anterior: Compose no considera huérfanos a los servicios de un perfil inactivo y, sin ese paso, el Caddy de cloud seguiría ocupando 80/443. El volumen `caddy_data` con los certificados se conserva.
 
-Pasar el VPS de cloud a edge, con orden, corte de segundos y vuelta atrás: [migración en el README de vps-edge](https://github.com/lopezjuanma96/vps-edge#migración-sacar-caddy-de-volleyballscorer). Hacelo fuera de días de torneo.
+Pasar el VPS de cloud a edge, con orden, corte de segundos y vuelta atrás: migración en vps-ops (`docs/caddy.md`, «Migración desde un Caddy propio»). Hacelo fuera de días de torneo.
 
 ### Cloud con plataforma administrada
 
@@ -151,34 +151,34 @@ La restauración requiere el flag explícito porque reemplaza datos. Importa DB 
 
 Entre torneos la app puede quedar **apagada** en la VPS, sin ocupar memoria ni CPU, y volver en minutos. Para eso se conservan los volúmenes (base y logos), el `.env` y la carpeta, más un backup fuera de la VPS por si se pierde el servidor. Borrarla del todo libera sólo unos cientos de MB de disco, y para volver obliga a reinstalar y restaurar. Conviene recién si se reinstala o se da de baja la VPS.
 
-**Estado desde el 25/11/2026:** apagada. `DEPLOY_ENABLED=false` en GitHub, y `voley.zagador123.cloud` muestra una página de «torneo finalizado» servida por el Caddy compartido ([vps-edge](https://github.com/lopezjuanma96/vps-edge), `conf/sites/voley.caddy`).
+**Estado desde el 25/11/2026:** apagada. `DEPLOY_ENABLED=false` en GitHub, y `voley.zagador123.cloud` muestra una página de «torneo finalizado» servida por el Caddy compartido ([vps-ops](https://github.com/lopezjuanma96/vps-ops), `conf/sites/voley.caddy`).
 
 ### Apagar
 
 1. GitHub: `gh variable set DEPLOY_ENABLED --body false`. Si no, el próximo merge a `main` vuelve a levantar todo.
-2. vps-edge: cambiar `conf/sites/voley.caddy` por la página de «torneo finalizado» (está en su historial) y hacer push. Así nadie escribe mientras se hace el backup final.
-3. En la VPS, como `deploy`:
+2. vps-ops: cambiar `conf/sites/voley.caddy` por la página de «torneo finalizado» (está en su historial) y hacer push. Así nadie escribe mientras se hace el backup final.
+3. En la VPS: `ssh -i ~/.ssh/claude_vps claude@187.41.113.203 voley hibernate`. Lo puede correr Claude: el gate de vps-ops hace checkout de `origin/main` y corre `scripts/hibernate.sh --yes`. A mano, como `deploy`:
    ```bash
    cd ~/volleyball-scorer
    git fetch -q origin main && git checkout -q --detach origin/main   # trae el script; no reinicia nada
    scripts/hibernate.sh --yes
    ```
    El script hace el backup final y verifica que el dump y los logos se puedan leer. Si algo falla, no apaga nada. Después borra contenedores e imagen y saca de `~/.ssh/authorized_keys` la clave con la que despliega GitHub Actions. También quita del cron las líneas de esta carpeta. Las líneas que saca quedan en `~/hibernate/volleyball-scorer/`. Con el Caddy compartido en uso, borra además los volúmenes del Caddy propio de cloud.
-4. Desde tu computadora, copiá fuera de la VPS el backup que indica el script (`scp -r deploy@IP:~/volleyball-scorer/backups/… ~/Backups/volleyball-scorer/`). Si querés, ensayá restaurarlo en local ([cómo](#backup-y-restauración)).
+4. Fuera de la VPS: el backup diario de vps-ops (`offsite-backup`, OneDrive cifrado) copia también la carpeta `backups/` de la app apagada. El backup final sube esa noche, o ya mismo con `ssh … claude@187.41.113.203 offsite-backup`. Una copia extra en tu computadora: `scp -r deploy@IP:~/volleyball-scorer/backups/… ~/Backups/volleyball-scorer/`. Si querés, ensayá restaurarlo en local ([cómo](#backup-y-restauración)).
 5. Opcional: guardá en tu gestor de contraseñas `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` del `.env`. Google sólo muestra el secret al crearlo; si se pierde, se crea otro en la consola.
 
 ### Reactivar en la misma VPS
 
-```bash
-cd ~/volleyball-scorer
-git fetch -q origin main && git checkout -q --detach origin/main
-scripts/stack.sh up -d --build                       # aplica migraciones nuevas al arrancar
-cat ~/hibernate/volleyball-scorer/authorized_keys >> ~/.ssh/authorized_keys   # clave de despliegue
-[ -f ~/hibernate/volleyball-scorer/crontab ] && (crontab -l 2>/dev/null; cat ~/hibernate/volleyball-scorer/crontab) | crontab -
-curl -fsS http://127.0.0.1:3000/healthz
-```
-
-Después, en vps-edge, devolvé `conf/sites/voley.caddy` al `reverse_proxy voley:3000` (revert del commit que lo apagó). En GitHub: `gh variable set DEPLOY_ENABLED --body true`. Comprobá `curl -fsS https://voley.zagador123.cloud/healthz`; mientras está apagada responde 503. Revisá también que el cliente OAuth de Google siga activo y que la lista de **Usuarios** esté al día para el torneo nuevo.
+1. En la VPS: `ssh -i ~/.ssh/claude_vps claude@187.41.113.203 voley wake`, o a mano como `deploy`:
+   ```bash
+   cd ~/volleyball-scorer
+   git fetch -q origin main && git checkout -q --detach origin/main
+   scripts/wake.sh --yes
+   ```
+   `wake.sh` construye y levanta el stack (las migraciones nuevas se aplican al arrancar) y espera a que la app esté sana. Si no lo está, muestra los logs y no toca nada más. Después devuelve la clave de despliegue y el cron guardados en `~/hibernate/volleyball-scorer/`, sin duplicar líneas.
+2. vps-ops: devolvé `conf/sites/voley.caddy` al `reverse_proxy voley:3000` (revert del commit que lo apagó).
+3. GitHub: `gh variable set DEPLOY_ENABLED --body true`.
+4. Comprobá `curl -fsS https://voley.zagador123.cloud/healthz` (mientras está apagada responde 503). Revisá también que el cliente OAuth de Google siga activo y que la lista de **Usuarios** esté al día para el torneo nuevo.
 
 ### Reactivar en otra VPS, o después de borrarla
 
@@ -193,7 +193,7 @@ cd ~/volleyball-scorer && scripts/stack.sh down -v --rmi local   # -v borra base
 cd ~ && rm -rf ~/volleyball-scorer ~/hibernate/volleyball-scorer
 ```
 
-En vps-edge, borrá `conf/sites/voley.caddy`. En el DNS, el registro `voley`.
+En vps-ops, borrá `conf/sites/voley.caddy`. En el DNS, el registro `voley`.
 
 ## Migrar la instalación anterior
 

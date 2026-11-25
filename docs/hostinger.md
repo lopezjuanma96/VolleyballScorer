@@ -4,13 +4,13 @@ Guía para hacer una sola vez. Resultado: VPS con Docker, app + PostgreSQL + Cad
 
 **Estado actual (25/11/2026):** apagada después del torneo, lista para reactivar ([cómo](operations.md#apagar-y-reactivar)). Estuvo en <https://voley.zagador123.cloud> del 02/11 al 25/11/2026 con despliegue automático, ingreso con Google y, desde el 19/11, en `DEPLOY_MODE=edge` detrás del Caddy compartido. Donde esta guía dice `voley.tudominio.com`, en producción es `voley.zagador123.cloud`.
 
-Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude: revisar la VPS con el conector de Hostinger (estado, firewall, snapshots, métricas) y con el acceso restringido que describe vps-edge (`docs/access.md`), y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
+Lo que hacés vos: comprar, crear credenciales, cargar secretos. Lo que puede hacer Claude: revisar la VPS con el conector de Hostinger (estado, firewall, snapshots, métricas) y con el acceso restringido que describe vps-ops (`docs/access.md`), y ayudarte a diagnosticar. Nunca se contratan servicios sin un pedido explícito.
 
 ## 1–4. Servidor, acceso y dominio
 
-Comprar la VPS, el usuario `deploy`, el endurecimiento de SSH, los dos firewalls (UFW y hPanel), el conector de Hostinger para Claude Code, el DNS y el Caddy compartido son de la VPS, no de esta app. Por eso viven en el repositorio privado [vps-edge](https://github.com/lopezjuanma96/vps-edge) (`docs/server.md` y `docs/access.md`), junto con lo aprendido en esta VPS (`docs/lessons.md`).
+Comprar la VPS, el usuario `deploy`, el endurecimiento de SSH, los dos firewalls (UFW y hPanel), el conector de Hostinger para Claude Code, el DNS y el Caddy compartido son de la VPS, no de esta app. Por eso viven en el repositorio privado [vps-ops](https://github.com/lopezjuanma96/vps-ops) (`docs/server.md` y `docs/access.md`), junto con lo aprendido en esta VPS (`docs/lessons.md`).
 
-Lo que esta app necesita del servidor: Docker con Compose, el usuario `deploy` en el grupo `docker`, 80/443 abiertos, un registro **A** (y AAAA) `voley.tudominio.com → IP` y, en una VPS con varias apps, la red `edge` con su sitio en vps-edge ([§10](#edge)). La app nunca publica más que `127.0.0.1:3000`; no cambies `APP_BIND`.
+Lo que esta app necesita del servidor: Docker con Compose, el usuario `deploy` en el grupo `docker`, 80/443 abiertos, un registro **A** (y AAAA) `voley.tudominio.com → IP` y, en una VPS con varias apps, la red `edge` con su sitio en vps-ops ([§10](#edge)). La app nunca publica más que `127.0.0.1:3000`; no cambies `APP_BIND`.
 
 ## 5. Instalar la app
 
@@ -92,18 +92,7 @@ Un deploy pausa la app unos segundos (backup y reinicio). El día del torneo no 
 Un volumen o snapshot en la misma VPS no reemplaza una copia externa.
 
 - Activá los backups semanales de Hostinger y tomá un snapshot manual antes del torneo.
-- Diario, con cron de `deploy` (`crontab -e`), y copia a otro lugar con [rclone](https://rclone.org/) (Google Drive, Backblaze B2, etc.; se instala con `sudo apt install rclone`) configurado con `rclone config`:
-  ```
-  # Formato de cron: minuto hora día-del-mes mes día-de-la-semana comando.
-  # "30 4 * * *" = todos los días a las 04:30 (hora del servidor).
-  #   scripts/backup.sh: pausa la app unos segundos, vuelca la base y los logos subidos
-  #     a backups/<fecha>-… y vuelve a arrancarla (>/dev/null descarta el mensaje de éxito).
-  #     Los errores no se avisan solos: revisá cada tanto que haya carpetas nuevas.
-  #   rclone copy … --max-age 2d: sube a la nube sólo lo de los últimos 2 días, sin borrar
-  #     nada del destino. "remoto" es el nombre que le pusiste en "rclone config".
-  # Cada && hace que el paso siguiente corra sólo si el anterior salió bien.
-  30 4 * * * cd ~/volleyball-scorer && scripts/backup.sh >/dev/null && rclone copy backups remoto:voley-backups --max-age 2d
-  ```
+- Diario: el backup fuera de la VPS es de la VPS, no de esta app. `offsite-backup` de vps-ops corre a las 04:30, le pide al hook `voley` un `scripts/backup.sh` (pausa la app unos segundos) y copia `backups/` cifrado a OneDrive. Configuración y restauración desde otra máquina: vps-ops `docs/apps.md#backups`. No agregues un cron propio.
 - Ensayá una restauración completa en local al menos una vez ([cómo](operations.md#backup-y-restauración)).
 
 ## 8. Antes del torneo
@@ -141,11 +130,11 @@ Si Google no está configurado, el botón muestra «El ingreso con Google todav�
 <a id="edge"></a>
 ## 10. Otra app en la misma VPS (modo edge)
 
-En `cloud` el Caddy que publica 80/443 está dentro de este stack, así que ninguna otra app de la VPS puede usar HTTPS. Para alojar más de una (por ejemplo `metamorfosis.zagador123.cloud`), el proxy sale a un stack aparte y compartido: el repositorio [vps-edge](https://github.com/lopezjuanma96/vps-edge), clonado en `~/edge` como `deploy`. Ese Caddy reparte cada dominio por la red Docker `edge`, y el vóley pasa a `DEPLOY_MODE=edge`: app + PostgreSQL sin Caddy propio, unidos a esa red con el nombre `voley` ([detalles](operations.md#edge-caddy-compartido-en-vps)).
+En `cloud` el Caddy que publica 80/443 está dentro de este stack, así que ninguna otra app de la VPS puede usar HTTPS. Para alojar más de una (por ejemplo `metamorfosis.zagador123.cloud`), el proxy sale a un stack aparte y compartido: el repositorio [vps-ops](https://github.com/lopezjuanma96/vps-ops), clonado en `~/edge` como `deploy`. Ese Caddy reparte cada dominio por la red Docker `edge`, y el vóley pasa a `DEPLOY_MODE=edge`: app + PostgreSQL sin Caddy propio, unidos a esa red con el nombre `voley` ([detalles](operations.md#edge-caddy-compartido-en-vps)).
 
 ```bash
 # Una sola vez por VPS: la red por la que el Caddy compartido llega a cada app.
 docker network create edge
 ```
 
-La VPS de Hostinger pasó a edge el 19/11/2026. El orden completo (red, copiar los certificados, corte de segundos y vuelta atrás) quedó en vps-edge (`docs/caddy.md`, «Migración desde un Caddy propio»), para rehacerlo en otra VPS. Hacelo fuera de días de torneo. El despliegue automático no cambia, porque `scripts/deploy.sh` lee el modo del `.env`. Los dominios se agregan en vps-edge, no acá.
+La VPS de Hostinger pasó a edge el 19/11/2026. El orden completo (red, copiar los certificados, corte de segundos y vuelta atrás) quedó en vps-ops (`docs/caddy.md`, «Migración desde un Caddy propio»), para rehacerlo en otra VPS. Hacelo fuera de días de torneo. El despliegue automático no cambia, porque `scripts/deploy.sh` lee el modo del `.env`. Los dominios se agregan en vps-ops, no acá.
